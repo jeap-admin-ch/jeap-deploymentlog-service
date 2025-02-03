@@ -1,0 +1,123 @@
+<th:block xmlns:th="http://www.thymeleaf.org">
+    <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+    <table class="wrapped">
+        <colgroup>
+            <col/>
+            <col/>
+        </colgroup>
+        <tbody>
+        <tr>
+            <th>Komponente</th>
+            <td><strong>
+                <ac:link>
+                    <ri:page th:ri:content-title="${deploymentLetter.getComponentName}"/>
+                    <ac:plain-text-link-body><![CDATA[[(${deploymentLetter.componentName})]]]></ac:plain-text-link-body>
+                </ac:link>
+            </strong>
+            </td>
+        </tr>
+        <tr>
+            <th>Version</th>
+            <td>
+                <i>(Undeployed)</i>
+            </td>
+        </tr>
+        <tr>
+            <th>Sequence</th>
+            <td>[(${deploymentLetter.sequence})]</td>
+        </tr>
+        <tr>
+            <th>Umgebung</th>
+            <td><strong>[(${deploymentLetter.environmentName})]</strong></td>
+        </tr>
+        <tr th:if="${deploymentLetter.targetType}">
+            <th>Plattform</th>
+            <td>
+                <table>
+                    <tbody>
+                    <tr>
+                        <th>Type</th>
+                        <td>[(${deploymentLetter.targetType})]</td>
+                    </tr>
+                    <tr>
+                        <th>URL</th>
+                        <td>[(${deploymentLetter.targetUrl})]</td>
+                    </tr>
+                    <tr>
+                        <th>Details</th>
+                        <td>[(${deploymentLetter.targetDetails})]</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <th colspan="1">Status</th>
+            <td colspan="1">
+                <th:block th:switch="${deploymentLetter.state}">
+                    <div th:case="'SUCCESS'">
+                        <ac:emoticon ac:name="tick"/>
+                    </div>
+                    <div th:case="'FAILURE'">
+                        <ac:emoticon ac:name="cross"/>
+                    </div>
+                    <div th:case="'STARTED'">
+                        <ac:emoticon ac:name="question"/>
+                    </div>
+                </th:block>
+                <div th:text="${deploymentLetter.stateMessage}"></div>
+            </td>
+        </tr>
+
+        <tr>
+            <th>Start</th>
+            <td>[(${deploymentLetter.startedAt})]</td>
+        </tr>
+
+        <tr>
+            <th>Ende</th>
+            <td>[(${deploymentLetter.endedAt})]</td>
+        </tr>
+
+        <tr>
+            <th>Dauer</th>
+            <td>[(${deploymentLetter.duration})]</td>
+        </tr>
+
+        <tr>
+            <th colspan="1">Gestartet durch</th>
+            <td colspan="1">[(${deploymentLetter.startedBy})]</td>
+        </tr>
+
+        <tr>
+            <th colspan="1">Id</th>
+            <td colspan="1">[(${deploymentLetter.externalId})]</td>
+        </tr>
+
+        <tr th:each="aLink:${deploymentLetter.links}">
+            <th colspan="1">[(${aLink.linkLabel})]</th>
+            <td colspan="1">
+                <a th:href="${aLink.linkUrl}" target="_blank">[(${aLink.linkUrl})]</a>
+            </td>
+        </tr>
+
+        <tr th:each="aLink:${deploymentLetter.buildJobLinks}">
+            <th colspan="1">Build Job</th>
+            <td colspan="1">
+                <a th:href="${aLink}" target="_blank">[(${aLink})]</a>
+            </td>
+        </tr>
+
+        <tr th:if="${deploymentLetter.remedyChangeId}">
+            <th colspan="1">Remedy Change</th>
+            <td colspan="1">
+                <a th:href="(${deploymentLetter.remedyChangeLink})" target="_blank">[(${deploymentLetter.remedyChangeId})]</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div th:replace="~{fragment/legend-status :: legend-status}"></div>
+
+</th:block>
+

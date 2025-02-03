@@ -1,0 +1,1 @@
+ALTER TABLE deployment_list_page RENAME COLUMN year TO year_;

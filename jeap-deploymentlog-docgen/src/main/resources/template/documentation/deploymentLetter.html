@@ -1,0 +1,182 @@
+<th:block xmlns:th="http://www.thymeleaf.org">
+    <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+    <table class="wrapped">
+        <colgroup>
+            <col/>
+            <col/>
+        </colgroup>
+        <tbody>
+        <tr>
+            <th>Komponente</th>
+            <td><strong>
+                <ac:link>
+                    <ri:page th:ri:content-title="${deploymentLetter.getComponentName}"/>
+                    <ac:plain-text-link-body><![CDATA[[(${deploymentLetter.componentName})]]]></ac:plain-text-link-body>
+                </ac:link>
+            </strong>
+            </td>
+        </tr>
+        <tr>
+            <th>Version</th>
+            <td>
+                <strong>
+                    <a th:href="${deploymentLetter.versionControlUrl}"
+                       target="_blank">[(${deploymentLetter.version})]</a>
+                </strong>
+            </td>
+        </tr>
+        <tr>
+            <th>Sequence</th>
+            <td>[(${deploymentLetter.sequence})]</td>
+        </tr>
+        <tr>
+            <th>Umgebung</th>
+            <td><strong>[(${deploymentLetter.environmentName})]</strong></td>
+        </tr>
+        <tr th:if="${deploymentLetter.targetType}">
+            <th>Plattform</th>
+            <td>
+                <table>
+                    <tbody>
+                    <tr>
+                        <th>Type</th>
+                        <td>[(${deploymentLetter.targetType})]</td>
+                    </tr>
+                    <tr>
+                        <th>URL</th>
+                        <td>[(${deploymentLetter.targetUrl})]</td>
+                    </tr>
+                    <tr>
+                        <th>Details</th>
+                        <td>[(${deploymentLetter.targetDetails})]</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <th colspan="1">Status</th>
+            <td colspan="1">
+                <th:block th:switch="${deploymentLetter.state}">
+                    <div th:case="'SUCCESS'">
+                        <ac:emoticon ac:name="tick"/>
+                    </div>
+                    <div th:case="'FAILURE'">
+                        <ac:emoticon ac:name="cross"/>
+                    </div>
+                    <div th:case="'STARTED'">
+                        <ac:emoticon ac:name="question"/>
+                    </div>
+                </th:block>
+                <div th:text="${deploymentLetter.stateMessage}"></div>
+            </td>
+        </tr>
+
+        <tr>
+            <th>Start</th>
+            <td>[(${deploymentLetter.startedAt})]</td>
+        </tr>
+
+        <tr>
+            <th>Ende</th>
+            <td>[(${deploymentLetter.endedAt})]</td>
+        </tr>
+
+        <tr>
+            <th>Dauer</th>
+            <td>[(${deploymentLetter.duration})]</td>
+        </tr>
+
+        <tr>
+            <th colspan="1">Gestartet durch</th>
+            <td colspan="1">[(${deploymentLetter.startedBy})]</td>
+        </tr>
+
+        <tr>
+            <th colspan="1">Deployment Unit</th>
+            <td colspan="1">[(${deploymentLetter.deploymentUnitType})] (<a
+                    th:href="${deploymentLetter.deploymentUnitRepositoryUrl}">[(${deploymentLetter.deploymentUnitCoordinates})]</a>)
+            </td>
+        </tr>
+
+        <tr>
+            <th colspan="1">Id</th>
+            <td colspan="1">[(${deploymentLetter.externalId})]</td>
+        </tr>
+
+        <tr th:each="aLink:${deploymentLetter.links}">
+            <th colspan="1">[(${aLink.linkLabel})]</th>
+            <td colspan="1">
+                <a th:href="${aLink.linkUrl}" target="_blank">[(${aLink.linkUrl})]</a>
+            </td>
+        </tr>
+
+        <tr th:each="aLink:${deploymentLetter.buildJobLinks}">
+            <th colspan="1">Build Job</th>
+            <td colspan="1">
+                <a th:href="${aLink}" target="_blank">[(${aLink})]</a>
+            </td>
+        </tr>
+
+        <tr th:if="${deploymentLetter.remedyChangeId}">
+            <th colspan="1">Remedy Change</th>
+            <td colspan="1">
+                <a th:href="(${deploymentLetter.remedyChangeLink})" target="_blank">[(${deploymentLetter.remedyChangeId})]</a>
+            </td>
+        </tr>
+
+        <tr th:each="prop:${deploymentLetter.properties}">
+            <th colspan="1" th:text="${prop.key}"></th>
+            <td th:if="${prop.value.startsWith('https:')}" colspan="1">
+                <a th:href="${prop.value}" target="_blank" th:text="${prop.value}"></a>
+            </td>
+            <td th:unless="${prop.value.startsWith('https:')}" colspan="1" th:text="${prop.value}"></td>
+        </tr>
+
+        </tbody>
+    </table>
+
+    <th:block th:if="${deploymentLetter.changeComparedToVersion} != ''">
+        <h2>Änderungen zu Version [(${deploymentLetter.changeComparedToVersion})]</h2>
+        <p>[(${deploymentLetter.changeComment})]</p>
+        <table class="wrapped">
+            <colgroup>
+                <col/>
+            </colgroup>
+            <tbody>
+            <tr th:each="jiraIssueKey: ${deploymentLetter.changeJiraIssueKeys}">
+                <td>
+                    <div class="content-wrapper">
+                        <p>
+                            <ac:structured-macro ac:macro-id="dbaf231b-5ce1-4e60-902a-4951915cc78e" ac:name="jira"
+                                                 ac:schema-version="1">
+                                <ac:parameter ac:name="server">Jira</ac:parameter>
+                                <ac:parameter ac:name="serverId">edb5d89c-a7c0-3ad9-8d19-5c4797a2779f</ac:parameter>
+                                <ac:parameter ac:name="key">[(${jiraIssueKey})]</ac:parameter>
+                            </ac:structured-macro>
+                            <span style="color: rgb(255,255,255);">[(${jiraIssueKey})]</span>
+                        </p>
+                    </div>
+                </td>
+            </tr>
+            <th:block th:if="${deploymentLetter.changeJiraIssueKeys.isEmpty()}">
+                <tr><td>Keine Jira Referenzen wurden im Commit-Log gefunden</td></tr>
+            </th:block>
+            </tbody>
+        </table>
+    </th:block>
+
+    <th:block th:if="${deploymentLetter.changeComparedToVersion} == ''">
+        <h2>Kein Changelog vorhanden</h2>
+        <p>Mögliche Ursachen:</p>
+        <ul>
+            <li>es ist das erste Deployment von diesem Service auf dieser Umgebung</li>
+            <li>kein GIT-Tag wurde publiziert</li>
+            <li>der Service wurde umbenannt (System-Name oder Komponente)</li>
+        </ul>
+    </th:block>
+
+    <div th:replace="~{fragment/legend-status :: legend-status}"></div>
+
+</th:block>
+

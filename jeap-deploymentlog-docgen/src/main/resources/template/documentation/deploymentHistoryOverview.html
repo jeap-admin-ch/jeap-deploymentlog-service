@@ -1,0 +1,65 @@
+<th:block xmlns:th="http://www.thymeleaf.org">
+    <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+
+    <h2>Deployment auf [(${deploymentHistoryOverview.environmentName})]</h2>
+    <table class="wrapped">
+        <tbody>
+        <tr>
+            <th colspan="1">
+                <span style="color: rgb(23,43,77);">Datum / Zeit</span>
+            </th>
+            <th colspan="1">Status</th>
+            <th colspan="1">Dauer</th>
+            <th colspan="1">Deployment</th>
+            <th colspan="1">System</th>
+            <th colspan="1">Komponente</th>
+            <th colspan="1">Version</th>
+            <th colspan="1">Gestartet durch</th>
+        </tr>
+        <tr th:each="deployment: ${deploymentHistoryOverview.deployments}">
+            <td colspan="1" th:text="${deployment.getStartedAt}"></td>
+            <td colspan="1" style="text-align: center;">
+                <th:block th:switch="${deployment.state}">
+                    <div th:case="'SUCCESS'">
+                        <ac:emoticon ac:name="tick"/>
+                    </div>
+                    <div th:case="'FAILURE'">
+                        <ac:emoticon ac:name="cross"/>
+                    </div>
+                    <div th:case="'STARTED'">
+                        <ac:emoticon ac:name="question"/>
+                    </div>
+                </th:block>
+            </td>
+            <td colspan="1" th:text="${deployment.duration}"></td>
+            <td colspan="1">
+                <ac:link>
+                    <ri:page th:ri:content-title="${deployment.deploymentLetterLink}"/>
+                    <ac:plain-text-link-body><![CDATA[Detail]]></ac:plain-text-link-body>
+                </ac:link>
+            </td>
+            <td colspan="1">
+                <ac:link>
+                    <ri:page th:ri:content-title="${deployment.system}"/>
+                    <ac:plain-text-link-body><![CDATA[[(${deployment.system})]]]></ac:plain-text-link-body>
+                </ac:link>
+            </td>
+            <td colspan="1">
+                <ac:link>
+                    <ri:page th:ri:content-title="${deployment.component}"/>
+                    <ac:plain-text-link-body><![CDATA[[(${deployment.component})]]]></ac:plain-text-link-body>
+                </ac:link>
+            </td>
+            <td>
+                <a th:href="${deployment.versionControlUrl}" th:if="${deployment.version} != '(undeployed)'" target="_blank">[(${deployment.version})]</a>
+                <span th:if="${deployment.version} == '(undeployed)'"><i>(Undeployed)</i></span>
+            </td>
+            <td colspan="1" th:text="${deployment.startedBy}"></td>
+        </tr>
+        </tbody>
+    </table>
+    <p>Zeigt nur die Deployments seit dem [(${deploymentHistoryOverview.deploymentHistoryOverviewMinStartedAt})] (maximal [(${deploymentHistoryOverview.deploymentHistoryMaxShow})] Deployments)</p>
+
+    <div th:replace="~{fragment/legend-status :: legend-status}"></div>
+
+</th:block>

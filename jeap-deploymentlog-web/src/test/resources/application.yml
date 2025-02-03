@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: "jdbc:h2:mem:testdb"
+  flyway:
+    locations: classpath:db/migration/common
+    init-sqls:
+      - SET NON_KEYWORDS year
+  jpa:
+    show-sql: true
+
+jeap:
+  deploymentlog:
+    documentation-generator:
+      confluence:
+        url: "https://foo"
+        username: user
+        password: password
+        deployments-page-name: page
+        space-key: space
+        mock-confluence-client: true
+      scheduled:
+        cron: "-"
+      config:
+        remedy-change-link-root-url: "https://remedy"
+    read-user:
+      username: read
+      password: "{noop}secret"
+    write-user:
+      username: write
+      password: "{noop}secret"
+    jira:
+      url: "https://foo"
+      username: user
+      password: password
+      mock-jira-client: true
+
+logging.level:
+  ch.admin.bit.jeap.deploymentlog: debug

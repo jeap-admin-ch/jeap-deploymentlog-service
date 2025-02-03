@@ -1,0 +1,63 @@
+<th:block xmlns:th="http://www.thymeleaf.org">
+    <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+
+    <h2>Umgebungen</h2>
+    <table class="wrapped">
+        <tbody>
+        <tr>
+            <th>Komponente</th>
+            <th:block th:each="envName: ${system.environmentNamesArrayList}">
+                <th style="text-align: center;"> [(${envName})]</th>
+            </th:block>
+        </tr>
+        <tr th:each="component: ${system.componentList}">
+            <td>
+                <ac:link>
+                    <ri:page th:ri:content-title="${component.componentName}"/>
+                    <ac:plain-text-link-body><![CDATA[[(${component.componentName})]]]></ac:plain-text-link-body>
+                </ac:link>
+            </td>
+            <th:block th:each="componentEnv: ${component.componentEnvDtoList}">
+                <td th:class="${componentEnv.colorClass}">
+                    <p style="text-align: center;" title="">
+                        <a th:href="${componentEnv.versionControlUrl}"
+                           target="_blank">[(${componentEnv.versionName})]</a>
+                    </p>
+                    <p style="text-align: center;" title="">
+                        <ac:link th:if="${componentEnv.deploymentLetterUrl}">
+                            <ri:page th:ri:content-title="${componentEnv.deploymentLetterUrl}"/>
+                            <ac:plain-text-link-body><![CDATA[[(${componentEnv.deployedAt})]]]>
+                            </ac:plain-text-link-body>
+                        </ac:link>
+                    </p>
+                </td>
+            </th:block>
+
+        </tr>
+        </tbody>
+    </table>
+    <h4>Legende</h4>
+    <p>Entwicklungsumgebungen werden bei Versionsvergleichen nicht berücksichtigt.</p>
+    <table class="wrapped">
+        <colgroup>
+            <col/>
+        </colgroup>
+        <tbody>
+        <tr>
+            <td class="highlight-#e3fcef" data-highlight-colour="#e3fcef" title="Background colour : Light green 35%">
+                Alle Umgebungen identisch
+            </td>
+        </tr>
+        <tr>
+            <td class="highlight-#fffae6" data-highlight-colour="#fffae6" title="Background colour : Light yellow 35%">
+                Change: Höhere Version als auf der nächsten Stage
+            </td>
+        </tr>
+        <tr>
+            <td class="highlight-#deebff" data-highlight-colour="#deebff" title="Background colour : Light blue 35%">
+                Neu: "Fehlt" auf der Nächsten Stage
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</th:block>
