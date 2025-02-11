@@ -6,10 +6,13 @@
     <url>https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main</url>
     <scm>
         <url>https://github.com/jeap-admin-ch/jeap-deploymentlog-service.git</url>
+        <connection>scm:git:git://github.com/jeap-admin-ch/jeap-deploymentlog-service.git</connection>
+        <developerConnection>scm:git:ssh://github.com:jeap-admin-ch/jeap-deploymentlog-service.git</developerConnection>
     </scm>
     <developers>
         <developer>
             <name>BIT</name>
+            <email>jeap-community@bit.admin.ch</email>
             <organization>Federal Office of Information Technology, Systems and Telecommunication FOITT</organization>
             <organizationUrl>https://www.bit.admin.ch/</organizationUrl>
         </developer>
