@@ -11,6 +11,8 @@ spring:
 
 jeap:
   deploymentlog:
+    documentation:
+      root-url: "https://confluence.ch"
     documentation-generator:
       confluence:
         url: "https://foo"
@@ -34,6 +36,7 @@ jeap:
       username: user
       password: password
       mock-jira-client: true
+      app-id: b5541b5e-27e3-40b6-a607-cbb11ec458ba
 
 logging.level:
   ch.admin.bit.jeap.deploymentlog: debug

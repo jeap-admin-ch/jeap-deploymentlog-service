@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-02-26
+
+### Changed
+- **BREAKING** - Removed default values for the following Spring properties:
+  - `jeap.deploymentlog.jira.app-id`
+  - `jeap.deploymentlog.jira.url`
+  - `jeap.deploymentlog.documentation.root-url`
+
 ## [1.56.0] - 2025-02-13
 
 ### Changed
