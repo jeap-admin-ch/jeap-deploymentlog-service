@@ -8,11 +8,11 @@ Third-party dependencies grouped by their license type (see [pom.xml](/pom.xml) 
 Apache License Version 2.0
 -------------------------------
 
- * jeap-deploymentlog-docgen - [ch.admin.bit.jeap:jeap-deploymentlog-docgen](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-docgen)
- * jeap-deploymentlog-domain - [ch.admin.bit.jeap:jeap-deploymentlog-domain](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-domain)
- * jeap-deploymentlog-jira - [ch.admin.bit.jeap:jeap-deploymentlog-jira](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-jira)
- * jeap-deploymentlog-persistence - [ch.admin.bit.jeap:jeap-deploymentlog-persistence](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-persistence)
- * jeap-deploymentlog-web - [ch.admin.bit.jeap:jeap-deploymentlog-web](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-web)
+ * ch.admin.bit.jeap:jeap-deploymentlog-docgen - [ch.admin.bit.jeap:jeap-deploymentlog-docgen](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-docgen)
+ * ch.admin.bit.jeap:jeap-deploymentlog-domain - [ch.admin.bit.jeap:jeap-deploymentlog-domain](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-domain)
+ * ch.admin.bit.jeap:jeap-deploymentlog-jira - [ch.admin.bit.jeap:jeap-deploymentlog-jira](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-jira)
+ * ch.admin.bit.jeap:jeap-deploymentlog-persistence - [ch.admin.bit.jeap:jeap-deploymentlog-persistence](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-persistence)
+ * ch.admin.bit.jeap:jeap-deploymentlog-web - [ch.admin.bit.jeap:jeap-deploymentlog-web](https://github.com/jeap-admin-ch/jeap-deploymentlog-service/tree/main/jeap-deploymentlog-web)
  * ch.admin.bit.jeap:jeap-spring-boot-application-starter - [ch.admin.bit.jeap:jeap-spring-boot-application-starter](https://github.com/jeap-admin-ch/jeap-spring-boot-starters/tree/main/jeap-spring-boot-application-starter)
  * ch.admin.bit.jeap:jeap-spring-boot-cloud-autoconfig-starter - [ch.admin.bit.jeap:jeap-spring-boot-cloud-autoconfig-starter](https://github.com/jeap-admin-ch/jeap-spring-boot-starters/tree/main/jeap-spring-boot-cloud-autoconfig-starter)
  * ch.admin.bit.jeap:jeap-spring-boot-logging-starter - [ch.admin.bit.jeap:jeap-spring-boot-logging-starter](https://github.com/jeap-admin-ch/jeap-spring-boot-starters/tree/main/jeap-spring-boot-logging-starter)
