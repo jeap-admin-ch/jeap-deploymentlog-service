@@ -33,6 +33,7 @@
     </parent>
 
     <artifactId>jeap-deploymentlog-service</artifactId>
+    <name>${project.groupId}:${project.artifactId}</name>
     <version>2.4.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 

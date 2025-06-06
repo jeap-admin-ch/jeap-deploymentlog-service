@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>jeap-deploymentlog-service-instance</artifactId>
+    <name>${project.groupId}:${project.artifactId}</name>
     <packaging>pom</packaging>
 
     <properties>
