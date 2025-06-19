@@ -80,6 +80,12 @@ public class Deployment {
     @AttributeOverride(name = "details", column = @Column(name = "target_details"))
     private DeploymentTarget target;
 
+    @ElementCollection
+    @CollectionTable(name = "deployment_types", joinColumns = @JoinColumn(name = "deployment_id"))
+    @Column(name = "type")
+    @Enumerated(EnumType.STRING)
+    private Set<DeploymentType> deploymentTypes = new HashSet<>();
+
     @Builder
     @SuppressWarnings("java:S107")
     private Deployment(@NonNull String externalId,
@@ -93,7 +99,8 @@ public class Deployment {
                        Set<String> referenceIdentifiers,
                        Changelog changelog,
                        @NonNull DeploymentSequence sequence,
-                       String remedyChangeId) {
+                       String remedyChangeId,
+                       Set<DeploymentType> deploymentTypes) {
         this.id = UUID.randomUUID();
         this.state = DeploymentState.STARTED;
         this.externalId = externalId;
@@ -109,6 +116,7 @@ public class Deployment {
         this.changelog = changelog;
         this.sequence = sequence;
         this.remedyChangeId = remedyChangeId;
+        this.deploymentTypes = new HashSet<>(deploymentTypes == null ? Set.of() : deploymentTypes);
     }
 
     public void failed(ZonedDateTime endedAt, String stateMessage) {

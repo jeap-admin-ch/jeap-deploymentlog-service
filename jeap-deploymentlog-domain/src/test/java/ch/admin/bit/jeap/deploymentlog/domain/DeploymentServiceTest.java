@@ -66,7 +66,7 @@ class DeploymentServiceTest {
                 true, "system", "component", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository, times(1)).save(any(Deployment.class));
         verify(systemRepository, never()).save(any(System.class));
@@ -87,7 +87,7 @@ class DeploymentServiceTest {
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(),
                 "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository, times(1)).save(any(Deployment.class));
         verify(environmentRepository, times(1)).save(any(Environment.class));
@@ -106,7 +106,7 @@ class DeploymentServiceTest {
                 true, "system", "component", "environment",
                 null,
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository, times(1)).save(any(Deployment.class));
         verify(systemRepository, never()).save(any(System.class));
@@ -362,10 +362,36 @@ class DeploymentServiceTest {
                 true, "system", "component", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository).save(deploymentCaptor.capture());
         assertThat(deploymentCaptor.getValue().getSequence()).isEqualTo(DeploymentSequence.NEW);
+
+    }
+
+    @Test
+    void createDeployment_withDeploymentTypes_deploymentTypesSaved() {
+        when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
+        when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
+        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        EnvironmentComponentVersionState snapshot = mock(EnvironmentComponentVersionState.class);
+        ComponentVersion mockComponentVersion = mock(ComponentVersion.class);
+        when(mockComponentVersion.getVersionName()).thenReturn("1.0.0");
+        when(snapshot.getComponentVersion()).thenReturn(mockComponentVersion);
+        when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(any(Environment.class), any(Component.class))).thenReturn(Optional.of(snapshot));
+
+        deploymentService.createDeployment(
+                "externalId", "1.2.3-4",
+                ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
+                true, "system", "component", "environment",
+                new DeploymentTarget("CF", "http://localhost/cf", "details"),
+                ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
+                "comment", "1.1.0", Set.of("PROJ-123"), null,
+                Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE));
+
+        verify(deploymentRepository).save(deploymentCaptor.capture());
+        assertThat(deploymentCaptor.getValue().getSequence()).isEqualTo(DeploymentSequence.NEW);
+        assertThat(deploymentCaptor.getValue().getDeploymentTypes()).containsOnly(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE);
 
     }
 
@@ -386,7 +412,7 @@ class DeploymentServiceTest {
                 true, "system", "component", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository).save(deploymentCaptor.capture());
         assertThat(deploymentCaptor.getValue().getSequence()).isEqualTo(DeploymentSequence.REPEATED);
@@ -405,7 +431,7 @@ class DeploymentServiceTest {
                 true, "system", "component", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
-                "comment", "1.1.0", Set.of("PROJ-123"), null);
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
 
         verify(deploymentRepository).save(deploymentCaptor.capture());
         assertThat(deploymentCaptor.getValue().getSequence()).isEqualTo(DeploymentSequence.FIRST);

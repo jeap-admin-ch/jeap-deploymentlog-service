@@ -78,6 +78,7 @@ class DeploymentRepositoryImplTest {
                         .jiraIssueKeys(Set.of("1", "2"))
                         .build())
                 .sequence(DeploymentSequence.NEW)
+                .deploymentTypes(Set.of(DeploymentType.CODE, DeploymentType.CONFIG))
                 .build());
 
         Optional<Deployment> deployment = deploymentRepository.findByExternalId(externalId);

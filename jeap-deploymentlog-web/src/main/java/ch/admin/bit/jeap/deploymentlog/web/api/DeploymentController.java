@@ -92,7 +92,8 @@ public class DeploymentController {
                 changelogComment,
                 changelogComparedToVersion,
                 changelogJiraIssueKeys,
-                deploymentCreateDto.getRemedyChangeId());
+                deploymentCreateDto.getRemedyChangeId(),
+                deploymentCreateDto.getDeploymentTypes());
 
         triggerDocgenForDeployment(deploymentId);
 

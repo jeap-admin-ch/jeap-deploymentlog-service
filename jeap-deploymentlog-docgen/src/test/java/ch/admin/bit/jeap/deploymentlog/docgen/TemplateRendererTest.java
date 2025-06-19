@@ -78,6 +78,7 @@ class TemplateRendererTest {
                 .changeComparedToVersion("1.2.3")
                 .changeJiraIssueKeys(Set.of())
                 .sequence("NEW")
+                .deploymentTypes("CODE, CONFIG")
                 .build();
 
         String content = templateRenderer.renderDeploymentLetterPage(deploymentLetterPageDto);
@@ -85,7 +86,8 @@ class TemplateRendererTest {
         assertThat(content)
                 .doesNotContain("Kein Changelog vorhanden")
                 .contains("Änderungen zu Version 1.2.3")
-                .contains("Keine Jira Referenzen wurden im Commit-Log gefunden");
+                .contains("Keine Jira Referenzen wurden im Commit-Log gefunden")
+                .contains("CODE, CONFIG");
     }
 
     @Test
@@ -274,6 +276,7 @@ class TemplateRendererTest {
                 .state("STARTED")
                 .deploymentId("123")
                 .startedAt("01.01.2022 - 12:00:00")
+                .deploymentTypes("CODE, CONFIG")
                 .build();
 
         DeploymentHistoryOverviewPageDto dto = DeploymentHistoryOverviewPageDto.builder()
@@ -286,7 +289,8 @@ class TemplateRendererTest {
         String content = templateRenderer.renderDeploymentHistoryOverviewPage(dto);
         assertThat(content)
                 .isNotNull()
-                .contains(dto.getDeploymentHistoryOverviewMinStartedAt());
+                .contains(dto.getDeploymentHistoryOverviewMinStartedAt())
+                .contains("CODE, CONFIG");
     }
 
     @Test

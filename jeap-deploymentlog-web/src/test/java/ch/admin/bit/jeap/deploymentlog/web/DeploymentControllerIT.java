@@ -68,7 +68,7 @@ class DeploymentControllerIT extends IntegrationTestBase {
     }
 
     @Test
-    void getDeployment() throws InterruptedException {
+    void getDeployment() {
         String externalId = "external-id-3";
         postDeployment(createDeploymentDto(), externalId);
 

@@ -51,7 +51,8 @@ public class DeploymentService {
                                  String changelogComment,
                                  String changelogComparedToVersion,
                                  Set<String> changelogJiraIssueKeys,
-                                 String remedyChangeId) {
+                                 String remedyChangeId,
+                                 Set<DeploymentType> deploymentTypes) {
 
         final ch.admin.bit.jeap.deploymentlog.domain.Component component = systemService.retrieveOrCreateComponent(systemName, componentName);
         final Environment environment = retrieveOrCreateEnvironmentByName(environmentName);
@@ -80,6 +81,7 @@ public class DeploymentService {
                 .remedyChangeId(remedyChangeId)
                 .properties(properties)
                 .referenceIdentifiers(referenceIdentifiers)
+                .deploymentTypes(deploymentTypes)
                 .build();
 
         return deploymentRepository.save(deployment).getId();

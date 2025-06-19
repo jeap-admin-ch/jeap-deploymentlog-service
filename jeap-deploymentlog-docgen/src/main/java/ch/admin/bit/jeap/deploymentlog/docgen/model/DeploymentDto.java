@@ -17,4 +17,5 @@ public class DeploymentDto {
     String versionControlUrl;
     String startedBy;
     String state;
+    String deploymentTypes;
 }

@@ -207,6 +207,7 @@ public class GeneratorService {
                         .deploymentLetterLink(createDeploymentLetterLink(deployment))
                         .startedBy(deployment.getStartedBy())
                         .state(deployment.getState().toString())
+                        .deploymentTypes(getDeploymentTypesAsString(deployment.getDeploymentTypes()))
                         .build())
                 .toList();
     }
@@ -224,6 +225,7 @@ public class GeneratorService {
                         .deploymentLetterLink(createDeploymentLetterLink(deployment))
                         .startedBy(deployment.getStartedBy())
                         .state(deployment.getState().toString())
+                        .deploymentTypes(getDeploymentTypesAsString(deployment.getDeploymentTypes()))
                         .build())
                 .toList();
     }
@@ -266,7 +268,8 @@ public class GeneratorService {
                 .sequence(deployment.getSequence().getLabel())
                 .remedyChangeId(deployment.getRemedyChangeId())
                 .remedyChangeLink(getRemedyChangeLink(deployment.getRemedyChangeId()))
-                .buildJobLinks(getBuildJobLinks(deployment.getComponentVersion().getDeploymentUnit(), deployment.getReferenceIdentifiers()));
+                .buildJobLinks(getBuildJobLinks(deployment.getComponentVersion().getDeploymentUnit(), deployment.getReferenceIdentifiers()))
+                .deploymentTypes(getDeploymentTypesAsString(deployment.getDeploymentTypes()));
 
         final DeploymentTarget target = deployment.getTarget();
         if (target != null) {
@@ -277,6 +280,13 @@ public class GeneratorService {
         }
 
         return dtoBuilder.build();
+    }
+
+    private static String getDeploymentTypesAsString(Set<DeploymentType> deploymentTypes) {
+        if (deploymentTypes.isEmpty()) {
+            return "-";
+        }
+        return String.join(", ", deploymentTypes.stream().map(Enum::name).toList());
     }
 
     public DeploymentLetterPageDto createUndeploymentLetterPageDto(Deployment deployment) {

@@ -8,6 +8,7 @@
             <th colspan="1">
                 <span style="color: rgb(23,43,77);">Datum / Zeit</span>
             </th>
+            <th colspan="1">Typ</th>
             <th colspan="1">Status</th>
             <th colspan="1">Dauer</th>
             <th colspan="1">Deployment</th>
@@ -18,6 +19,7 @@
         </tr>
         <tr th:each="deployment: ${deploymentHistoryOverview.deployments}">
             <td colspan="1" th:text="${deployment.getStartedAt}"></td>
+            <td colspan="1" th:text="${deployment.deploymentTypes}"></td>
             <td colspan="1" style="text-align: center;">
                 <th:block th:switch="${deployment.state}">
                     <div th:case="'SUCCESS'">

@@ -43,6 +43,7 @@ public class DeploymentLetterPageDto {
     String remedyChangeLink;
     Set<String> buildJobLinks;
     Map<String, String> properties;
+    String deploymentTypes;
 
     public String getPageTitle() {
         String pageTitle = startedAt + " " + componentName + " (" + environmentName + ")";

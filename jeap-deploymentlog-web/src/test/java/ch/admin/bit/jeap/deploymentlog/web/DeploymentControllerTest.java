@@ -1,8 +1,8 @@
 package ch.admin.bit.jeap.deploymentlog.web;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
-import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
+import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentCheckService;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -41,11 +41,11 @@ class DeploymentControllerTest {
     private MockMvc mockMvc;
     @Autowired
     private ObjectMapper objectMapper;
-    @MockBean
+    @MockitoBean
     private DeploymentService deploymentService;
-    @MockBean
+    @MockitoBean
     private DeploymentCheckService deploymentCheckService;
-    @MockBean
+    @MockitoBean
     private DocgenAsyncService docgenAsyncService;
 
     @Test
@@ -71,6 +71,7 @@ class DeploymentControllerTest {
         changelogDto.setJiraIssueKeys(Set.of("PROJ-123"));
         deploymentCreateDto.setChangelog(changelogDto);
         deploymentCreateDto.setRemedyChangeId("REMEDY_123");
+        deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE));
 
         mockMvc.perform(
                         put("/api/deployment/{externalId}", externalId)
@@ -104,7 +105,8 @@ class DeploymentControllerTest {
                 changelogDto.getComment(),
                 changelogDto.getComparedToVersion(),
                 changelogDto.getJiraIssueKeys(),
-                deploymentCreateDto.getRemedyChangeId());
+                deploymentCreateDto.getRemedyChangeId(),
+                Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE));
 
     }
 
@@ -196,6 +198,20 @@ class DeploymentControllerTest {
     @Test
     void putNewDeployment_noWriteRole_thenReturnsForbidden() throws Exception {
         String externalId = "123";
+        mockMvc.perform(
+                        put("/api/deployment/{externalId}", externalId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(getDeploymentCreateDto()))
+                                .with(httpBasic("read", "secret")))
+                .andExpect(status().isForbidden());
+
+        verify(deploymentService, never()).findByExternalId(externalId);
+
+        verify(deploymentService, never()).createDeployment(
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+    }
+
+    private static DeploymentCreateDto getDeploymentCreateDto() {
         ComponentVersionCreateDto componentVersion = new ComponentVersionCreateDto();
         componentVersion.setComponentName("test");
         componentVersion.setVersionName("1.2.3-4");
@@ -207,18 +223,7 @@ class DeploymentControllerTest {
         deploymentCreateDto.setComponentVersion(componentVersion);
         deploymentCreateDto.setStartedBy("user");
         deploymentCreateDto.setLinks(Collections.emptySet());
-
-        mockMvc.perform(
-                        put("/api/deployment/{externalId}", externalId)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(deploymentCreateDto))
-                                .with(httpBasic("read", "secret")))
-                .andExpect(status().isForbidden());
-
-        verify(deploymentService, never()).findByExternalId(externalId);
-
-        verify(deploymentService, never()).createDeployment(
-                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString());
+        return deploymentCreateDto;
     }
 
     @Test

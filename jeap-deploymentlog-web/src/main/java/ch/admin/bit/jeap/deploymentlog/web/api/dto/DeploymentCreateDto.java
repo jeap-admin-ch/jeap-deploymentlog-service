@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.web.api.dto;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTarget;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentUnit;
 import ch.admin.bit.jeap.deploymentlog.domain.Link;
 import lombok.Data;
@@ -33,6 +34,8 @@ public class DeploymentCreateDto {
     Map<String, String> properties;
 
     Set<String> referenceIdentifiers;
+
+    Set<DeploymentType> deploymentTypes;
 
     public String getEnvironmentName() {
         return environmentName.toUpperCase();
