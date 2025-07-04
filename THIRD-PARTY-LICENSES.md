@@ -78,12 +78,13 @@ Apache License Version 2.0
  * Non-Blocking Reactive Foundation for the JVM - [io.projectreactor:reactor-core](https://github.com/reactor/reactor-core)
  * Core functionality for the Reactor Netty library - [io.projectreactor.netty:reactor-netty-core](https://github.com/reactor/reactor-netty)
  * HTTP functionality for the Reactor Netty library - [io.projectreactor.netty:reactor-netty-http](https://github.com/reactor/reactor-netty)
- * Prometheus Metrics Config - [io.prometheus:prometheus-metrics-config](http://github.com/prometheus/client_java/prometheus-metrics-config)
- * Prometheus Metrics Core - [io.prometheus:prometheus-metrics-core](http://github.com/prometheus/client_java/prometheus-metrics-core)
- * Prometheus Metrics Exposition Formats - [io.prometheus:prometheus-metrics-exposition-formats](http://github.com/prometheus/client_java/prometheus-metrics-exposition-formats)
- * Prometheus Metrics Exposition Text Formats - [io.prometheus:prometheus-metrics-exposition-textformats](http://github.com/prometheus/client_java/prometheus-metrics-exposition-textformats)
- * Prometheus Metrics Model - [io.prometheus:prometheus-metrics-model](http://github.com/prometheus/client_java/prometheus-metrics-model)
- * Prometheus Metrics Tracer Common - [io.prometheus:prometheus-metrics-tracer-common](http://github.com/prometheus/client_java/prometheus-metrics-tracer/prometheus-metrics-tracer-common)
+ * Prometheus Metrics Config - [io.prometheus:prometheus-metrics-config](http://github.com/prometheus/client_java/client_java/prometheus-metrics-config)
+ * Prometheus Metrics Core - [io.prometheus:prometheus-metrics-core](http://github.com/prometheus/client_java/client_java/prometheus-metrics-core)
+ * Prometheus Metrics Exposition Formats - [io.prometheus:prometheus-metrics-exposition-formats](http://github.com/prometheus/client_java/client_java/prometheus-metrics-exposition-formats)
+ * Prometheus Metrics Exposition Formats no protobuf - [io.prometheus:prometheus-metrics-exposition-formats-no-protobuf](http://github.com/prometheus/client_java/client_java/prometheus-metrics-exposition-formats-no-protobuf)
+ * Prometheus Metrics Exposition Text Formats - [io.prometheus:prometheus-metrics-exposition-textformats](http://github.com/prometheus/client_java/client_java/prometheus-metrics-exposition-textformats)
+ * Prometheus Metrics Model - [io.prometheus:prometheus-metrics-model](http://github.com/prometheus/client_java/client_java/prometheus-metrics-model)
+ * Prometheus Metrics Tracer Common - [io.prometheus:prometheus-metrics-tracer-common](http://github.com/prometheus/client_java/client_java/prometheus-metrics-tracer/prometheus-metrics-tracer-common)
  * Jandex: Core - [io.smallrye:jandex](https://smallrye.io)
  * swagger-annotations-jakarta - [io.swagger.core.v3:swagger-annotations-jakarta](https://github.com/swagger-api/swagger-core/modules/swagger-annotations-jakarta)
  * swagger-core-jakarta - [io.swagger.core.v3:swagger-core-jakarta](https://github.com/swagger-api/swagger-core/modules/swagger-core-jakarta)
@@ -202,6 +203,7 @@ BSD 2-Clause License
 BSD License 3
 -------------------------------
 
+ * Protocol Buffers [Core] - [com.google.protobuf:protobuf-java](https://developers.google.com/protocol-buffers/protobuf-java/)
  * ANTLR 4 Runtime - [org.antlr:antlr4-runtime](https://www.antlr.org/antlr4-runtime/)
  * commons-compiler - [org.codehaus.janino:commons-compiler](http://janino-compiler.github.io/commons-compiler/)
  * janino - [org.codehaus.janino:janino](http://janino-compiler.github.io/janino/)
