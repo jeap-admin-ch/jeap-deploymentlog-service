@@ -366,7 +366,7 @@ public class GeneratorService {
     private Set<String> getChangeLogJiraIssueKeys(Deployment deployment) {
         Changelog changelog = deployment.getChangelog();
         if (changelog != null) {
-            return changelog.getJiraIssueKeys();
+            return new HashSet<>(changelog.getJiraIssueKeys());
         } else return Set.of();
     }
 
