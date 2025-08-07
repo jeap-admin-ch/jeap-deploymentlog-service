@@ -194,15 +194,19 @@ public class DeploymentService {
         return environmentRepository.findByName(name).orElseGet(() -> environmentRepository.save(new Environment(name)));
     }
 
-    private void updateEnvironmentComponentVersionState(Deployment deployment) {
-        final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
+    void updateEnvironmentComponentVersionState(Deployment deployment) {
+        if(deployment.getDeploymentTypes().contains(DeploymentType.CODE)){
+            final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
 
-        if (snapshot.isPresent()) {
-            log.info("Updating current EnvironmentComponentVersionState {} with new version '{}' and deployment '{}'", snapshot.get(), deployment.getComponentVersion().getVersionName(), deployment.getEndedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
-            snapshot.get().updateVersion(deployment.getComponentVersion(), deployment);
+            if (snapshot.isPresent()) {
+                log.info("Updating current EnvironmentComponentVersionState {} with new version '{}' and deployment '{}'", snapshot.get(), deployment.getComponentVersion().getVersionName(), deployment.getEndedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                snapshot.get().updateVersion(deployment.getComponentVersion(), deployment);
+            } else {
+                final EnvironmentComponentVersionState envSaved = environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(deployment));
+                log.info("Created new EnvironmentComponentVersionState {}", envSaved);
+            }
         } else {
-            final EnvironmentComponentVersionState envSaved = environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(deployment));
-            log.info("Created new EnvironmentComponentVersionState {}", envSaved);
+            log.info("Skipping update of EnvironmentComponentVersionState for deployment with externalId '{}' as it is not a CODE deployment type", deployment.getExternalId());
         }
     }
 

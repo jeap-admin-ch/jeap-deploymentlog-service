@@ -136,6 +136,20 @@ class DeploymentServiceTest {
                 .containsEntry("test-prop", "test-value");
     }
 
+    @Test
+    void updateEnvironmentComponentVersionState_whenNotCodeType_thenNoUpdateOrSave() {
+        Deployment deployment = mock(Deployment.class);
+        when(deployment.getDeploymentTypes()).thenReturn(EnumSet.of(DeploymentType.INFRASTRUCTURE));
+        when(deployment.getExternalId()).thenReturn("externalId");
+
+        deploymentService.updateEnvironmentComponentVersionState(deployment);
+
+        verify(environmentComponentVersionStateRepository, never())
+                .findByEnvironmentAndComponent(any(), any());
+        verify(environmentComponentVersionStateRepository, never())
+                .save(any(EnvironmentComponentVersionState.class));
+    }
+
 
     @Test
     void updateState_snapshotNotExists_created() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
@@ -487,6 +501,7 @@ class DeploymentServiceTest {
                 .componentVersion(componentVersion)
                 .links(Collections.emptySet())
                 .sequence(DeploymentSequence.NEW)
+                .deploymentTypes(Collections.singleton(DeploymentType.CODE))
                 .build();
     }
 
