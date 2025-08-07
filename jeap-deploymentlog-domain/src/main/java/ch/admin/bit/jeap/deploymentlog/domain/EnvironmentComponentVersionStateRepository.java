@@ -12,11 +12,9 @@ public interface EnvironmentComponentVersionStateRepository {
     /**
      * Get all Compenents of a System, which have Successful-Deployments
      * @param system as System
-     * @return List of Components
+     * @return List of Componentsd
      */
     List<Component> findComponentsBySystem(System system);
-
-    Optional<EnvironmentComponentVersionState> findLastByEnvironmentAndComponentAndDeploymentTypeCode(Environment environment, Component component);
 
     Optional<EnvironmentComponentVersionState> findByEnvironmentAndComponent(Environment environment, Component component);
 

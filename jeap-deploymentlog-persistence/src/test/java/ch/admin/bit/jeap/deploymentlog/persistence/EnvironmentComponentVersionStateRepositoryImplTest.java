@@ -132,36 +132,4 @@ class EnvironmentComponentVersionStateRepositoryImplTest {
                 .hasSize(1)
                 .allMatch(componentVersionSummary -> componentVersionSummary.getComponentName().equals("Microservice A"));
     }
-
-    @Test
-    void findLastByEnvironmentAndComponentAndDeploymentTypeCode() {
-        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
-
-        // First deployment with CODE
-        Deployment firstDeployment = TestDataFactory.createDeployment(environmentDev, systemAMicroserviceA, ZonedDateTime.now().minusHours(2), deploymentTarget);
-        firstDeployment.getDeploymentTypes().add(DeploymentType.CODE);
-        firstDeployment.success(ZonedDateTime.now().minusHours(1), "first success");
-        deploymentRepository.save(firstDeployment);
-        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(firstDeployment));
-
-        // Second deployment with CODE (should be found)
-        Deployment secondDeployment = TestDataFactory.createDeployment(environmentDev, systemAMicroserviceA, ZonedDateTime.now().minusMinutes(90), deploymentTarget);
-        secondDeployment.getDeploymentTypes().add(DeploymentType.CODE);
-        secondDeployment.success(ZonedDateTime.now().minusMinutes(80), "latest code success");
-        deploymentRepository.save(secondDeployment);
-        EnvironmentComponentVersionState latestState = environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(secondDeployment));
-
-        // Third deployment with CONFIG (should be ignored)
-        Deployment thirdDeployment = TestDataFactory.createDeployment(environmentDev, systemAMicroserviceA, ZonedDateTime.now().minusMinutes(30), deploymentTarget);
-        thirdDeployment.getDeploymentTypes().add(DeploymentType.CONFIG);
-        thirdDeployment.success(ZonedDateTime.now().minusMinutes(20), "config success");
-        deploymentRepository.save(thirdDeployment);
-        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(thirdDeployment));
-
-        Optional<EnvironmentComponentVersionState> resultOpt =
-                environmentComponentVersionStateRepository.findLastByEnvironmentAndComponentAndDeploymentTypeCode(environmentDev, systemAMicroserviceA);
-
-        assertTrue(resultOpt.isPresent());
-        assertEquals(latestState.getId(), resultOpt.get().getId());
-    }
 }
