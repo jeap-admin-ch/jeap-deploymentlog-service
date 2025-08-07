@@ -25,6 +25,11 @@ public class EnvironmentComponentVersionStateRepositoryImpl implements Environme
     }
 
     @Override
+    public Optional<EnvironmentComponentVersionState> findLastByEnvironmentAndComponentAndDeploymentTypeCode(Environment environment, Component component) {
+        return jpaEnvironmentComponentVersionStateRepository.findTopByEnvironmentAndComponentAndDeployment_DeploymentTypesContainingOrderByDeployment_StartedAtDesc(environment, component, DeploymentType.CODE);
+    }
+
+    @Override
     public List<EnvironmentComponentVersionState> findByComponentIn(Set<Component> components) {
         return jpaEnvironmentComponentVersionStateRepository.findByComponentIn(components);
     }

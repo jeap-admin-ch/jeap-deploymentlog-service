@@ -53,7 +53,6 @@ public class GeneratorService {
                         .build())
                 .sorted(Comparator.comparing(ComponentDto::getComponentName))
                 .toList();
-
         return SystemPageDto.builder()
                 .name(system.getName())
                 .environmentNamesArrayList(environmentNamesList)
@@ -66,7 +65,7 @@ public class GeneratorService {
         List<ComponentEnvDto> componentEnvDtoList = new ArrayList<>();
 
         environmentList.forEach(environment -> {
-            Optional<EnvironmentComponentVersionState> envCompOpt = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component);
+            Optional<EnvironmentComponentVersionState> envCompOpt = environmentComponentVersionStateRepository.findLastByEnvironmentAndComponentAndDeploymentTypeCode(environment, component);
             if (envCompOpt.isPresent()) {
                 EnvironmentComponentVersionState envCompVersionState = envCompOpt.get();
                 ComponentEnvDto componentEnvDto = ComponentEnvDto.builder()

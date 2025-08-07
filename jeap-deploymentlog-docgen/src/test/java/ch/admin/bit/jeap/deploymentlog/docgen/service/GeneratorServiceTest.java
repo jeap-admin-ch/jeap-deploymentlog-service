@@ -143,9 +143,9 @@ class GeneratorServiceTest {
 
         doReturn(environmentListSystemA).when(environmentRepositoryMock).findEnvironmentsForSystem(systemA);
         doReturn(componentListSystemA).when(environmentComponentVersionStateRepositoryMock).findComponentsBySystem(systemA);
-        doReturn(optStateDEVComponentA).when(environmentComponentVersionStateRepositoryMock).findByEnvironmentAndComponent(environmentDEV, componentA);
-        doReturn(optStateREFComponentA).when(environmentComponentVersionStateRepositoryMock).findByEnvironmentAndComponent(environmentREF, componentA);
-        doReturn(optStatePRODComponentA).when(environmentComponentVersionStateRepositoryMock).findByEnvironmentAndComponent(environmentPROD, componentA);
+        doReturn(optStateDEVComponentA).when(environmentComponentVersionStateRepositoryMock).findLastByEnvironmentAndComponentAndDeploymentTypeCode(environmentDEV, componentA);
+        doReturn(optStateREFComponentA).when(environmentComponentVersionStateRepositoryMock).findLastByEnvironmentAndComponentAndDeploymentTypeCode(environmentREF, componentA);
+        doReturn(optStatePRODComponentA).when(environmentComponentVersionStateRepositoryMock).findLastByEnvironmentAndComponentAndDeploymentTypeCode(environmentPROD, componentA);
 
         SystemPageDto systemPageDto = generatorService.createSystemPageDto(systemA);
         assertEquals(systemName, systemPageDto.getName());

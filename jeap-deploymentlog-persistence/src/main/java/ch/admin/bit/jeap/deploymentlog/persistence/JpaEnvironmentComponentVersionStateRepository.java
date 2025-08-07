@@ -1,9 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
-import ch.admin.bit.jeap.deploymentlog.domain.Component;
-import ch.admin.bit.jeap.deploymentlog.domain.ComponentVersionSummary;
-import ch.admin.bit.jeap.deploymentlog.domain.Environment;
-import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionState;
+import ch.admin.bit.jeap.deploymentlog.domain.*;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
@@ -26,6 +23,12 @@ public interface JpaEnvironmentComponentVersionStateRepository extends CrudRepos
     List<Component> findComponentsBySystemId(@Param("systemId") UUID systemId);
 
     Optional<EnvironmentComponentVersionState> findByEnvironmentAndComponent(Environment environment, Component component);
+
+    Optional<EnvironmentComponentVersionState> findTopByEnvironmentAndComponentAndDeployment_DeploymentTypesContainingOrderByDeployment_StartedAtDesc(
+            Environment environment,
+            Component component,
+            DeploymentType deploymentType
+    );
 
     List<EnvironmentComponentVersionState> findByComponentIn(Set<Component> components);
 
