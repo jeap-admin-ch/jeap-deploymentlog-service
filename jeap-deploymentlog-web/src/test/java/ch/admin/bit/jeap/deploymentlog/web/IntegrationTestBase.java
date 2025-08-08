@@ -47,10 +47,18 @@ public class IntegrationTestBase {
     }
 
     protected static DeploymentCreateDto createDeploymentDto() {
-        return createDeploymentDto("TestSystem", "test", "1.2.3-4");
+        return createDeploymentDto("TestSystem", "test", "1.2.3-4", DeploymentType.CODE);
+    }
+
+    protected static DeploymentCreateDto createConfigDeploymentDto() {
+        return createDeploymentDto("TestSystem", "test", "2b04ffa", DeploymentType.CONFIG);
     }
 
     protected static DeploymentCreateDto createDeploymentDto(String systemName, String componentName, String versionName) {
+        return createDeploymentDto(systemName, componentName, versionName, DeploymentType.CODE);
+    }
+
+    protected static DeploymentCreateDto createDeploymentDto(String systemName, String componentName, String versionName, DeploymentType deploymentType) {
         ComponentVersionCreateDto componentVersion = new ComponentVersionCreateDto();
         componentVersion.setComponentName(componentName);
         componentVersion.setVersionName(versionName);
@@ -73,6 +81,7 @@ public class IntegrationTestBase {
                 .coordinates("org:artifact:1.0.0")
                 .type(DeploymentUnitType.MAVEN_JAR)
                 .build());
+        deploymentCreateDto.setDeploymentTypes(Set.of(deploymentType));
 
         ChangelogDto changelogDto = new ChangelogDto();
         changelogDto.setComment("comment");

@@ -45,6 +45,26 @@ class SystemControllerIT extends IntegrationTestBase {
     }
 
     @Test
+    void getCurrentComponentVersionOnEnvironment_withMultipleDeployments_returnsLatestCodeVersion() {
+        String externalCodeId = "external-id-10";
+        postDeployment(createDeploymentDto(), externalCodeId);
+        putDeploymentState(externalCodeId, DeploymentState.SUCCESS);
+
+        String externalConfigId = "external-id-20";
+        postDeployment(createConfigDeploymentDto(), externalConfigId);
+        putDeploymentState(externalConfigId, DeploymentState.SUCCESS);
+
+        webTestClient.get()
+                .uri("/api/system/TestSystem/component/test/currentVersion/DEV")
+                .headers(headers -> headers.setBasicAuth("read", "secret"))
+                .exchange()
+                .expectStatus()
+                .is2xxSuccessful()
+                .expectBody(String.class)
+                .value(version -> assertEquals("1.2.3-4", version));
+    }
+
+    @Test
     void deleteComponentOnEnvironment() throws JsonProcessingException {
         String externalId = "external-id-10";
         postDeployment(createDeploymentDto(), externalId);
