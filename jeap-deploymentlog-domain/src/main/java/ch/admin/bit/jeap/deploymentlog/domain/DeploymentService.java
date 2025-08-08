@@ -195,7 +195,9 @@ public class DeploymentService {
     }
 
     void updateEnvironmentComponentVersionState(Deployment deployment) {
-        if(deployment.getDeploymentTypes().contains(DeploymentType.CODE)){
+        if (deployment.getDeploymentTypes() != null &&
+                deployment.getDeploymentTypes().contains(DeploymentType.CODE)) {
+
             final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
 
             if (snapshot.isPresent()) {
