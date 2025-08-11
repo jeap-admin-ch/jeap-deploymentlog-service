@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2025-08-11
+
+### Changed
+
+- The system view in the component table now displays the latest version per environment for all deployments, except those classified as CONFIG or INFRASTRUCTURE.
+This ensures that all relevant non-classified changes are visible, not just CODE deployments.
+
 ## [2.12.0] - 2025-08-07
 
 ### Changed

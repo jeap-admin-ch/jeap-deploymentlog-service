@@ -131,7 +131,7 @@ public class DeploymentService {
             return DeploymentSequence.FIRST;
         }
         else {
-            if (currentDeploymentState.get().getComponentVersion().getVersionName().equals(versionName)){
+            if (currentDeploymentState.get().getComponentVersion().getVersionName().equals(versionName)) {
                 return DeploymentSequence.REPEATED;
             }
         }
@@ -195,8 +195,10 @@ public class DeploymentService {
     }
 
     void updateEnvironmentComponentVersionState(Deployment deployment) {
-        if (deployment.getDeploymentTypes() != null &&
-                deployment.getDeploymentTypes().contains(DeploymentType.CODE)) {
+        Set<DeploymentType> deploymentTypes = deployment.getDeploymentTypes();
+        if (deploymentTypes == null ||
+                (!deploymentTypes.contains(DeploymentType.INFRASTRUCTURE) &&
+                        !deploymentTypes.contains(DeploymentType.CONFIG))) {
 
             final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
 
@@ -297,9 +299,9 @@ public class DeploymentService {
     }
 
     @TransactionalReadReplica
-    public Deployment getLastDeploymentForComponent(ch.admin.bit.jeap.deploymentlog.domain.Component component, Environment env){
+    public Deployment getLastDeploymentForComponent(ch.admin.bit.jeap.deploymentlog.domain.Component component, Environment env) {
         return deploymentRepository.getLastDeploymentForComponent(component, env)
-            .orElseThrow(() -> new IllegalStateException(String.format("Last deployment not found for component '%s' in environment '%s'", component.getName(), env.getName())));
+                .orElseThrow(() -> new IllegalStateException(String.format("Last deployment not found for component '%s' in environment '%s'", component.getName(), env.getName())));
     }
 
 }
