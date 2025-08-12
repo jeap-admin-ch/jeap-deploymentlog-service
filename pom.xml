@@ -34,7 +34,7 @@
 
     <artifactId>jeap-deploymentlog-service</artifactId>
     <name>${project.groupId}:${project.artifactId}</name>
-    <version>2.12.1-SNAPSHOT</version>
+    <version>2.13.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <properties>
@@ -56,27 +56,27 @@
             <dependency>
                 <groupId>ch.admin.bit.jeap</groupId>
                 <artifactId>jeap-deploymentlog-domain</artifactId>
-                <version>2.12.1-SNAPSHOT</version>
+                <version>2.13.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap</groupId>
                 <artifactId>jeap-deploymentlog-docgen</artifactId>
-                <version>2.12.1-SNAPSHOT</version>
+                <version>2.13.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap</groupId>
                 <artifactId>jeap-deploymentlog-persistence</artifactId>
-                <version>2.12.1-SNAPSHOT</version>
+                <version>2.13.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap</groupId>
                 <artifactId>jeap-deploymentlog-web</artifactId>
-                <version>2.12.1-SNAPSHOT</version>
+                <version>2.13.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>ch.admin.bit.jeap</groupId>
                 <artifactId>jeap-deploymentlog-jira</artifactId>
-                <version>2.12.1-SNAPSHOT</version>
+                <version>2.13.0-SNAPSHOT</version>
             </dependency>
 
             <dependency>
