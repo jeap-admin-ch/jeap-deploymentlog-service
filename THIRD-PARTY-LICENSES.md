@@ -125,7 +125,7 @@ Apache License Version 2.0
  * flyway-core - [org.flywaydb:flyway-core](https://flywaydb.org/flyway-core)
  * flyway-database-postgresql - [org.flywaydb:flyway-database-postgresql](https://flywaydb.org/flyway-database-postgresql)
  * Hibernate Commons Annotations - [org.hibernate.common:hibernate-commons-annotations](http://hibernate.org)
- * Hibernate Validator Engine - [org.hibernate.validator:hibernate-validator](http://hibernate.org/validator/hibernate-validator)
+ * Hibernate Validator Engine - [org.hibernate.validator:hibernate-validator](https://hibernate.org/validator)
  * JBoss Logging 3 - [org.jboss.logging:jboss-logging](http://www.jboss.org)
  * JSpecify annotations - [org.jspecify:jspecify](http://jspecify.org/)
  * Objenesis - [org.objenesis:objenesis](http://objenesis.org/objenesis)
