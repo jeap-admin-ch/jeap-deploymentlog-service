@@ -196,10 +196,7 @@ public class DeploymentService {
 
     void updateEnvironmentComponentVersionState(Deployment deployment) {
         Set<DeploymentType> deploymentTypes = deployment.getDeploymentTypes();
-        if (deploymentTypes == null ||
-                (!deploymentTypes.contains(DeploymentType.INFRASTRUCTURE) &&
-                        !deploymentTypes.contains(DeploymentType.CONFIG))) {
-
+        if (deploymentTypes == null || deploymentTypes.isEmpty() || deploymentTypes.contains(DeploymentType.CODE)) {
             final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
 
             if (snapshot.isPresent()) {

@@ -72,7 +72,6 @@ class DeploymentServiceTest {
         verify(systemRepository, never()).save(any(System.class));
         verify(componentRepository, never()).save(any(Component.class));
         verify(environmentRepository, never()).save(any(Environment.class));
-
     }
 
     @Test
@@ -118,7 +117,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_snapshotExists_updated() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        final Deployment deployment = getDeployment();
+        Deployment deployment = getDeploymentWithTypes(DeploymentType.CODE);
         deployment.success(ZonedDateTime.now(), "great success");
 
         when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(deployment));
@@ -150,11 +149,46 @@ class DeploymentServiceTest {
                 .save(any(EnvironmentComponentVersionState.class));
     }
 
-
     @Test
-    void updateState_snapshotNotExists_created() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+    void updateState_snapshotNotExists_created_noDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
         when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeployment()));
+
+        deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
+
+        verify(environmentComponentVersionStateRepository, times(1)).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
+        verify(environmentComponentVersionStateRepository, times(1)).save(any(EnvironmentComponentVersionState.class));
+
+    }
+
+    @Test
+    void updateState_snapshotNotExists_created_emptyDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+
+        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes()));
+
+        deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
+
+        verify(environmentComponentVersionStateRepository, times(1)).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
+        verify(environmentComponentVersionStateRepository, times(1)).save(any(EnvironmentComponentVersionState.class));
+
+    }
+
+    @Test
+    void updateState_snapshotNotExists_created_codeDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+
+        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE)));
+
+        deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
+
+        verify(environmentComponentVersionStateRepository, times(1)).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
+        verify(environmentComponentVersionStateRepository, times(1)).save(any(EnvironmentComponentVersionState.class));
+
+    }
+
+    @Test
+    void updateState_snapshotNotExists_created_codeAndInfraDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+
+        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE)));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 
@@ -480,6 +514,10 @@ class DeploymentServiceTest {
     }
 
     private Deployment getDeployment() {
+        return getDeploymentWithTypes(DeploymentType.CODE);
+    }
+
+    private Deployment getDeploymentWithTypes(DeploymentType... deploymentTypes) {
         Environment environment = new Environment("test");
         DeploymentTarget deploymentTarget = new DeploymentTarget("test", "http://localhost/cf", "details");
         Component component = new Component("test", getSystem());
@@ -501,7 +539,7 @@ class DeploymentServiceTest {
                 .componentVersion(componentVersion)
                 .links(Collections.emptySet())
                 .sequence(DeploymentSequence.NEW)
-                .deploymentTypes(Collections.singleton(DeploymentType.CODE))
+                .deploymentTypes(Set.of(deploymentTypes))
                 .build();
     }
 
