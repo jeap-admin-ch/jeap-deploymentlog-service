@@ -206,6 +206,19 @@ class ConfluenceAdapterImplTest {
     }
 
     @Test
+    void movePage_requestFailedException404() {
+        String pageId = "pageId";
+        String ancestorId = "ancestorId";
+        RequestFailedException rfe = mock(RequestFailedException.class);
+        when(rfe.getMessage()).thenReturn("request failed (request: GET https://some-confluence-server.com/rest/api/content/954415933?expand=body.storage,version <empty body>, response: 404  {\"statusCode\":404,\"data\":{\"authorized\":false,\"valid\":true,\"allowedInReadOnlyMode\":true,\"errors\":[],\"successful\":false},\"message\":\"No content found with id: ContentId{id=954415933}\",\"reason\":\"Not Found\"})");
+        doThrow(rfe).when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+
+        assertDoesNotThrow(() -> confluenceAdapter.movePage(ancestorId, pageId));
+        verify(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+        verifyNoMoreInteractions(confluenceClientMock);
+    }
+
+    @Test
     void deletePageAndChildPages() {
         String parentPageId = "parentPageId";
         String childPage1Id = "childPage1Id";

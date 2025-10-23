@@ -8,6 +8,7 @@ import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluencePage;
 import org.sahli.asciidoc.confluence.publisher.client.http.NotFoundException;
 import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedException;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -57,8 +58,13 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
             ConfluencePage existingPage = confluenceClient.getPageWithContentAndVersionById(contentId);
             log.info("Moving page {}", existingPage.getTitle());
             updatePageWithRetryOnConflict(contentId, ancestorId, existingPage.getTitle(), existingPage.getContent(), existingPage);
-        } catch (NotFoundException e) {
-            log.info("Page with id {} not found. Ignoring...", contentId);
+        } catch (RequestFailedException rfe) {
+            if (StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains("response: 404")) {
+                log.info("Page with id {} not found. Ignoring...", contentId);
+            } else {
+                throw rfe;
+            }
+
         }
     }
 
