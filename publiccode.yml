@@ -1,8 +1,8 @@
 publiccodeYmlVersion: 0.4.0
 name: jeap-deploymentlog-service
 applicationSuite: jEAP
-softwareVersion: 2.21.0
-releaseDate: 2025-10-14
+softwareVersion: 2.21.1
+releaseDate: 2025-10-24
 url: "https://github.com/jeap-admin-ch/jeap-deploymentlog-service.git"
 landingURL: "https://github.com/jeap-admin-ch/jeap"
 platforms:
