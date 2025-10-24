@@ -219,6 +219,19 @@ class ConfluenceAdapterImplTest {
     }
 
     @Test
+    void movePage_requestFailedExceptionEmptyMessage() {
+        String pageId = "pageId";
+        String ancestorId = "ancestorId";
+        RequestFailedException rfe = mock(RequestFailedException.class);
+        when(rfe.getMessage()).thenReturn("");
+        doThrow(rfe).when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+
+        assertThrows(RequestFailedException.class, () -> confluenceAdapter.movePage(ancestorId, pageId));
+        verify(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+        verifyNoMoreInteractions(confluenceClientMock);
+    }
+
+    @Test
     void deletePageAndChildPages() {
         String parentPageId = "parentPageId";
         String childPage1Id = "childPage1Id";
