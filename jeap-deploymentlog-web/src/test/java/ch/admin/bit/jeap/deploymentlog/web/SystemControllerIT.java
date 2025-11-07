@@ -5,46 +5,54 @@ import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentCreateDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentSnapshotDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.EnvironmentComponentVersionStateDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.UndeploymentCreateDto;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.test.web.servlet.MockMvc;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import java.util.Base64;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "logging.level.org.springframework.security=debug")
-@AutoConfigureWebTestClient(timeout = "PT30s")
+@AutoConfigureMockMvc
 class SystemControllerIT extends IntegrationTestBase {
 
     @Autowired
-    private WebTestClient webTestClient;
+    private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
 
     @Test
+    @SneakyThrows
     void getCurrentComponentVersionOnEnvironment() {
         String externalId = "external-id-10";
         postDeployment(createDeploymentDto(), externalId);
         putDeploymentState(externalId, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/system/TestSystem/component/test/currentVersion/DEV")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(String.class)
-                .value(version -> assertEquals("1.2.3-4", version));
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/system/TestSystem/component/test/currentVersion/DEV")
+                        .header("Authorization", basicAuthHeader))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals("1.2.3-4", responseBody);
     }
 
     @Test
+    @SneakyThrows
     void getCurrentComponentVersionOnEnvironment_withMultipleDeployments_returnsLatestCodeVersion() {
         String externalCodeId = "external-id-10";
         postDeployment(createDeploymentDto(), externalCodeId);
@@ -54,18 +62,22 @@ class SystemControllerIT extends IntegrationTestBase {
         postDeployment(createConfigDeploymentDto(), externalConfigId);
         putDeploymentState(externalConfigId, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/system/TestSystem/component/test/currentVersion/DEV")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(String.class)
-                .value(version -> assertEquals("1.2.3-4", version));
+        String basicAuthHeader = "Basic " + Base64.getEncoder()
+                .encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/system/TestSystem/component/test/currentVersion/DEV")
+                        .header("Authorization", basicAuthHeader))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals("1.2.3-4", responseBody);
     }
 
     @Test
-    void deleteComponentOnEnvironment() throws JsonProcessingException {
+    @SneakyThrows
+    void deleteComponentOnEnvironment() {
         String externalId = "external-id-10";
         postDeployment(createDeploymentDto(), externalId);
         putDeploymentState(externalId, DeploymentState.SUCCESS);
@@ -75,80 +87,92 @@ class SystemControllerIT extends IntegrationTestBase {
         undeploymentCreateDto.setEnvironmentName("DEV");
         undeploymentCreateDto.setComponentName("test");
 
-        webTestClient.put()
-                .uri("/api/system/deployment-id/undeploy")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(objectMapper.writeValueAsString(undeploymentCreateDto))
-                .headers(headers -> headers.setBasicAuth("write", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful();
+        String basicAuthHeaderWrite = "Basic " + Base64.getEncoder().encodeToString(("write:secret").getBytes());
 
-        webTestClient.get()
-                .uri("/api/system/TestSystem/component/test/currentVersion/DEV")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is4xxClientError()
-                .expectBody(String.class)
-                .value(body -> assertThat(body).contains("\"status\":404"));
+        mockMvc.perform(put("/api/system/deployment-id/undeploy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", basicAuthHeaderWrite)
+                        .content(objectMapper.writeValueAsString(undeploymentCreateDto)))
+                .andExpect(status().is2xxSuccessful());
+
+        String basicAuthHeaderRead = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+
+       mockMvc.perform(get("/api/system/TestSystem/component/test/currentVersion/DEV")
+                        .header("Authorization", basicAuthHeaderRead))
+                .andExpect(status().is(404))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
     }
 
     @Test
+    @SneakyThrows
     void getSystem() {
         String externalId = "external-id-20";
         postDeployment(createDeploymentDto(), externalId);
         putDeploymentState(externalId, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/system/TestSystem")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(EnvironmentComponentVersionStateDto.class)
-                .value(dto -> {
-                    assertEquals("TestSystem", dto.getSystemName());
-                    assertEquals("test", dto.getComponents().get(0).getName());
-                    DeploymentSnapshotDto deploymentSnapshotDto = dto.getComponents().get(0).getDeployments().get(0);
-                    assertEquals("DEV", deploymentSnapshotDto.getEnv());
-                    assertEquals("1.2.3-4", deploymentSnapshotDto.getVersion());
-                });
+        String basicAuthHeader = "Basic " + Base64.getEncoder()
+                .encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/system/TestSystem")
+                        .header("Authorization", basicAuthHeader))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        EnvironmentComponentVersionStateDto dto = objectMapper.readValue(
+                responseBody, EnvironmentComponentVersionStateDto.class);
+
+        assertEquals("TestSystem", dto.getSystemName());
+        assertEquals("test", dto.getComponents().getFirst().getName());
+
+        DeploymentSnapshotDto deploymentSnapshotDto = dto.getComponents().getFirst().getDeployments().getFirst();
+        assertEquals("DEV", deploymentSnapshotDto.getEnv());
+        assertEquals("1.2.3-4", deploymentSnapshotDto.getVersion());
     }
 
     @Test
+    @SneakyThrows
     void getPreviousVersionOfComponent() {
         String externalId = "external-id-20-test1";
         final DeploymentCreateDto deploymentDto = createDeploymentDto("myTestSystem", "test1", "5.0.0");
         postDeployment(deploymentDto, externalId);
         putDeploymentState(externalId, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/system/myTestSystem/component/test1/previousVersion/DEV?version=6.0.0")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(String.class)
-                .value(response -> assertEquals(deploymentDto.getComponentVersion().getVersionName(), response));
+        String basicAuthHeader = "Basic " + Base64.getEncoder()
+                .encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/system/myTestSystem/component/test1/previousVersion/DEV")
+                        .header("Authorization", basicAuthHeader)
+                        .param("version", "6.0.0"))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals(deploymentDto.getComponentVersion().getVersionName(), responseBody);
     }
 
     @Test
+    @SneakyThrows
     void getPreviousVersionOfComponent_notFound() {
         String externalId = "external-id-20-test3";
         final DeploymentCreateDto deploymentDto = createDeploymentDto("myTestSystem", "test3", "1.0.0");
         postDeployment(deploymentDto, externalId);
         putDeploymentState(externalId, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/system/myTestSystem/component/test3/previousVersion/DEV?version=" + deploymentDto.getComponentVersion().getVersionName())
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .isNotFound();
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+
+        mockMvc.perform(get("/api/system/myTestSystem/component/test3/previousVersion/DEV")
+                        .header("Authorization", basicAuthHeader)
+                        .param("version", deploymentDto.getComponentVersion().getVersionName()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
+    @SneakyThrows
     void getPreviousVersionOfComponent_foundPrevious() {
         String externalIdFirst = "external-id-20-test2";
         final DeploymentCreateDto deploymentDtoFirst = createDeploymentDto("myTestSystem", "test2", "1.2.3");
@@ -161,14 +185,18 @@ class SystemControllerIT extends IntegrationTestBase {
         putDeploymentState(externalIdSecond, DeploymentState.SUCCESS);
 
 
-        webTestClient.get()
-                .uri("/api/system/myTestSystem/component/test2/previousVersion/DEV?version=" + deploymentDtoFirst.getComponentVersion().getVersionName())
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(String.class)
-                .value(response -> assertEquals(deploymentDtoSecond.getComponentVersion().getVersionName(), response));
+        String basicAuthHeader = "Basic " + Base64.getEncoder()
+                .encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/system/myTestSystem/component/test2/previousVersion/DEV")
+                        .header("Authorization", basicAuthHeader)
+                        .param("version", deploymentDtoFirst.getComponentVersion().getVersionName()))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals(deploymentDtoSecond.getComponentVersion().getVersionName(), responseBody);
     }
 
 }

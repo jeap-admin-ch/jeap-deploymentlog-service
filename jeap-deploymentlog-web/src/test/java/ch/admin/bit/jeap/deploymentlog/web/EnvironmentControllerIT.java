@@ -4,25 +4,32 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.persistence.JpaEnvironmentComponentVersionStateRepository;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.ComponentVersionSummaryDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentCreateDto;
+import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureWebTestClient(timeout = "PT30s")
+@AutoConfigureMockMvc
 class EnvironmentControllerIT extends IntegrationTestBase {
 
     @Autowired
-    private WebTestClient webTestClient;
+    private MockMvc mockMvc;
 
     @Autowired
     private JpaEnvironmentComponentVersionStateRepository componentVersionStateRepository;
 
     @Test
+    @SneakyThrows
     void getEnvironmentComponents() {
         componentVersionStateRepository.deleteAll();
 
@@ -31,13 +38,18 @@ class EnvironmentControllerIT extends IntegrationTestBase {
         postDeployment(deploymentDtoFirst, externalIdFirst);
         putDeploymentState(externalIdFirst, DeploymentState.SUCCESS);
 
-        webTestClient.get()
-                .uri("/api/environment/dev/components")
-                .headers(headers -> headers.setBasicAuth("read", "secret"))
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful()
-                .expectBody(ComponentVersionSummaryDto[].class)
-                .value(response -> assertEquals("test", response[0].componentName()));
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+
+        String responseBody = mockMvc.perform(get("/api/environment/dev/components")
+                        .header("Authorization", basicAuthHeader)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        ComponentVersionSummaryDto[] response = objectMapper.readValue(responseBody, ComponentVersionSummaryDto[].class);
+
+        assertEquals("test", response[0].componentName());
     }
 }

@@ -7,29 +7,34 @@ import ch.admin.bit.jeap.deploymentlog.web.api.dto.ChangelogDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.ComponentVersionCreateDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentCreateDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentUpdateStateDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.awaitility.Awaitility;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.test.web.reactive.server.WebTestClient;
-import reactor.core.publisher.Mono;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureWebTestClient(timeout = "PT30s")
+@AutoConfigureMockMvc
 public class IntegrationTestBase {
 
     @Autowired
-    protected WebTestClient webTestClient;
+    protected MockMvc mockMvc;
     @Autowired
     @Qualifier(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     protected ThreadPoolTaskExecutor asyncDocgenExecutor;
@@ -38,6 +43,8 @@ public class IntegrationTestBase {
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     protected ConfluenceAdapterMock confluenceAdapterMock;
+    @Autowired
+    protected ObjectMapper objectMapper;
 
     void awaitUntilAsyncTasksCompleted() {
         Awaitility.await()
@@ -93,13 +100,17 @@ public class IntegrationTestBase {
     }
 
     protected void postDeployment(DeploymentCreateDto dto, String externalId) {
-        webTestClient.put()
-                .uri("/api/deployment/" + externalId)
-                .headers(headers -> headers.setBasicAuth("write", "secret"))
-                .body(Mono.just(dto), DeploymentCreateDto.class)
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful();
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("write:secret").getBytes());
+
+        try {
+            mockMvc.perform(put("/api/deployment/{externalId}", externalId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", basicAuthHeader)
+                            .content(objectMapper.writeValueAsString(dto)))
+                    .andExpect(status().is2xxSuccessful());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     protected void putDeploymentState(String externalId, DeploymentState state) {
@@ -116,13 +127,16 @@ public class IntegrationTestBase {
         LocalDateTime startedAt = LocalDateTime.parse("2007-12-03T10:15:30");
         stateDto.setTimestamp(ZonedDateTime.of(startedAt, ZoneId.systemDefault()));
 
-        webTestClient.put()
-                .uri("/api/deployment/" + externalId + "/state")
-                .headers(headers -> headers.setBasicAuth("write", "secret"))
-                .body(Mono.just(stateDto), DeploymentUpdateStateDto.class)
-                .exchange()
-                .expectStatus()
-                .is2xxSuccessful();
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("write:secret").getBytes());
+        try {
+            mockMvc.perform(put("/api/deployment/{externalId}/state", externalId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .header("Authorization", basicAuthHeader)
+                            .content(objectMapper.writeValueAsString(stateDto)))
+                    .andExpect(status().is2xxSuccessful());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }
