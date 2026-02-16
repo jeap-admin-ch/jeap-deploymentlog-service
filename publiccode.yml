@@ -1,4 +1,4 @@
-publiccodeYmlVersion: 0.4.0
+publiccodeYmlVersion: 0.5.0
 name: jeap-deploymentlog-service
 applicationSuite: jEAP
 softwareVersion: 3.14.0
@@ -17,7 +17,7 @@ organisation:
 description:
   en:
     localisedName: jeap-deploymentlog-service
-    shortDescription: A jEAP service and library for recording and documenting deployments across environments, with Confluence integration
+    shortDescription: Service template to trace the deployments of microservice on stages.
     longDescription: >
       The jEAP Deployment Log provides a centralized way to record and track deployments
       of components across different environments. Delivered as a Spring Boot–based 
@@ -27,6 +27,7 @@ description:
       and detailed deployment records including version, commit references, and linked
       Jira issues. It supports direct integration into jEAP CI/CD Pipelines. The Deployment Log
       enables transparency and traceability while reducing manual documentation effort.
+      A service instance can be created by depending on this template, then adding specific configuration.
     features:
       - Records deployments and environment states via REST API and pipeline integration
       - Generates Confluence documentation with histories and current environment status
