@@ -6,12 +6,13 @@ import ch.admin.bit.jeap.deploymentlog.web.api.ArtifactVersionController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.ArtifactVersionCreateDto;
 import ch.admin.bit.jeap.deploymentlog.web.config.WebSecurityConfig;
 import ch.admin.bit.jeap.security.resource.properties.ResourceServerProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,16 +25,17 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {ArtifactVersionController.class, WebSecurityConfig.class})
-@Import(ResourceServerProperties.class)
+@WebMvcTest(controllers = {ArtifactVersionController.class})
+@Import({WebSecurityConfig.class, ResourceServerProperties.class})
 @AutoConfigureMockMvc
 class ArtifactVersionControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-    @Autowired
-    private ObjectMapper objectMapper;
-    @MockBean
+    private final ObjectMapper objectMapper = JsonMapper.builder()
+            .findAndAddModules()
+            .build();
+    @MockitoBean
     private ArtifactVersionService service;
 
     @Test

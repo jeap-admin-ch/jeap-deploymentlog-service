@@ -7,10 +7,9 @@ import ch.admin.bit.jeap.deploymentlog.docgen.api.dto.ConfluenceSpaceDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.api.dto.ConfluenceStorageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.api.dto.CreateBlogpostDto;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.web.client.ClientHttpRequestFactories;
-import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -22,14 +21,14 @@ public class ConfluenceCustomRestClient {
     private final RestClient restClient;
 
     public ConfluenceCustomRestClient(DocumentationGeneratorConfluenceProperties props, RestClient.Builder restClientBuilder) {
-        ClientHttpRequestFactory timeoutRequestFactory = ClientHttpRequestFactories.get(ClientHttpRequestFactorySettings.DEFAULTS
-                .withReadTimeout(Duration.ofSeconds(10)));
+        SimpleClientHttpRequestFactory timeoutRequestFactory = new SimpleClientHttpRequestFactory();
+        timeoutRequestFactory.setReadTimeout(Duration.ofSeconds(10));
         this.restClient = restClientBuilder
                 .requestFactory(timeoutRequestFactory)
                 .defaultHeaders(header -> header.setBasicAuth(props.getUsername(), props.getPassword()))
                 .baseUrl(
                         UriComponentsBuilder
-                                .fromHttpUrl(props.getUrl())
+                                .fromUriString(props.getUrl())
                                 .pathSegment("rest", "api", "content")
                                 .build()
                                 .toString())

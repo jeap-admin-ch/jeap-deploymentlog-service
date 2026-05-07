@@ -3,13 +3,14 @@ package ch.admin.bit.jeap.deploymentlog.jira;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraErrorResponse;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraIssueDto;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraSearchResultDto;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import tools.jackson.core.JacksonException;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class JiraWebClientImpl implements JiraWebClient {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new JsonMapper();
     private static final Pattern pattern = Pattern.compile("'(.*?)'");
     private final RestClient restClient;
     private final String documentationRootUrl;
@@ -32,7 +33,7 @@ public class JiraWebClientImpl implements JiraWebClient {
                 .defaultHeaders(header -> header.setBasicAuth(props.getUsername(), props.getPassword()))
                 .baseUrl(
                         UriComponentsBuilder
-                                .fromHttpUrl(props.getUrl())
+                                .fromUriString(props.getUrl())
                                 .pathSegment("rest", "api", "2")
                                 .build()
                                 .toString())
@@ -122,7 +123,7 @@ public class JiraWebClientImpl implements JiraWebClient {
                 }
             }
             return new JiraIssuesNotFoundException(jiraIssues);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }

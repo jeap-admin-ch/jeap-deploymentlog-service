@@ -4,14 +4,13 @@ import ch.admin.bit.jeap.deploymentlog.docgen.api.ConfluenceCustomRestClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluencePage;
 import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
@@ -23,14 +22,13 @@ import static org.mockito.Mockito.*;
 @Import(ConfluenceAdapterRetryTest.TestConfig.class)
 class ConfluenceAdapterRetryTest {
 
-    @MockBean
+    @MockitoBean
     private ConfluenceClient confluenceClientMock;
-    @MockBean
+    @MockitoBean
     private LockProvider lockProviderMock;
-    @MockBean
+    @MockitoBean
     private MeterRegistry meterRegistryMock;
-    @Mock
-    private ConfluencePage pageMock;
+    private final ConfluencePage pageMock = mock(ConfluencePage.class);
     @Autowired
     private ConfluenceAdapter confluenceAdapter;
 

@@ -12,12 +12,11 @@ import net.javacrumbs.shedlock.core.SimpleLock;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -37,22 +36,22 @@ import static org.mockito.Mockito.*;
 @Import(TestConfig.class)
 class DocgenAsyncServiceTest {
 
-    @MockBean
+    @MockitoBean
     private DocumentationGenerator documentationGenerator;
 
-    @MockBean
+    @MockitoBean
     private LockProvider lockProvider;
 
-    @MockBean
+    @MockitoBean
     private DeploymentRepository deploymentRepository;
 
-    @MockBean
+    @MockitoBean
     private JiraAdapter jiraAdapter;
 
-    @MockBean
+    @MockitoBean
     private DeploymentPageRepository deploymentPageRepository;
 
-    @MockBean
+    @MockitoBean
     private ConfluenceAdapter confluenceAdapter;
 
     @Autowired
@@ -65,8 +64,7 @@ class DocgenAsyncServiceTest {
     @Qualifier(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     private ThreadPoolTaskExecutor taskExecutor;
 
-    @Mock
-    private SimpleLock simpleLockMock;
+    private final SimpleLock simpleLockMock = mock(SimpleLock.class);
 
     @TestConfiguration
     static class TestConfig {

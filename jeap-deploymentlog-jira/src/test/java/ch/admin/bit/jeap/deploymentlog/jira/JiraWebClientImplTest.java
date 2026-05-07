@@ -3,18 +3,17 @@ package ch.admin.bit.jeap.deploymentlog.jira;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraFieldsDto;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraIssueDto;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraSearchResultDto;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import org.junit.jupiter.api.BeforeEach;
 import lombok.SneakyThrows;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.test.autoconfigure.web.client.RestClientTest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.Map;
@@ -26,22 +25,23 @@ import static org.springframework.test.web.client.ExpectedCount.times;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
-@RestClientTest(components = {JiraWebClient.class}, properties = {
-        "jeap.deploymentlog.jira.url=https://jira-test.com",
-        "jeap.deploymentlog.jira.appId=12345",
-        "jeap.deploymentlog.jira.username=usr",
-        "jeap.deploymentlog.jira.password=pwd",
-        "jeap.deploymentlog.documentation.root-url=https:/my-root-url.ch?pageId="
-})
-@ContextConfiguration(classes={JiraWebClientConfig.class})
-@EnableConfigurationProperties(JiraWebClientProperties.class)
 class JiraWebClientImplTest {
 
-    @Autowired
     private JiraWebClient jiraWebClient;
 
-    @Autowired
     private MockRestServiceServer server;
+
+    @BeforeEach
+    void setUp() {
+        JiraWebClientProperties props = new JiraWebClientProperties();
+        props.setUrl("https://jira-test.com");
+        props.setAppId("12345");
+        props.setUsername("usr");
+        props.setPassword("pwd");
+        RestClient.Builder restClientBuilder = RestClient.builder();
+        server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        jiraWebClient = new JiraWebClientImpl(props, "https:/my-root-url.ch?pageId=", restClientBuilder);
+    }
 
     @Test
     void testUpdateIssueWithConfluenceLink() {
@@ -82,7 +82,7 @@ class JiraWebClientImplTest {
         fields.setLabels(List.of(label));
         issueDto.setFields(fields);
         searchResultDto.setIssues(List.of(issueDto));
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = new JsonMapper();
         return objectMapper.writeValueAsString(searchResultDto);
     }
 

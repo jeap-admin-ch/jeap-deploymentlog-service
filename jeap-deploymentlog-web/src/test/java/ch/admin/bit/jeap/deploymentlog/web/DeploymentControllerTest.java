@@ -8,11 +8,12 @@ import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
 import ch.admin.bit.jeap.deploymentlog.web.config.WebSecurityConfig;
 import ch.admin.bit.jeap.security.resource.properties.ResourceServerProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -32,15 +33,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {DeploymentController.class, WebSecurityConfig.class})
-@Import(ResourceServerProperties.class)
+@WebMvcTest(controllers = {DeploymentController.class})
+@Import({WebSecurityConfig.class, ResourceServerProperties.class})
 @AutoConfigureMockMvc
 class DeploymentControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-    @Autowired
-    private ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = JsonMapper.builder()
+            .findAndAddModules()
+            .build();
     @MockitoBean
     private DeploymentService deploymentService;
     @MockitoBean
