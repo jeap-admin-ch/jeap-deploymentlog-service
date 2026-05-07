@@ -62,6 +62,11 @@ public class DocgenAsyncService {
     private void generateDeploymentPages(UUID deploymentId) {
         try {
             final GeneratedDeploymentPageDto generatedDeploymentPageDto = documentationGenerator.generateDeploymentPages(deploymentId);
+            if (generatedDeploymentPageDto == null || generatedDeploymentPageDto.getDeploymentLetterPageDto() == null) {
+                errorCounter.increment();
+                log.warn("Generated deployment page data is incomplete for deployment {}. Skipping Jira issue link update.", value("deploymentId", deploymentId));
+                return;
+            }
             Set<String> jiraIssueKeys = generatedDeploymentPageDto.getDeploymentLetterPageDto().getChangeJiraIssueKeys();
             if (jiraIssueKeys != null && !jiraIssueKeys.isEmpty()) {
                 jiraAdapter.updateJiraIssuesWithConfluenceLink(generatedDeploymentPageDto);

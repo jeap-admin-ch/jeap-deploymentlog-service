@@ -3,6 +3,8 @@ package ch.admin.bit.jeap.deploymentlog.docgen.service;
 import ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapter;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
 import ch.admin.bit.jeap.deploymentlog.docgen.JiraAdapter;
+import ch.admin.bit.jeap.deploymentlog.docgen.model.DeploymentLetterPageDto;
+import ch.admin.bit.jeap.deploymentlog.docgen.model.GeneratedDeploymentPageDto;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
@@ -24,6 +26,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -77,6 +80,8 @@ class DocgenAsyncServiceTest {
     @BeforeEach
     void setUp() {
         Awaitility.setDefaultTimeout(Duration.ofSeconds(30));
+        docgenLocks.setTryAcquireTimeout(Duration.ofMinutes(3));
+        reset(simpleLockMock);
         when(deploymentRepository.getSystemNameForDeployment(any())).thenReturn("systemName");
     }
 
@@ -84,6 +89,7 @@ class DocgenAsyncServiceTest {
     void triggerDocgenForDeployment() {
         Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
         when(lockProvider.lock(any())).thenReturn(presentLock);
+        when(documentationGenerator.generateDeploymentPages(any())).thenReturn(generatedDeploymentPageDtoWithoutJiraIssueKeys());
 
         List<UUID> uuids = Stream.generate(UUID::randomUUID)
                 .limit(10).toList();
@@ -92,8 +98,23 @@ class DocgenAsyncServiceTest {
 
         uuids.forEach(uuid ->
                 verify(documentationGenerator, timeout(Duration.ofSeconds(10).toMillis())).generateDeploymentPages(uuid));
-        verify(simpleLockMock, times(10)).unlock();
         await().until(this::asyncTaskExecutorIsDone);
+        verify(simpleLockMock, times(10)).unlock();
+    }
+
+    @Test
+    void triggerDocgenForDeployment_whenGeneratorReturnsNull_thenNoJiraUpdateAndLockReleased() {
+        Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
+        when(lockProvider.lock(any())).thenReturn(presentLock);
+        UUID deploymentId = UUID.randomUUID();
+        when(documentationGenerator.generateDeploymentPages(deploymentId)).thenReturn(null);
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(documentationGenerator).generateDeploymentPages(deploymentId);
+        verify(jiraAdapter, never()).updateJiraIssuesWithConfluenceLink(any(GeneratedDeploymentPageDto.class));
+        verify(simpleLockMock).unlock();
     }
 
     @Test
@@ -136,5 +157,15 @@ class DocgenAsyncServiceTest {
 
     private boolean asyncTaskExecutorIsDone() {
         return taskExecutor.getActiveCount() == 0 && taskExecutor.getThreadPoolExecutor().getCompletedTaskCount() > 0;
+    }
+
+    private GeneratedDeploymentPageDto generatedDeploymentPageDtoWithoutJiraIssueKeys() {
+        DeploymentLetterPageDto deploymentLetterPageDto = DeploymentLetterPageDto.builder()
+                .changeJiraIssueKeys(Set.of())
+                .build();
+        return GeneratedDeploymentPageDto.builder()
+                .deploymentLetterPageDto(deploymentLetterPageDto)
+                .pageId("pageId")
+                .build();
     }
 }
