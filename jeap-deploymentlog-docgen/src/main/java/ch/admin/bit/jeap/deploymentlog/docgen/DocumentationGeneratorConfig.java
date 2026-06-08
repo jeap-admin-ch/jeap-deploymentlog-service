@@ -7,7 +7,7 @@ import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
-import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceRestClient;
+import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceRestV1Client;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationContext;
@@ -33,7 +33,7 @@ public class DocumentationGeneratorConfig {
 
     @Bean
     ConfluenceClient confluenceClient(DocumentationGeneratorConfluenceProperties props) {
-        return new ConfluenceRestClient(props.getUrl(), true, null, props.getUsername(), props.getPassword());
+        return new ConfluenceRestV1Client(props.getUrl(), true, false, null, null, props.getUsername(), props.getPassword());
     }
 
     @Bean

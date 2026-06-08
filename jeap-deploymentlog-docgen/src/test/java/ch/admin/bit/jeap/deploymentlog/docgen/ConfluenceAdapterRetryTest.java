@@ -45,7 +45,7 @@ class ConfluenceAdapterRetryTest {
 
     @Test
     void addOrUpdatePageUnderAncestor_successAfterRetry() {
-        when(confluenceClientMock.getPageByTitle(any(), any()))
+        when(confluenceClientMock.getPageByTitle(any(), any(), any()))
                 // First two call fail
                 .thenThrow(RequestFailedException.class)
                 .thenThrow(RequestFailedException.class)
@@ -58,12 +58,12 @@ class ConfluenceAdapterRetryTest {
 
         confluenceAdapter.addOrUpdatePageUnderAncestor("ancestorId", "pageName", "content");
 
-        verify(confluenceClientMock).updatePage(any(), any(), any(), any(), anyInt(), any());
+        verify(confluenceClientMock).updatePage(any(), any(), any(), any(), anyInt(), any(), anyBoolean());
     }
 
     @Test
     void getPageByName_successAfterRetry() {
-        when(confluenceClientMock.getPageByTitle(any(), any()))
+        when(confluenceClientMock.getPageByTitle(any(), any(), any()))
                 // First call fails
                 .thenThrow(RequestFailedException.class)
                 .thenThrow(RequestFailedException.class)

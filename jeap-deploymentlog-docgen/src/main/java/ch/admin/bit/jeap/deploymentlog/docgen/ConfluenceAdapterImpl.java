@@ -34,14 +34,14 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
 
     @Override
     public String getPageByName(String pageName) {
-        return confluenceClient.getPageByTitle(props.getSpaceKey(), pageName);
+        return confluenceClient.getPageByTitle(props.getSpaceKey(), null, pageName);
     }
 
     @Override
     public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, String content) {
         String contentId;
         try {
-            contentId = confluenceClient.getPageByTitle(props.getSpaceKey(), pageName);
+            contentId = confluenceClient.getPageByTitle(props.getSpaceKey(), ancestorId, pageName);
             updatePage(contentId, ancestorId, pageName, content);
         } catch (NotFoundException e) {
             log.info("Creating page {}", pageName);
@@ -87,7 +87,7 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         for (int retries = 0; ; retries++) {
             try {
                 int newPageVersion = existingPage.getVersion() + 1;
-                confluenceClient.updatePage(contentId, ancestorId, pageName, content, newPageVersion, VERSION_MESSAGE);
+                confluenceClient.updatePage(contentId, ancestorId, pageName, content, newPageVersion, VERSION_MESSAGE, true);
                 return; // success
             } catch (RequestFailedException rfe) {
                 if (rfe.getMessage().contains("response: 409") && retries < 2) {

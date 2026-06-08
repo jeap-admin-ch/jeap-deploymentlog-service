@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > - Spring Boot 3 maintenance (bug fixes, patches, and regular updates) continues on branch `release/springboot3`.
 
+## [5.2.0] - 2026-06-09
+
+### Changed
+
+- Update asciidoc-confluence-publisher-client from 0.12.0 to 0.33.0 and adapt the publisher usage to the changed API (
+  `ConfluenceRestClient` -> `ConfluenceRestV1Client`, additional parameters on `getPageByTitle` and `updatePage`)
+
 ## [5.1.0] - 2026-06-04
 
 ### Changed

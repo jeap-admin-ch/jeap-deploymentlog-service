@@ -40,7 +40,7 @@ class ConfluenceAdapterImplTest {
         String ancestorId = "ancestorId";
         String content = "content";
         String contentHash = sha256Hex(content);
-        doThrow(new NotFoundException()).when(confluenceClientMock).getPageByTitle(SPACE_KEY, pageName);
+        doThrow(new NotFoundException()).when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
         doReturn(pageId)
                 .when(confluenceClientMock)
                 .addPageUnderAncestor(eq(SPACE_KEY), eq(ancestorId), eq(pageName), eq(content), anyString());
@@ -61,7 +61,7 @@ class ConfluenceAdapterImplTest {
         int version = 1;
         ConfluencePage existingPage = new ConfluencePage(pageId, pageName, version);
         doReturn(pageId)
-                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, pageName);
+                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
         doReturn(existingPage)
                 .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
         doReturn("differenthash")
@@ -69,7 +69,7 @@ class ConfluenceAdapterImplTest {
 
         confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
 
-        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString());
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString(), eq(true));
         verify(confluenceClientMock).setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, contentHash);
     }
 
@@ -90,7 +90,7 @@ class ConfluenceAdapterImplTest {
         ConfluencePage existingPageV2 = new ConfluencePage(pageId, pageName, version2);
 
         doReturn(pageId)
-                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, pageName);
+                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
         doReturn(existingPageV1)
                 .doReturn(existingPageV2)
                 .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
@@ -98,12 +98,12 @@ class ConfluenceAdapterImplTest {
                 .when(confluenceClientMock).getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
         doThrow(ex) // First attempt fails
                 .doNothing() // Second attempt succeeds
-                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString());
+                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
 
         confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
 
-        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version1 + 1), anyString());
-        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version2 + 1), anyString());
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version1 + 1), anyString(), eq(true));
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version2 + 1), anyString(), eq(true));
         verify(confluenceClientMock).setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, contentHash);
     }
 
@@ -121,19 +121,19 @@ class ConfluenceAdapterImplTest {
         ConfluencePage existingPage = new ConfluencePage(pageId, pageName, version);
 
         doReturn(pageId)
-                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, pageName);
+                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
         doReturn(existingPage)
                 .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
         doReturn("differenthash")
                 .when(confluenceClientMock).getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
         doThrow(ex)
-                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString());
+                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
 
         assertThrows(RequestFailedException.class, () ->
                 confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content));
 
         verify(confluenceClientMock, times(3))
-                .updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString());
+                .updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString(), eq(true));
     }
 
     @Test
@@ -146,7 +146,7 @@ class ConfluenceAdapterImplTest {
         int version = 1;
         ConfluencePage existingPage = new ConfluencePage(pageId, pageName, version);
         doReturn(pageId)
-                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, pageName);
+                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
         doReturn(existingPage)
                 .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
         doReturn(contentHash)
@@ -202,7 +202,7 @@ class ConfluenceAdapterImplTest {
 
         confluenceAdapter.movePage(ancestorId, pageId);
 
-        verify(confluenceClientMock).updatePage(pageId, ancestorId, pageName, content, version + 1, "Documentation generated");
+        verify(confluenceClientMock).updatePage(pageId, ancestorId, pageName, content, version + 1, "Documentation generated", true);
     }
 
     @Test
