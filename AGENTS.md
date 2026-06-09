@@ -9,8 +9,11 @@ across stages and generates deployment documentation as Confluence pages. Downst
 `jeap-deploymentlog-web` and add their own configuration/instance — they do not run this repo directly (a runnable
 `DeploymentLogApplication` exists in the web module mainly as a default/test entry point). See `README.md`.
 
-The build targets **Java 21** (CI uses `bit/eclipse-temurin:21`). The Maven parent is `jeap-spring-boot-parent`, which
+The Maven parent is `jeap-spring-boot-parent`, which
 supplies most dependency versions and plugin config.
+
+- **Spring Boot 4.x**: uses the `@AutoConfiguration` pattern (not legacy `spring.factories`)
+- **Java 25**: required minimum version
 
 ## Commands
 
