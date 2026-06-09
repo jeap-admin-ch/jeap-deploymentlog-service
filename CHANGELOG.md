@@ -7,6 +7,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > - Spring Boot 3 maintenance (bug fixes, patches, and regular updates) continues on branch `release/springboot3`.
 
+## [5.3.0] - 2026-06-09
+
+### Fixed
+
+- Fix deployment page generation failing with `NotFoundException` after the asciidoc-confluence-publisher-client
+  0.33.0 upgrade. The root deployments page is now taken directly from the configured root page id instead of
+  being looked up by title (the 0.33.0 `getPageByTitle` filters by ancestor and can no longer perform a
+  title-only lookup). **Config change:** replace
+  `jeap.deploymentlog.documentation-generator.confluence.deployments-page-name` with
+  `jeap.deploymentlog.documentation-generator.confluence.root-page-id`.
+
 ## [5.2.0] - 2026-06-09
 
 ### Changed

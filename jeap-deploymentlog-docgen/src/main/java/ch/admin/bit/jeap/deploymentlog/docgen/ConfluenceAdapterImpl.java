@@ -33,11 +33,6 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
     }
 
     @Override
-    public String getPageByName(String pageName) {
-        return confluenceClient.getPageByTitle(props.getSpaceKey(), null, pageName);
-    }
-
-    @Override
     public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, String content) {
         String contentId;
         try {

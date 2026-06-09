@@ -11,11 +11,6 @@ public interface ConfluenceAdapter {
     /**
      * @return Page ID
      */
-    String getPageByName(String pageName);
-
-    /**
-     * @return Page ID
-     */
     String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, String content);
 
     void movePage(String ancestorId, String contentId);

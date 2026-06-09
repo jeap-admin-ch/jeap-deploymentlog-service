@@ -2,8 +2,8 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.SystemPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.GeneratorService;
-import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
+import ch.admin.bit.jeap.deploymentlog.domain.System;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +28,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(SpringExtension.class)
 class DocumentationGeneratorTest {
 
-    private static final String ROOT_PAGE_NAME = "rootPageName";
+    private static final String ROOT_PAGE_ID = "configuredRootPageId";
     @Autowired
     ApplicationContext applicationContext;
 
@@ -67,7 +67,7 @@ class DocumentationGeneratorTest {
     @Test
     void generate() {
         // given
-        String rootPageId = "rootPageId";
+        String rootPageId = ROOT_PAGE_ID;
         String systemName = "SYSTEM A";
         System system = new System(systemName);
         List<System> systemList = List.of(system);
@@ -76,7 +76,6 @@ class DocumentationGeneratorTest {
                 .build();
 
         doReturn(systemPageDto).when(generatorServiceMock).createSystemPageDto(system);
-        doReturn(rootPageId).when(confluenceAdapterMock).getPageByName(ROOT_PAGE_NAME);
         doReturn(systemList).when(systemRepositoryMock).findAll();
 
         // when
@@ -89,7 +88,7 @@ class DocumentationGeneratorTest {
     @Test
     void generateAllPagesForSystem() {
         // given
-        String rootPageId = "rootPageId";
+        String rootPageId = ROOT_PAGE_ID;
         String systemName = "SYSTEM A";
         System system = new System(systemName);
         SystemPageDto systemPageDto = SystemPageDto.builder()
@@ -97,7 +96,6 @@ class DocumentationGeneratorTest {
                 .build();
 
         doReturn(systemPageDto).when(generatorServiceMock).createSystemPageDto(system);
-        doReturn(rootPageId).when(confluenceAdapterMock).getPageByName(ROOT_PAGE_NAME);
         doReturn(Optional.of(system)).when(systemRepositoryMock).findByNameIgnoreCase(systemName);
 
         // when
@@ -111,7 +109,7 @@ class DocumentationGeneratorTest {
     @Test
     void migrateSystem() {
         // given
-        String rootPageId = "rootPageId";
+        String rootPageId = ROOT_PAGE_ID;
         String systemName = "SYSTEM A";
         System system = new System(systemName);
         SystemPageDto systemPageDto = SystemPageDto.builder()
@@ -139,7 +137,6 @@ class DocumentationGeneratorTest {
         when(confluenceAdapterMock.addOrUpdatePageUnderAncestor(anyString(), anyString(), anyString())).thenReturn(UUID.randomUUID().toString());
 
         doReturn(systemPageDto).when(generatorServiceMock).createSystemPageDto(system);
-        doReturn(rootPageId).when(confluenceAdapterMock).getPageByName(ROOT_PAGE_NAME);
 
         // when
         documentationGenerator.migrateSystem(system);
@@ -152,7 +149,6 @@ class DocumentationGeneratorTest {
     @Test
     void mergeSystems() {
         // given
-        String rootPageId = "rootPageId";
         String systemName = "SYSTEM A";
         String oldSystemName = "SYSTEM OLD";
         System system = new System(systemName);
@@ -182,8 +178,6 @@ class DocumentationGeneratorTest {
         when(deploymentRepositoryMock.getById(deployment2Id)).thenReturn(deployment2Mock);
 
         when(confluenceAdapterMock.addOrUpdatePageUnderAncestor(anyString(), anyString(), anyString())).thenReturn(UUID.randomUUID().toString());
-
-        doReturn(rootPageId).when(confluenceAdapterMock).getPageByName(ROOT_PAGE_NAME);
 
         // when
         documentationGenerator.mergeSystems(system, oldSystem);
@@ -235,12 +229,44 @@ class DocumentationGeneratorTest {
 
     }
 
+    @Test
+    void generateAllPages_usesConfiguredRootPageIdAsAncestor() {
+        String configuredRootPageId = "a-distinct-configured-root-page-id";
+        DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
+        DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
+        props.setRootPageId(configuredRootPageId);
+        DocumentationGenerator generator = new DocumentationGenerator(
+                confluenceAdapterMock,
+                jiraAdapterMock,
+                new TemplateRenderer(generatorConfig.templateEngine(applicationContext)),
+                props,
+                systemRepositoryMock,
+                environmentRepositoryMock,
+                generatorServiceMock,
+                deploymentRepositoryMock,
+                deploymentPageRepositoryMock,
+                systemPageRepositoryMock,
+                environmentHistoryPageRepositoryMock,
+                deploymentListPageRepositoryMock);
+
+        String systemName = "SYSTEM A";
+        System system = new System(systemName);
+        doReturn(SystemPageDto.builder().name(systemName).build()).when(generatorServiceMock).createSystemPageDto(system);
+        doReturn(List.of(system)).when(systemRepositoryMock).findAll();
+
+        // when
+        generator.generateAllPages();
+
+        // then - the top-level system page is created under exactly the configured root page id
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(configuredRootPageId), eq(systemName), anyString());
+    }
+
     @BeforeEach
     void setUp() {
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
         TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext));
         DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
-        props.setDeploymentsPageName(ROOT_PAGE_NAME);
+        props.setRootPageId(ROOT_PAGE_ID);
         documentationGenerator = new DocumentationGenerator(
                 confluenceAdapterMock,
                 jiraAdapterMock,

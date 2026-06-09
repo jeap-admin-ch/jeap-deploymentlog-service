@@ -17,9 +17,9 @@ import java.time.temporal.ChronoUnit;
 public class DocumentationGeneratorConfluenceProperties {
 
     /**
-     * Name of the root page under which all deployments are listed
+     * Id of the root page under which all deployments are listed
      */
-    private String deploymentsPageName;
+    private String rootPageId;
 
     /**
      * Key of the confluence space into which the documentation is generated

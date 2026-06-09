@@ -37,7 +37,7 @@ public class DocumentationGenerator {
     @Timed("deploymentlog_generate_deployment_page")
     @Transactional
     public GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId) {
-        String rootPageId = confluenceAdapter.getPageByName(props.getDeploymentsPageName());
+        String rootPageId = props.getRootPageId();
 
         Deployment deployment = deploymentRepository.getById(deploymentId);
         Environment environment = deployment.getEnvironment();
@@ -60,7 +60,7 @@ public class DocumentationGenerator {
         log.info("Retrieve the deployments for the system '{}'", system.getName());
         List<DeploymentPageQueryResult> deployments = deploymentPageRepository.getDeploymentPagesForSystem(system.getId());
 
-        String rootPageId = confluenceAdapter.getPageByName(props.getDeploymentsPageName());
+        String rootPageId = props.getRootPageId();
 
         Optional<SystemPage> existingSystemPage = systemPageRepository.findSystemPageBySystemId(system.getId());
         String existingSystemPageId = null;
@@ -88,7 +88,7 @@ public class DocumentationGenerator {
         log.info("Retrieve the deployments for the system '{}' to merge into '{}'", oldSystem.getName(), system.getName());
         List<DeploymentPageQueryResult> deployments = deploymentPageRepository.getDeploymentPagesForSystem(oldSystem.getId());
 
-        String rootPageId = confluenceAdapter.getPageByName(props.getDeploymentsPageName());
+        String rootPageId = props.getRootPageId();
 
         final SystemPage existingSystemPage = systemPageRepository.findSystemPageBySystemId(system.getId()).orElseThrow(() -> new IllegalStateException("SystemPage for " + system.getName() + " not found"));
 
@@ -187,7 +187,7 @@ public class DocumentationGenerator {
 
     @Transactional
     public void generateAllPages() {
-        String rootPageId = confluenceAdapter.getPageByName(props.getDeploymentsPageName());
+        String rootPageId = props.getRootPageId();
         List<System> systemList = systemRepository.findAll();
         systemList.forEach(system -> recursivelyGenerateSystemPage(rootPageId, system, null));
         Iterable<Environment> environmentList = environmentRepository.findAll();
@@ -196,7 +196,7 @@ public class DocumentationGenerator {
 
     @Transactional
     public void generateAllPagesForSystem(String systemName, Integer year) {
-        String rootPageId = confluenceAdapter.getPageByName(props.getDeploymentsPageName());
+        String rootPageId = props.getRootPageId();
         System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
         recursivelyGenerateSystemPage(rootPageId, system, year);
         Iterable<Environment> environmentList = environmentRepository.findAll();

@@ -17,7 +17,7 @@ jeap:
         url: "https://foo"
         username: user
         password: password
-        deployments-page-name: page
+        root-page-id: "123456"
         space-key: space
         mock-confluence-client: true
       scheduled:

@@ -15,7 +15,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest(classes = DocumentationGeneratorConfig.class)
@@ -59,20 +58,6 @@ class ConfluenceAdapterRetryTest {
         confluenceAdapter.addOrUpdatePageUnderAncestor("ancestorId", "pageName", "content");
 
         verify(confluenceClientMock).updatePage(any(), any(), any(), any(), anyInt(), any(), anyBoolean());
-    }
-
-    @Test
-    void getPageByName_successAfterRetry() {
-        when(confluenceClientMock.getPageByTitle(any(), any(), any()))
-                // First call fails
-                .thenThrow(RequestFailedException.class)
-                .thenThrow(RequestFailedException.class)
-                // Third call succeeds
-                .thenReturn("1234");
-
-        String result = confluenceAdapter.getPageByName("name");
-
-        assertEquals("1234", result);
     }
 
     @Test
