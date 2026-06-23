@@ -180,11 +180,11 @@ Apache License Version 2.0
  * spring-boot-starter-jdbc-test - [org.springframework.boot:spring-boot-starter-jdbc-test](https://spring.io/projects/spring-boot)
  * spring-boot-starter-logging - [org.springframework.boot:spring-boot-starter-logging](https://spring.io/projects/spring-boot)
  * spring-boot-starter-micrometer-metrics - [org.springframework.boot:spring-boot-starter-micrometer-metrics](https://spring.io/projects/spring-boot)
- * spring-boot-starter-oauth2-resource-server - [org.springframework.boot:spring-boot-starter-oauth2-resource-server](https://spring.io/projects/spring-boot)
  * spring-boot-starter-opentelemetry - [org.springframework.boot:spring-boot-starter-opentelemetry](https://spring.io/projects/spring-boot)
  * spring-boot-starter-restclient - [org.springframework.boot:spring-boot-starter-restclient](https://spring.io/projects/spring-boot)
  * spring-boot-starter-security - [org.springframework.boot:spring-boot-starter-security](https://spring.io/projects/spring-boot)
  * spring-boot-starter-security-oauth2-client - [org.springframework.boot:spring-boot-starter-security-oauth2-client](https://spring.io/projects/spring-boot)
+ * spring-boot-starter-security-oauth2-resource-server - [org.springframework.boot:spring-boot-starter-security-oauth2-resource-server](https://spring.io/projects/spring-boot)
  * spring-boot-starter-security-test - [org.springframework.boot:spring-boot-starter-security-test](https://spring.io/projects/spring-boot)
  * spring-boot-starter-test - [org.springframework.boot:spring-boot-starter-test](https://spring.io/projects/spring-boot)
  * spring-boot-starter-thymeleaf - [org.springframework.boot:spring-boot-starter-thymeleaf](https://spring.io/projects/spring-boot)
@@ -308,4 +308,3 @@ Public Domain
 
  * AOP alliance - [aopalliance:aopalliance](http://aopalliance.sourceforge.net)
  * HdrHistogram - [org.hdrhistogram:HdrHistogram](http://hdrhistogram.github.io/HdrHistogram/)
- * LatencyUtils - [org.latencyutils:LatencyUtils](http://latencyutils.github.io/LatencyUtils/)
