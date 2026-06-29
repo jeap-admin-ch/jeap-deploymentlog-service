@@ -7,6 +7,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > - Spring Boot 3 maintenance (bug fixes, patches, and regular updates) continues on branch `release/springboot3`.
 
+## [6.0.0] - 2026-06-29
+
+### Dependencies
+- **net.javacrumbs.shedlock:shedlock-spring**: 4.33.0 → 7.7.0 (major)
+- **net.javacrumbs.shedlock:shedlock-provider-jdbc-template**: 4.33.0 → 7.7.0 (major)
+- **ch.admin.bit.jeap:jeap-spring-boot-parent**: 35.11.0 → 35.11.1 (patch)
+- **org.sahli.asciidoc.confluence.publisher:asciidoc-confluence-publisher-client**: 0.33.0 → 0.34.0 (minor)
+
 ## [5.5.0] - 2026-06-23
 
 ### Changed
