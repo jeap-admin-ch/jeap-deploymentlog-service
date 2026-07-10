@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> - Spring Boot 3 maintenance (bug fixes, patches, and regular updates) continues on branch `release/springboot3`.
+## [7.3.0] - 2026-07-10
+
+### Changed
+- Ready-for-deploy check: jira issues that cannot be resolved (issue does not exist, project not visible, or key not a
+  valid jira issue key) now yield a `WARNING` check result with a diagnostic message instead of an unhandled exception
+  (HTTP 500). `DeploymentCheckResultDto` additionally reports `issuesWithoutLabel`, `issuesNotFound` and
+  `projectsNotVisible` (backward compatible).
+- Jira search: issue keys are validated, normalized and quoted in the JQL query (keys like `AND-1` no longer break the
+  query), searches are chunked (previously more than 50 issues were silently not checked).
+- If jira is unavailable or rejects the deployment log service itself (e.g. invalid credentials), the deployment API
+  returns HTTP 503 with a meaningful message instead of passing the jira status through, and logs at ERROR level.
+- New optional configuration property `jeap.deploymentlog.jira.retry-delay-ms` (default 2000).
 
 ## [7.2.0] - 2026-07-08
 

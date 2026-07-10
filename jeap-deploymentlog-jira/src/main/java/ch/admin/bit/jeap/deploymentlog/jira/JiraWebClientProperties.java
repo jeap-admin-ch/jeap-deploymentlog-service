@@ -24,6 +24,11 @@ public class JiraWebClientProperties {
 
     private boolean mockJiraClient = false;
 
+    /**
+     * Delay in milliseconds before the first retry of a failed jira request (doubled for each further retry).
+     */
+    private long retryDelayMs = 2000;
+
     @PostConstruct
     void init() {
         log.info("Jira configuration: {}", this);

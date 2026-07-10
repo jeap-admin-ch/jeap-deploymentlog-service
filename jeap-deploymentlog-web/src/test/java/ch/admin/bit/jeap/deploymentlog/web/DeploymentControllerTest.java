@@ -3,6 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.web;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
+import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentCheckService;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
@@ -18,7 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.time.ZonedDateTime;
 import java.util.Collections;
@@ -229,7 +230,7 @@ class DeploymentControllerTest {
     }
 
     @Test
-    void issuesReadyForDeploy_whenAllWithLabel_thenReturnsOk() throws Exception {
+    void checkIssuesReadyForDeploy_whenAllWithLabel_thenReturnsOk() throws Exception {
         //given
         final Set<String> issues = Set.of("JEAP-1234", "JEAP-2345");
 
@@ -237,7 +238,7 @@ class DeploymentControllerTest {
         DeploymentCreateDto deploymentCreateDto = generateDeploymentCreateDto(issues);
 
         DeploymentCheckResultDto resultDto = DeploymentCheckResultDto.builder().result(DeploymentCheckResult.OK).build();
-        when(deploymentCheckService.issuesReadyForDeploy(issues)).thenReturn(resultDto);
+        when(deploymentCheckService.checkIssuesReadyForDeploy(issues)).thenReturn(resultDto);
 
         //when
         mockMvc.perform(
@@ -249,11 +250,11 @@ class DeploymentControllerTest {
                 .andExpect(jsonPath("$.checkResult.result", is(DeploymentCheckResult.OK.name())));
 
         //then
-        verify(deploymentCheckService, times(1)).issuesReadyForDeploy(issues);
+        verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
     }
 
     @Test
-    void issuesReadyForDeploy_withoutLabel_thenReturnsNok() throws Exception {
+    void checkIssuesReadyForDeploy_withoutLabel_thenReturnsNok() throws Exception {
         //given
         final Set<String> issues = Set.of("JEAP-1234", "JEAP-2345");
 
@@ -263,8 +264,11 @@ class DeploymentControllerTest {
         DeploymentCheckResultDto resultDto = DeploymentCheckResultDto.builder()
                 .result(DeploymentCheckResult.NOK)
                 .message("myMessage")
+                .issuesWithoutLabel(java.util.List.of("JEAP-1234"))
+                .issuesNotFound(java.util.List.of("JEAP-2345"))
+                .projectsNotVisible(java.util.List.of("UTF"))
                 .build();
-        when(deploymentCheckService.issuesReadyForDeploy(issues)).thenReturn(resultDto);
+        when(deploymentCheckService.checkIssuesReadyForDeploy(issues)).thenReturn(resultDto);
 
         //when
         mockMvc.perform(
@@ -274,22 +278,32 @@ class DeploymentControllerTest {
                                 .with(httpBasic("write", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.checkResult.result", is(DeploymentCheckResult.NOK.name())))
-                .andExpect(jsonPath("$.checkResult.message", is("myMessage")));
+                .andExpect(jsonPath("$.checkResult.message", is("myMessage")))
+                .andExpect(jsonPath("$.checkResult.issuesWithoutLabel[0]", is("JEAP-1234")))
+                .andExpect(jsonPath("$.checkResult.issuesNotFound[0]", is("JEAP-2345")))
+                .andExpect(jsonPath("$.checkResult.projectsNotVisible[0]", is("UTF")));
 
-        //then
-        verify(deploymentCheckService, times(1)).issuesReadyForDeploy(issues);
+        //then: a NOK check result blocks the deployment - no deployment record is created
+        verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
+        verify(deploymentService, never()).createDeployment(
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
     @Test
-    void issuesReadyForDeploy_checkResultIsFailed_thenThrowsException() throws Exception {
+    void checkIssuesReadyForDeploy_warning_thenCreatesDeploymentAndReturnsCreated() throws Exception {
         //given
-        final Set<String> issues = Set.of("JEAP-1234", "JEAP-2345");
+        final Set<String> issues = Set.of("JEAP-1234", "UTF-8");
 
         String externalId = "123";
         DeploymentCreateDto deploymentCreateDto = generateDeploymentCreateDto(issues);
 
-        when(deploymentCheckService.issuesReadyForDeploy(issues))
-                .thenThrow(new RestClientResponseException("myMessage", 500, "status", null, null, null));
+        DeploymentCheckResultDto resultDto = DeploymentCheckResultDto.builder()
+                .result(DeploymentCheckResult.WARNING)
+                .message("Issues in jira projects not visible to the deployment log service: [UTF-8]")
+                .issuesNotFound(java.util.List.of("UTF-8"))
+                .projectsNotVisible(java.util.List.of("UTF"))
+                .build();
+        when(deploymentCheckService.checkIssuesReadyForDeploy(issues)).thenReturn(resultDto);
 
         //when
         mockMvc.perform(
@@ -297,12 +311,41 @@ class DeploymentControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(deploymentCreateDto))
                                 .with(httpBasic("write", "secret")))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.checkResult.result", is(DeploymentCheckResult.WARNING.name())))
+                .andExpect(jsonPath("$.checkResult.issuesNotFound[0]", is("UTF-8")))
+                .andExpect(jsonPath("$.checkResult.projectsNotVisible[0]", is("UTF")));
 
-        //then
-        verify(deploymentCheckService, times(1)).issuesReadyForDeploy(issues);
+        //then: a WARNING check result does not block the deployment - the deployment record is created
+        verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
+        verify(deploymentService, times(1)).createDeployment(
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
+    @Test
+    void checkIssuesReadyForDeploy_jiraUnavailable_thenReturnsServiceUnavailable() throws Exception {
+        //given
+        final Set<String> issues = Set.of("JEAP-1234", "JEAP-2345");
+
+        String externalId = "123";
+        DeploymentCreateDto deploymentCreateDto = generateDeploymentCreateDto(issues);
+
+        when(deploymentCheckService.checkIssuesReadyForDeploy(issues))
+                .thenThrow(JiraUnavailableException.jiraNotAvailable(new ResourceAccessException("connection refused")));
+
+        //when
+        mockMvc.perform(
+                        put("/api/deployment/{externalId}?readyForDeployCheck=true", externalId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                                .with(httpBasic("write", "secret")))
+                .andExpect(status().isServiceUnavailable());
+
+        //then
+        verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
+        verify(deploymentService, never()).createDeployment(
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+    }
 
     private DeploymentCreateDto generateDeploymentCreateDto(Set<String> issues){
         ComponentVersionCreateDto componentVersion = new ComponentVersionCreateDto();

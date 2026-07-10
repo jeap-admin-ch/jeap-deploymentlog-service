@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.web.api;
 
 import ch.admin.bit.jeap.deploymentlog.domain.exception.*;
+import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +51,20 @@ public class RestResponseExceptionHandler {
         return new ResponseEntity<>(ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
+    @ExceptionHandler(JiraUnavailableException.class)
+    public ResponseEntity<String> handleJiraUnavailableException(JiraUnavailableException ex) {
+        // ERROR level: jira being unavailable or rejecting the deployment log service itself is a problem
+        // the platform team must check - unlike not found jira issues, which are reported to the pipeline
+        // as a check result and logged at WARN level only.
+        log.error(ex.getMessage(), ex);
+        return new ResponseEntity<>(ex.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
+     * Passes rest client errors of synchronously called upstream systems through to the caller, e.g.
+     * confluence errors when creating a blogpost via {@link BlogpostController}. Jira errors of the
+     * ready-for-deploy check never reach this handler - they are wrapped in {@link JiraUnavailableException}.
+     */
     @ExceptionHandler(RestClientResponseException.class)
     public ResponseEntity<String> handleRestClientResponseException(RestClientResponseException ex) {
         String errorSummary = "Rest client request failed: %s %s %s %s".formatted(

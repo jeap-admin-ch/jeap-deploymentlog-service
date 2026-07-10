@@ -1,30 +1,42 @@
 package ch.admin.bit.jeap.deploymentlog.jira;
 
-import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraErrorResponse;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraIssueDto;
+import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraProjectDto;
 import ch.admin.bit.jeap.deploymentlog.jira.dto.JiraSearchResultDto;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
-import java.util.regex.Matcher;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class JiraWebClientImpl implements JiraWebClient {
 
+    /**
+     * Syntactically valid jira issue keys: project key (starting with a letter, at least two characters),
+     * a dash and the issue number. Anything else is never sent to jira and directly reported as not found.
+     */
+    private static final Pattern ISSUE_KEY_PATTERN = Pattern.compile("[A-Z][A-Z0-9_]+-\\d+");
+    private static final int SEARCH_CHUNK_SIZE = 50;
+    private static final Duration VISIBLE_PROJECTS_CACHE_TTL = Duration.ofMinutes(5);
+
     private static final ObjectMapper objectMapper = new JsonMapper();
-    private static final Pattern pattern = Pattern.compile("'(.*?)'");
     private final RestClient restClient;
     private final String documentationRootUrl;
     private final String appId;
+    private final AtomicReference<CachedProjects> visibleProjectsCache = new AtomicReference<>();
+
+    private record CachedProjects(Set<String> projectKeys, Instant fetchedAt) {
+    }
 
     public JiraWebClientImpl(JiraWebClientProperties props, String documentationRootUrl, RestClient.Builder restClientBuilder) {
         this.documentationRootUrl = documentationRootUrl;
@@ -73,58 +85,122 @@ public class JiraWebClientImpl implements JiraWebClient {
     }
 
     @Override
-    public Map<String, List<String>> searchIssuesLabels(Set<String> jiraIssueKeys) throws JiraIssuesNotFoundException {
-        if (jiraIssueKeys.isEmpty()) {
-            return Collections.emptyMap();
+    public JiraIssuesSearchResult searchIssuesLabels(Set<String> jiraIssueKeys) {
+        SortedSet<String> notFoundIssueKeys = new TreeSet<>();
+        List<String> validIssueKeys = new ArrayList<>();
+        jiraIssueKeys.stream()
+                .filter(Objects::nonNull)
+                .map(key -> key.trim().toUpperCase(Locale.ROOT))
+                .filter(key -> !key.isEmpty())
+                .distinct()
+                .forEach(key -> {
+                    if (ISSUE_KEY_PATTERN.matcher(key).matches()) {
+                        validIssueKeys.add(key);
+                    } else {
+                        log.debug("Not looking up syntactically invalid jira issue key '{}'", key);
+                        notFoundIssueKeys.add(key);
+                    }
+                });
+
+        Map<String, List<String>> labelsByIssueKey = new TreeMap<>();
+        for (int fromIndex = 0; fromIndex < validIssueKeys.size(); fromIndex += SEARCH_CHUNK_SIZE) {
+            List<String> chunk = validIssueKeys.subList(fromIndex, Math.min(fromIndex + SEARCH_CHUNK_SIZE, validIssueKeys.size()));
+            labelsByIssueKey.putAll(searchIssuesLabelsChunk(chunk));
         }
+        validIssueKeys.stream()
+                .filter(key -> !labelsByIssueKey.containsKey(key))
+                .forEach(notFoundIssueKeys::add);
 
-        final String url = "/search";
-        log.debug("Call jira api with url '{}' and jiraIssueKeys '{}'", url, jiraIssueKeys);
+        log.debug("Received jira issues with labels '{}', issue keys not resolved in jira: '{}'", labelsByIssueKey, notFoundIssueKeys);
+        return JiraIssuesSearchResult.builder()
+                .labelsByIssueKey(labelsByIssueKey)
+                .notFoundIssueKeys(notFoundIssueKeys)
+                .build();
+    }
 
-        final String body = "{ \"jql\": \"key in (%1$s)\", \"fields\":[\"key\", \"labels\"] }";
+    private Map<String, List<String>> searchIssuesLabelsChunk(List<String> issueKeys) {
+        // Issue keys are quoted to avoid JQL parsing errors for keys resembling JQL reserved words (e.g. AND-1).
+        // The keys are validated against ISSUE_KEY_PATTERN and can therefore not break out of the quotes.
+        final String jql = issueKeys.stream()
+                .map(key -> "\"" + key + "\"")
+                .collect(Collectors.joining(",", "key in (", ")"));
+        // validateQuery=false makes jira silently ignore issue keys that do not exist or are not readable
+        // for the deployment log jira user, instead of rejecting the whole query with a 400 response.
+        final Map<String, Object> searchRequest = Map.of(
+                "jql", jql,
+                "fields", List.of("key", "labels"),
+                "validateQuery", false,
+                "maxResults", issueKeys.size());
 
+        log.debug("Call jira api with url '/search' and jql '{}'", jql);
+        final String action = "searching the labels of the jira issues " + issueKeys;
         try {
-            final JiraSearchResultDto jiraSearchResultDto = restClient
+            final JiraSearchResultDto searchResult = restClient
                     .post()
-                    .uri(url)
+                    .uri("/search")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(body.formatted(String.join(",", jiraIssueKeys)))
-                    .exchange( (clientRequest, clientResponse) -> {
-                        if (clientResponse.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
-                            throw mapToException(clientResponse.bodyTo(String.class));
-                        } else {
-                            return Objects.requireNonNull(clientResponse.bodyTo(JiraSearchResultDto.class),
-                                    "result of api call is null!");
-                        }
-                    });
-
-            log.trace("Received response {}", jiraSearchResultDto);
-            Map<String, List<String>> issuesWithLabels = jiraSearchResultDto.getIssues().stream().collect(
-                    Collectors.toMap(JiraIssueDto::getKey, issue -> issue.getFields().getLabels()));
-
-            log.debug("Received jira issues with labels '{}'", issuesWithLabels);
-            return issuesWithLabels;
-        } catch (Exception e) {
-            if (e.getCause() instanceof JiraIssuesNotFoundException jiraIssuesNotFoundException) {
-                throw jiraIssuesNotFoundException;
+                    .body(objectMapper.writeValueAsString(searchRequest))
+                    .retrieve()
+                    .body(JiraSearchResultDto.class);
+            if (searchResult == null || searchResult.getIssues() == null) {
+                // A 2xx response without a result body is a fundamental jira problem. It must be mapped
+                // explicitly: an unclassified exception (e.g. a NullPointerException) would neither be
+                // retried nor translated into a meaningful response by the exception handling.
+                throw JiraUnavailableException.emptyJiraResponse(action);
             }
-            throw e;
+            return searchResult.getIssues().stream()
+                    .filter(JiraWebClientImpl::hasKey)
+                    .collect(Collectors.toMap(
+                            issue -> issue.getKey().toUpperCase(Locale.ROOT),
+                            JiraWebClientImpl::labels));
+        } catch (HttpClientErrorException e) {
+            throw JiraUnavailableException.jiraClientError(action, e);
         }
     }
 
-    private JiraIssuesNotFoundException mapToException(String errorMessageJson) {
+    private static boolean hasKey(JiraIssueDto issue) {
+        if (issue.getKey() == null) {
+            log.warn("Ignoring malformed jira issue without key in the jira search response");
+            return false;
+        }
+        return true;
+    }
+
+    private static List<String> labels(JiraIssueDto issue) {
+        if (issue.getFields() == null || issue.getFields().getLabels() == null) {
+            return List.of();
+        }
+        return issue.getFields().getLabels();
+    }
+
+    @Override
+    public Set<String> getVisibleProjectKeys() {
+        CachedProjects cached = visibleProjectsCache.get();
+        if (cached != null && cached.fetchedAt().plus(VISIBLE_PROJECTS_CACHE_TTL).isAfter(Instant.now())) {
+            return cached.projectKeys();
+        }
+
+        log.debug("Call jira api with url '/project'");
+        final String action = "fetching the jira projects visible to the deployment log jira user";
         try {
-            final List<String> jiraIssues = new ArrayList<>();
-            for (String errorMessage : objectMapper.readValue(errorMessageJson, JiraErrorResponse.class).getErrorMessages()) {
-                Matcher matcher = pattern.matcher(errorMessage);
-                if (matcher.find())
-                {
-                    jiraIssues.add(matcher.group(1));
-                }
+            JiraProjectDto[] projects = restClient
+                    .get()
+                    .uri("/project")
+                    .retrieve()
+                    .body(JiraProjectDto[].class);
+            if (projects == null) {
+                throw JiraUnavailableException.emptyJiraResponse(action);
             }
-            return new JiraIssuesNotFoundException(jiraIssues);
-        } catch (JacksonException e) {
-            throw new IllegalStateException(e);
+            Set<String> projectKeys = Arrays.stream(projects)
+                    .map(JiraProjectDto::getKey)
+                    .filter(Objects::nonNull)
+                    .map(key -> key.toUpperCase(Locale.ROOT))
+                    .collect(Collectors.toUnmodifiableSet());
+            log.debug("Fetched {} jira projects visible to the deployment log jira user", projectKeys.size());
+            visibleProjectsCache.set(new CachedProjects(projectKeys, Instant.now()));
+            return projectKeys;
+        } catch (HttpClientErrorException e) {
+            throw JiraUnavailableException.jiraClientError(action, e);
         }
     }
 }

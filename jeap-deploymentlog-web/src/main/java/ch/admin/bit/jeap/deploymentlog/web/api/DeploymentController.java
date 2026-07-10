@@ -5,7 +5,6 @@ import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
-import ch.admin.bit.jeap.deploymentlog.jira.JiraIssuesNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +35,7 @@ public class DeploymentController {
     public ResponseEntity<DeploymentCreateResultDto> createDeployment(
             @PathVariable(name = "id") String externalId,
             @RequestParam(required = false) boolean readyForDeployCheck,
-            @RequestBody DeploymentCreateDto deploymentCreateDto) throws JiraIssuesNotFoundException {
+            @RequestBody DeploymentCreateDto deploymentCreateDto) {
         log.debug("Create new deployment with externalId '{}' for the component '{}' of the system '{}' on env '{}'",
                 externalId,
                 deploymentCreateDto.getComponentVersion().getComponentName(),
@@ -62,11 +61,11 @@ public class DeploymentController {
                 log.info("Check if the issues '{}' are ready to be deployed", changelogJiraIssueKeys);
 
                 deploymentCreateResultDto = DeploymentCreateResultDto.builder()
-                        .checkResult(deploymentCheckService.issuesReadyForDeploy(changelogJiraIssueKeys))
+                        .checkResult(deploymentCheckService.checkIssuesReadyForDeploy(changelogJiraIssueKeys))
                         .build();
 
                 if (deploymentCreateResultDto.getCheckResult().getResult().equals(DeploymentCheckResult.NOK)) {
-                    log.info("Result of readyForDeployCheck is {}: returning bad request", deploymentCreateResultDto.getCheckResult().getResult());
+                    log.info("Result of readyForDeployCheck is {}: not creating the deployment, returning the check result", deploymentCreateResultDto.getCheckResult().getResult());
                     return ResponseEntity.ok().body(deploymentCreateResultDto);
                 }
             }

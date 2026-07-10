@@ -1,8 +1,10 @@
 package ch.admin.bit.jeap.deploymentlog.web.api;
 
+import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -18,6 +20,16 @@ class RestResponseExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, responseEntity.getStatusCode());
         assertEquals("Rest client request failed: 400 text msg body", responseEntity.getBody());
+    }
+
+    @Test
+    void handleJiraUnavailableException() {
+        RestResponseExceptionHandler restResponseExceptionHandler = new RestResponseExceptionHandler();
+        JiraUnavailableException ex = JiraUnavailableException.jiraNotAvailable(new ResourceAccessException("connection refused"));
+        ResponseEntity<String> responseEntity = restResponseExceptionHandler.handleJiraUnavailableException(ex);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, responseEntity.getStatusCode());
+        assertEquals("Jira is not available - the ready-for-deploy check could not be executed", responseEntity.getBody());
     }
 
 }
