@@ -56,6 +56,20 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderCancelledDeploymentHistoryPage() {
+        DeploymentDto deploymentDto = DeploymentDto.builder()
+                .state("CANCELLED")
+                .build();
+        DeploymentHistoryPageDto pageDto = DeploymentHistoryPageDto.builder()
+                .deployments(List.of(deploymentDto))
+                .build();
+
+        String content = templateRenderer.renderDeploymentHistoryPage(pageDto);
+
+        assertThat(content).contains("Abgebrochen", "Vorzeitig beendet");
+    }
+
+    @Test
     void renderDeploymentListPage() {
         String content = templateRenderer.renderDeploymentListPage();
         assertNotNull(content);

@@ -162,6 +162,7 @@ public class DeploymentService {
                 }
             }
             case FAILURE -> deployment.failed(endedAt, stateMessage);
+            case CANCELLED -> deployment.cancelled(endedAt, stateMessage);
             default -> throw new InvalidDeploymentStateForUpdateException(state);
         }
 

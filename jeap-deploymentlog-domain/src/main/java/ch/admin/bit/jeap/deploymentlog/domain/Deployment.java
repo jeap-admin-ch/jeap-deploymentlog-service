@@ -133,4 +133,11 @@ public class Deployment {
         this.stateMessage = StringUtils.abbreviate(stateMessage, 1000);
     }
 
+    public void cancelled(ZonedDateTime endedAt, String stateMessage) {
+        this.endedAt = endedAt;
+        this.lastModified = ZonedDateTime.now();
+        this.state = DeploymentState.CANCELLED;
+        this.stateMessage = StringUtils.abbreviate(stateMessage, 1000);
+    }
+
 }

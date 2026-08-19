@@ -68,6 +68,7 @@
                     <div th:case="'FAILURE'">
                         <ac:emoticon ac:name="cross"/>
                     </div>
+                    <div th:case="'CANCELLED'">Abgebrochen</div>
                     <div th:case="'STARTED'">
                         <ac:emoticon ac:name="question"/>
                     </div>
@@ -183,4 +184,3 @@
     <div th:replace="~{fragment/legend-status :: legend-status}"></div>
 
 </th:block>
-

@@ -210,6 +210,19 @@ class DeploymentServiceTest {
     }
 
     @Test
+    void updateState_cancelled_doesNotUpdateEnvironmentComponentVersionState() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+        Deployment deployment = getDeployment();
+        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(deployment));
+
+        deploymentService.updateState("externalId", DeploymentState.CANCELLED, "cancelled by user", ZonedDateTime.now(), Map.of());
+
+        assertThat(deployment.getState()).isEqualTo(DeploymentState.CANCELLED);
+        assertThat(deployment.getStateMessage()).isEqualTo("cancelled by user");
+        verify(environmentComponentVersionStateRepository, never()).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
+        verify(environmentComponentVersionStateRepository, never()).save(any(EnvironmentComponentVersionState.class));
+    }
+
+    @Test
     void updateState_snapshotExists_doNotUpdateOnUndeployment() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
         final Deployment deployment = getUndeployment();

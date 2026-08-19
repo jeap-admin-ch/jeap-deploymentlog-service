@@ -79,6 +79,28 @@ class DeploymentControllerIT extends IntegrationTestBase {
     }
 
     @Test
+    @Transactional
+    @SneakyThrows
+    void updateDeploymentStateToCancelled() {
+        String externalId = "external-id-cancelled";
+        putDeploymentState(externalId, DeploymentState.CANCELLED, Map.of());
+
+        awaitUntilAsyncTasksCompleted();
+
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+        String responseBody = mockMvc.perform(get("/api/deployment/{externalId}", externalId)
+                        .header("Authorization", basicAuthHeader)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        DeploymentDto response = objectMapper.readValue(responseBody, DeploymentDto.class);
+        assertThat(response.getState()).isEqualTo(DeploymentState.CANCELLED);
+    }
+
+    @Test
     @SneakyThrows
     void getDeployment() {
         String externalId = "external-id-3";

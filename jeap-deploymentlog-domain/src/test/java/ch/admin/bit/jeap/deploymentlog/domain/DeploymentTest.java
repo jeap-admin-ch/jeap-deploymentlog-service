@@ -28,6 +28,18 @@ class DeploymentTest {
         assertThat(deployment.getState()).isEqualTo(DeploymentState.SUCCESS);
     }
 
+    @Test
+    void deploymentCancelled_stateIsCancelled() {
+        final Deployment deployment = getDeployment();
+        ZonedDateTime endedAt = ZonedDateTime.now();
+
+        deployment.cancelled(endedAt, "cancelled by user");
+
+        assertThat(deployment.getState()).isEqualTo(DeploymentState.CANCELLED);
+        assertThat(deployment.getEndedAt()).isEqualTo(endedAt);
+        assertThat(deployment.getStateMessage()).isEqualTo("cancelled by user");
+    }
+
     private static Deployment getDeployment() {
         return Deployment.builder().externalId("test")
                 .startedAt(ZonedDateTime.now())
