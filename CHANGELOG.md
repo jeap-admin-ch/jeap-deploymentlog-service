@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [10.1.0] - 2026-08-19
+
+### Dependencies
+- **net.javacrumbs.shedlock:shedlock-spring**: 7.8.0 → 7.9.0 (minor)
+- **net.javacrumbs.shedlock:shedlock-provider-jdbc-template**: 7.8.0 → 7.9.0 (minor)
+- **ch.admin.bit.jeap:jeap-spring-boot-parent**: 39.0.1 → 39.5.0 (minor)
+
 ## [10.0.0] - 2026-08-16
 
 ### Dependencies
