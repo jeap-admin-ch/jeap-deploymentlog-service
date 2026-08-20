@@ -73,7 +73,7 @@ public class IntegrationTestBase {
         componentVersion.setVersionControlUrl("test");
         componentVersion.setSystemName(systemName);
         componentVersion.setCommitRef("foobar");
-        componentVersion.setCommitedAt(ZonedDateTime.now());
+        componentVersion.setCommittedAt(ZonedDateTime.now());
 
         DeploymentCreateDto deploymentCreateDto = new DeploymentCreateDto();
         deploymentCreateDto.setEnvironmentName("DEV");

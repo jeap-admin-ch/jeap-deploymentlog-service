@@ -32,6 +32,7 @@ public class ComponentVersion {
     private String commitRef;
 
     @NonNull
+    @Column(nullable = false)
     private ZonedDateTime committedAt;
 
     private boolean publishedVersion;

@@ -15,6 +15,12 @@ import java.nio.charset.StandardCharsets;
 @RestControllerAdvice
 public class RestResponseExceptionHandler {
 
+    @ExceptionHandler(InvalidFlowStageRequestException.class)
+    public ResponseEntity<String> handleInvalidFlowStageRequestException(InvalidFlowStageRequestException ex) {
+        log.warn(ex.getMessage());
+        return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(DeploymentNotFoundException.class)
     public ResponseEntity<String> handleDeploymentNotFoundException(DeploymentNotFoundException ex) {
         log.warn(ex.getMessage());

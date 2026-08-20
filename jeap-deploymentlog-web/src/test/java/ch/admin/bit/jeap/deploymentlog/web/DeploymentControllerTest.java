@@ -4,6 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageRequestException;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentCheckService;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
@@ -22,7 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,6 +35,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {DeploymentController.class})
@@ -50,6 +54,8 @@ class DeploymentControllerTest {
     private DeploymentCheckService deploymentCheckService;
     @MockitoBean
     private DocgenAsyncService docgenAsyncService;
+    @MockitoBean
+    private FlowStageResolver flowStageResolver;
 
     @Test
     void putNewDeployment_whenNotExists_thenReturnsCreated() throws Exception {
@@ -60,6 +66,7 @@ class DeploymentControllerTest {
         componentVersion.setPublishedVersion(false);
         componentVersion.setVersionControlUrl("test");
         componentVersion.setSystemName("test");
+        componentVersion.setCommittedAt(ZonedDateTime.now());
         DeploymentCreateDto deploymentCreateDto = new DeploymentCreateDto();
         deploymentCreateDto.setEnvironmentName("test");
         deploymentCreateDto.setTarget(new DeploymentTarget("cf","http://localhost/cf","details"));
@@ -91,7 +98,7 @@ class DeploymentControllerTest {
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
                 deploymentCreateDto.getComponentVersion().getVersionControlUrl(),
                 deploymentCreateDto.getComponentVersion().getCommitRef(),
-                deploymentCreateDto.getComponentVersion().getCommitedAt(),
+                deploymentCreateDto.getComponentVersion().getCommittedAt().withZoneSameInstant(ZoneOffset.UTC),
                 deploymentCreateDto.getComponentVersion().isPublishedVersion(),
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),
@@ -111,6 +118,56 @@ class DeploymentControllerTest {
                 deploymentCreateDto.getRemedyChangeId(),
                 Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE));
 
+    }
+
+    @Test
+    void putNewDeployment_resolvesRequestedFinalDeploymentEnvironments() throws Exception {
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setFinalDeploymentEnvironments(List.of("ABN", "PROD"));
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "target-stages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isCreated());
+
+        verify(flowStageResolver).resolveEffectiveFinalDeploymentEnvironment(List.of("ABN", "PROD"));
+    }
+
+    @Test
+    void putNewDeployment_withoutCommittedAt_returnsBadRequest() throws Exception {
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.getComponentVersion().setCommittedAt(null);
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "missing-commit-time")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(flowStageResolver);
+        verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any());
+    }
+
+    @Test
+    void putNewDeployment_withInvalidFinalEnvironment_returnsBadRequest() throws Exception {
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setFinalDeploymentEnvironments(List.of("UNKNOWN"));
+        when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(List.of("UNKNOWN")))
+                .thenThrow(new InvalidFlowStageRequestException("Unknown final deployment environment(s): UNKNOWN"));
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "unknown-target-stage")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Unknown final deployment environment(s): UNKNOWN"));
+
+        verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any());
     }
 
     @Test
@@ -221,6 +278,7 @@ class DeploymentControllerTest {
         componentVersion.setPublishedVersion(false);
         componentVersion.setVersionControlUrl("test");
         componentVersion.setSystemName("test");
+        componentVersion.setCommittedAt(ZonedDateTime.now());
         DeploymentCreateDto deploymentCreateDto = new DeploymentCreateDto();
         deploymentCreateDto.setEnvironmentName("test");
         deploymentCreateDto.setComponentVersion(componentVersion);
@@ -354,6 +412,7 @@ class DeploymentControllerTest {
         componentVersion.setPublishedVersion(false);
         componentVersion.setVersionControlUrl("test");
         componentVersion.setSystemName("test");
+        componentVersion.setCommittedAt(ZonedDateTime.now());
         DeploymentCreateDto deploymentCreateDto = new DeploymentCreateDto();
         deploymentCreateDto.setEnvironmentName("test");
         deploymentCreateDto.setTarget(new DeploymentTarget("cf","http://localhost/cf","details"));

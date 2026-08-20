@@ -3,12 +3,14 @@ package ch.admin.bit.jeap.deploymentlog.web.api;
 import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,6 +30,7 @@ public class DeploymentController {
     private final DeploymentService deploymentService;
     private final DocgenAsyncService docgenAsyncService;
     private final DeploymentCheckService deploymentCheckService;
+    private final FlowStageResolver flowStageResolver;
 
     @PutMapping("/{id}")
     @Operation(summary = "Create a new deployment")
@@ -35,7 +38,7 @@ public class DeploymentController {
     public ResponseEntity<DeploymentCreateResultDto> createDeployment(
             @PathVariable(name = "id") String externalId,
             @RequestParam(required = false) boolean readyForDeployCheck,
-            @RequestBody DeploymentCreateDto deploymentCreateDto) {
+            @Valid @RequestBody DeploymentCreateDto deploymentCreateDto) {
         log.debug("Create new deployment with externalId '{}' for the component '{}' of the system '{}' on env '{}'",
                 externalId,
                 deploymentCreateDto.getComponentVersion().getComponentName(),
@@ -46,6 +49,11 @@ public class DeploymentController {
             log.info("Deployment with externalId {} already exists. Returning OK", externalId);
             return new ResponseEntity<>(HttpStatus.OK);
         }
+
+        // Flow persistence is introduced in a later story. Resolve here already to validate the API input
+        // atomically before any deployment data is persisted.
+        flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
+                deploymentCreateDto.getFinalDeploymentEnvironments());
 
         DeploymentCreateResultDto deploymentCreateResultDto = null;
 
@@ -76,7 +84,7 @@ public class DeploymentController {
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
                 deploymentCreateDto.getComponentVersion().getVersionControlUrl(),
                 deploymentCreateDto.getComponentVersion().getCommitRef(),
-                deploymentCreateDto.getComponentVersion().getCommitedAt(),
+                deploymentCreateDto.getComponentVersion().getCommittedAt(),
                 deploymentCreateDto.getComponentVersion().isPublishedVersion(),
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),

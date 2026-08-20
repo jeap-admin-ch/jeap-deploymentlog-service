@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Add configurable start and default final environments for version flows.
+- Accept optional `finalDeploymentEnvironments` when creating deployments.
+
+### Changed
+- Require `componentVersion.committedAt` in the deployment API and database schema.
+
 ## [11.1.0] - 2026-08-24
 
 ### Dependencies

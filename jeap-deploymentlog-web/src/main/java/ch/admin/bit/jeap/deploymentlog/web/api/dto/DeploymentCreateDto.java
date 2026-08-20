@@ -4,10 +4,15 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTarget;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentUnit;
 import ch.admin.bit.jeap.deploymentlog.domain.Link;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.ZonedDateTime;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 @Data
@@ -23,7 +28,15 @@ public class DeploymentCreateDto {
 
     Set<Link> links;
 
+    @Valid
+    @NotNull
     ComponentVersionCreateDto componentVersion;
+
+    @ArraySchema(schema = @Schema(example = "PROD"), arraySchema = @Schema(
+            description = "Optional final environments of the current automated staging. The environment with the " +
+                    "highest configured stagingOrder is used. If omitted or empty, the configured default final " +
+                    "environment (or productive=true fallback) is used."))
+    List<String> finalDeploymentEnvironments;
 
     DeploymentUnit deploymentUnit;
 
