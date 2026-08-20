@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 import java.time.ZonedDateTime;
 import java.util.*;
 
-import static java.util.stream.Collectors.groupingBy;
 import static net.logstash.logback.argument.StructuredArguments.value;
 
 @Component
@@ -109,28 +108,6 @@ public class DocgenAsyncService {
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
-    public void triggerRegenerateAggregatePages(Collection<SystemEnv> systemEnvs) {
-        // Acquire the docgen lock once per system instead of once per system and environment
-        systemEnvs.stream().collect(groupingBy(SystemEnv::getSystemName))
-                .forEach((systemName, systemEnvsOfSystem) ->
-                        runLockedForSystem(systemName, () -> regenerateAggregatePages(systemEnvsOfSystem)));
-        // The overview page is shared by all systems of an environment, regenerating it per system would only render
-        // the same page again and again
-        systemEnvs.stream().map(SystemEnv::getEnvId).distinct()
-                .forEach(this::regenerateDeploymentHistoryOverview);
-    }
-
-    private void regenerateDeploymentHistoryOverview(UUID environmentId) {
-        try {
-            documentationGenerator.regenerateDeploymentHistoryOverview(environmentId);
-        } catch (Exception ex) {
-            errorCounter.increment();
-            log.warn("Failed to regenerate the deployment history overview page for environment {}",
-                    value("environmentId", environmentId), ex);
-        }
-    }
-
     /**
      * Runs one system of a batch, making sure that a failure - including one while acquiring or releasing the lock -
      * does not abort the systems that have not been processed yet.
@@ -144,24 +121,11 @@ public class DocgenAsyncService {
         }
     }
 
-    private void regenerateAggregatePages(List<SystemEnv> systemEnvs) {
-        for (SystemEnv systemEnv : systemEnvs) {
-            try {
-                documentationGenerator.regenerateAggregatePages(systemEnv);
-            } catch (Exception ex) {
-                errorCounter.increment();
-                log.warn("Failed to regenerate aggregate pages for system {}", value(SYSTEM_NAME, systemEnv.getSystemName()), ex);
-            }
-        }
-    }
-
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
-    public void triggerUpdateDeploymentListPages(Collection<SystemEnv> envsBySystems) {
+    public void triggerUpdateDeploymentListPages(String systemName, Collection<SystemEnv> systemEnvs) {
         // Update deployment history page per system (docgen lock is held per system name to avoid race conditions when
-        // generating confluence pages)
-        envsBySystems.stream().collect(groupingBy(SystemEnv::getSystemName))
-                .forEach((systemName, systemEnvs) ->
-                        runLockedForSystem(systemName, () ->
-                                documentationGenerator.updateDeploymentHistoryPages(systemEnvs)));
+        // generating confluence pages). One task per system, so that a system waiting for its lock does not hold up
+        // the other systems of the same batch.
+        runLockedForSystem(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(systemEnvs));
     }
 }

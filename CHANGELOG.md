@@ -17,9 +17,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The docgen lock is now kept alive while the docgen run is in progress instead of expiring after a fixed minute. A
   run retrying on conflicts can take longer than that, in which case the lock expired and a second run for the same
   system started concurrently - causing exactly the page conflicts that made the run slow in the first place.
-- The scheduled job now also repairs the pages that aggregate several deployments (system page and deployment history
-  page). Only the deployment letter page was tracked per deployment, so an outdated aggregate page was never detected
-  and stayed outdated until the next deployment of that system happened to rewrite it.
 
 ### Changed
 
@@ -29,7 +26,6 @@ an external caller or implementor has to be adapted:
 - `ConfluenceAdapter.addOrUpdatePageUnderAncestor` takes a `Supplier<String>` instead of the rendered content.
 - `DeploymentHistoryPageDto.getPageTitle()` and `DeploymentHistoryOverviewPageDto.getPageTitle()` were replaced by the
   static `pageTitle(...)` factories, so the title can be determined without rendering the page.
-- `DeploymentRepository` gained `getSystemEnvsWithOutdatedAggregatePages`.
 
 ## [11.0.0] - 2026-08-21
 

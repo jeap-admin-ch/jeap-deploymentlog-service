@@ -299,34 +299,6 @@ public class DocumentationGenerator {
                 .build();
     }
 
-    /**
-     * Regenerates the pages that aggregate several deployments of one system and environment: the system page and
-     * the deployment history page. Unlike the deployment letter page these are not tracked per deployment, so a
-     * docgen run that stopped before reaching them leaves them outdated without any deployment being reported as
-     * missing a page. The scheduled job repairs them through this method, together with
-     * {@link #regenerateDeploymentHistoryOverview(UUID)}.
-     */
-    @Timed("regenerate_aggregate_pages")
-    @Transactional
-    public void regenerateAggregatePages(SystemEnv systemEnv) {
-        String rootPageId = props.getRootPageId();
-        System system = systemRepository.getById(systemEnv.getSystemId());
-        Environment environment = environmentRepository.getById(systemEnv.getEnvId());
-        String systemPageId = generateSystemPage(rootPageId, system);
-        generateDeploymentHistoryPageForEnvironment(systemPageId, environment, system);
-    }
-
-    /**
-     * The deployment history overview page is shared by all systems of an environment, so a repair run regenerates it
-     * once per environment instead of once per system and environment.
-     */
-    @Timed("regenerate_deployment_history_overview")
-    @Transactional
-    public void regenerateDeploymentHistoryOverview(UUID environmentId) {
-        Environment environment = environmentRepository.getById(environmentId);
-        generateDeploymentHistoryOverviewPageForEnvironment(props.getRootPageId(), environment);
-    }
-
     @Timed("update_deployment_history_pages")
     @Transactional
     public void updateDeploymentHistoryPages(Collection<SystemEnv> envsBySystems) {

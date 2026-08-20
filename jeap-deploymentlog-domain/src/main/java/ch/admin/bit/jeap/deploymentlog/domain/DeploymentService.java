@@ -219,18 +219,6 @@ public class DeploymentService {
         return deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(limit, from, to);
     }
 
-    /**
-     * Finds system/environment combinations whose system page or deployment history page has not been regenerated
-     * since the last deployment. These pages are not tracked per deployment, so they are not covered by
-     * {@link #getMissingDeploymentPages(int, long, long)}.
-     */
-    @TransactionalReadReplica
-    public List<SystemEnv> getOutdatedAggregatePages(int limit, long minAgeMinutes, long maxAgeMinutes) {
-        ZonedDateTime from = ZonedDateTime.now().minusMinutes(maxAgeMinutes);
-        ZonedDateTime to = ZonedDateTime.now().minusMinutes(minAgeMinutes);
-        return deploymentRepository.getSystemEnvsWithOutdatedAggregatePages(limit, from, to);
-    }
-
     @TransactionalReadReplica
     public long countMissingDeploymentPages(int maxAgeDays) {
         ZonedDateTime from = ZonedDateTime.now().minusDays(maxAgeDays);

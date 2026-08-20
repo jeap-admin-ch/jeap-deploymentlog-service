@@ -78,8 +78,9 @@ class DocgenLocks {
      * A periodic task scheduled on a {@link ScheduledExecutorService} is silently dropped as soon as one of its
      * executions throws. A single failing lock extension - a short database hiccup is enough - would therefore stop
      * keeping the lock alive for the rest of the docgen run, without any trace in the log. Swallowing the exception
-     * here keeps the extension scheduled and makes the failure visible. Every scheduling method is wrapped, so this
-     * does not depend on which one shedlock happens to use.
+     * here keeps the extension scheduled and makes the failure visible. Both periodic scheduling methods are wrapped,
+     * so this does not depend on which of them shedlock uses. The one-shot methods are deliberately left alone: they
+     * do not drop anything, and wrapping them would also swallow the errors of execute() and submit().
      */
     private static final class LockExtenderExecutor extends ScheduledThreadPoolExecutor {
 
@@ -99,11 +100,6 @@ class DocgenLocks {
         @Override
         public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
             return super.scheduleWithFixedDelay(keepScheduledOnFailure(command), initialDelay, delay, unit);
-        }
-
-        @Override
-        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
-            return super.schedule(keepScheduledOnFailure(command), delay, unit);
         }
 
         private static Runnable keepScheduledOnFailure(Runnable command) {

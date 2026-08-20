@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toSet;
 
 @Component
@@ -52,21 +53,6 @@ public class SchedulingService {
         }
         deploymentIds.forEach(docgenAsyncService::triggerDocgenForDeployment);
 
-        // The pages aggregating several deployments are not tracked per deployment and therefore need their own
-        // check. Re-generating a deployment above already refreshes them, so those are skipped here.
-        Set<SystemEnv> coveredByDeployments = deploymentService.getSystemAndEnvsForDeploymentIds(Set.copyOf(deploymentIds));
-        List<SystemEnv> outdatedAggregatePages = deploymentService.getOutdatedAggregatePages(
-                        configProperties.getRetriedPagesLimit(),
-                        configProperties.getMinAgeMinutes(),
-                        configProperties.getMaxAgeMinutes()).stream()
-                .filter(systemEnv -> !coveredByDeployments.contains(systemEnv))
-                .toList();
-        if (!outdatedAggregatePages.isEmpty()) {
-            log.warn("Re-generating outdated aggregate pages for {} system/environment combination(s): {}",
-                    outdatedAggregatePages.size(), outdatedAggregatePages);
-            docgenAsyncService.triggerRegenerateAggregatePages(outdatedAggregatePages);
-        }
-
         log.debug("Missing page check finished");
     }
 
@@ -91,7 +77,8 @@ public class SchedulingService {
 
     private void updateDeploymentListPages(Set<UUID> deploymentIds) {
         Set<SystemEnv> systemEnvs = deploymentService.getSystemAndEnvsForDeploymentIds(deploymentIds);
-        docgenAsyncService.triggerUpdateDeploymentListPages(systemEnvs);
+        systemEnvs.stream().collect(groupingBy(SystemEnv::getSystemName))
+                .forEach(docgenAsyncService::triggerUpdateDeploymentListPages);
     }
 
     private void deletePage(DeploymentPage deploymentPage) {

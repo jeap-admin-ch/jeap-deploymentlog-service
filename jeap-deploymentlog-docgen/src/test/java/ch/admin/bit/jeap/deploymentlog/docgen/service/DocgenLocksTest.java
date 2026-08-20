@@ -41,7 +41,7 @@ class DocgenLocksTest {
     private SimpleLock lockMock;
 
     @Test
-    void runIfLockAquiredBeforeTimeout_keepsTheLockAliveWhileTheTaskIsRunning() {
+    void runIfLockAquiredBeforeTimeout_wrapsTheLockAndDelegatesUnlockToTheUnderlyingLock() {
         doReturn(Optional.of(lockMock)).when(extensibleLockProviderMock).lock(any());
         DocgenLocks locks = new DocgenLocks(extensibleLockProviderMock);
         AtomicBoolean taskExecuted = new AtomicBoolean(false);
@@ -52,8 +52,8 @@ class DocgenLocksTest {
             locks.shutdown();
         }
 
-        // The lock is wrapped by shedlock's keep-alive lock, which extends it for as long as it is held and releases
-        // the underlying lock when the docgen run is done
+        // The lock is wrapped by shedlock's keep-alive lock, which releases the underlying lock when the run is done.
+        // That it also extends it is covered by keepAliveLockProvider_extendsTheLockWhileTheTaskIsRunning.
         assertThat(taskExecuted).isTrue();
         verify(lockMock).unlock();
     }
@@ -140,7 +140,7 @@ class DocgenLocksTest {
     }
 
     @Test
-    void keepAliveLockProvider_stillReleasesTheUnderlyingLockAfterALostExtension() {
+    void keepAliveLockProvider_unlockThrowsAfterALostExtension() {
         ScheduledExecutorService lockExtenderMock = newLockExtenderMock();
         doReturn(Optional.of(lockMock)).when(extensibleLockProviderMock).lock(any());
         doReturn(Optional.empty()).when(lockMock).extend(any(), any());

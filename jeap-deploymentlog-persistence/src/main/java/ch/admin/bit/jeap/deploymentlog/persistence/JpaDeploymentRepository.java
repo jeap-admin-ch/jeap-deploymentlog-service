@@ -3,7 +3,6 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
-import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
@@ -68,36 +67,6 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             """)
     List<UUID> getDeploymentIdsMissingOrOutdatedGeneratedPages(@Param("from") ZonedDateTime from,
                                                                @Param("to") ZonedDateTime to, Pageable pageable);
-
-    /**
-     * Finds the system/environment combinations whose deployment history page has not been regenerated since the last
-     * deployment. In contrast to the deployment letter page these pages are not tracked per deployment, so a docgen
-     * run that stopped before reaching them leaves them outdated without any deployment being reported as missing a
-     * page.
-     * <p>
-     * The system page is deliberately not part of the condition: it is written by the same run that writes the
-     * deployment letter page, so a system page older than a deployment comes with a letter page that is outdated as
-     * well - and that is what {@link #getDeploymentIdsMissingOrOutdatedGeneratedPages} already reports. Including it
-     * here would only return the same system once per environment, as the condition does not depend on the
-     * environment.
-     */
-    @Query("""
-            select distinct new ch.admin.bit.jeap.deploymentlog.domain.SystemEnv(\
-            system.id, system.name, environment.id) \
-            from Deployment deployment \
-            join deployment.componentVersion componentVersion \
-            join componentVersion.component component \
-            join component.system system \
-            join deployment.environment environment \
-            left join EnvironmentHistoryPage historyPage \
-            on historyPage.systemId = system.id and historyPage.environmentId = environment.id \
-            where \
-            deployment.startedAt >= :from and deployment.startedAt <= :to and \
-            (historyPage.id is null or deployment.lastModified > historyPage.lastUpdatedAt) \
-            order by system.name, environment.id
-            """)
-    List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(@Param("from") ZonedDateTime from,
-                                                            @Param("to") ZonedDateTime to, Pageable pageable);
 
     @Query("""
             select count(deployment.id) from Deployment deployment \

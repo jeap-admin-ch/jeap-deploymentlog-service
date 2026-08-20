@@ -130,39 +130,6 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
-    void triggerRegenerateAggregatePages_oneFailingSystemDoesNotAbortTheBatch() {
-        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
-        SystemEnv failing = new SystemEnv(UUID.randomUUID(), "SYSTEM A", UUID.randomUUID());
-        SystemEnv succeeding = new SystemEnv(UUID.randomUUID(), "SYSTEM B", UUID.randomUUID());
-        doThrow(new IllegalStateException("boom")).when(documentationGenerator).regenerateAggregatePages(failing);
-
-        docgenAsyncService.triggerRegenerateAggregatePages(List.of(failing, succeeding));
-
-        await().until(this::asyncTaskExecutorIsDone);
-        verify(documentationGenerator).regenerateAggregatePages(failing);
-        verify(documentationGenerator).regenerateAggregatePages(succeeding);
-        // The shared overview page is regenerated once per environment, not once per system
-        verify(documentationGenerator).regenerateDeploymentHistoryOverview(failing.getEnvId());
-        verify(documentationGenerator).regenerateDeploymentHistoryOverview(succeeding.getEnvId());
-        verify(simpleLockMock, times(2)).unlock();
-    }
-
-    @Test
-    void triggerRegenerateAggregatePages_regeneratesTheOverviewPageOncePerEnvironment() {
-        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
-        UUID environmentId = UUID.randomUUID();
-        SystemEnv systemA = new SystemEnv(UUID.randomUUID(), "SYSTEM A", environmentId);
-        SystemEnv systemB = new SystemEnv(UUID.randomUUID(), "SYSTEM B", environmentId);
-
-        docgenAsyncService.triggerRegenerateAggregatePages(List.of(systemA, systemB));
-
-        await().until(this::asyncTaskExecutorIsDone);
-        verify(documentationGenerator).regenerateAggregatePages(systemA);
-        verify(documentationGenerator).regenerateAggregatePages(systemB);
-        verify(documentationGenerator, times(1)).regenerateDeploymentHistoryOverview(environmentId);
-    }
-
-    @Test
     void triggerDocgenForSystem() {
         Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
         when(lockProvider.lock(any())).thenReturn(presentLock);
@@ -181,11 +148,24 @@ class DocgenAsyncServiceTest {
         SystemEnv systemEnv = new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID());
         List<SystemEnv> systemEnvs = List.of(systemEnv);
 
-        docgenAsyncService.triggerUpdateDeploymentListPages(systemEnvs);
+        docgenAsyncService.triggerUpdateDeploymentListPages(systemEnv.getSystemName(), systemEnvs);
 
         await().until(this::asyncTaskExecutorIsDone);
         verify(documentationGenerator, timeout(Duration.ofSeconds(10).toMillis())).updateDeploymentHistoryPages(systemEnvs);
         verify(simpleLockMock, timeout(Duration.ofSeconds(10).toMillis())).unlock();
+    }
+
+    @Test
+    void triggerUpdateDeploymentListPages_whenAcquiringTheLockFails_thenNoExceptionEscapes() {
+        when(lockProvider.lock(any())).thenThrow(new IllegalStateException("database not available"));
+        SystemEnv systemEnv = new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID());
+
+        docgenAsyncService.triggerUpdateDeploymentListPages(systemEnv.getSystemName(), List.of(systemEnv));
+
+        // Without the guard in runLockedForSystem this would escape the async task and, in a scheduled batch, skip
+        // every system that has not been processed yet
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(documentationGenerator, never()).updateDeploymentHistoryPages(any());
     }
 
     private boolean asyncTaskExecutorIsDone() {
