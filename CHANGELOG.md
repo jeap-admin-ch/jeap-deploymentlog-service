@@ -20,14 +20,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run retrying on conflicts can take longer than that, in which case the lock expired and a second run for the same
   system started concurrently - causing exactly the page conflicts that made the run slow in the first place.
 
-### Changed
-
-These signatures changed. They are only used inside this repository, which is why this ships as a patch release, but
-an external caller or implementor has to be adapted:
-
-- `ConfluenceAdapter.addOrUpdatePageUnderAncestor` takes a `Supplier<String>` instead of the rendered content.
-- `DeploymentHistoryPageDto.getPageTitle()` and `DeploymentHistoryOverviewPageDto.getPageTitle()` were replaced by the
-  static `pageTitle(...)` factories, so the title can be determined without rendering the page.
 
 ## [11.0.0] - 2026-08-21
 
