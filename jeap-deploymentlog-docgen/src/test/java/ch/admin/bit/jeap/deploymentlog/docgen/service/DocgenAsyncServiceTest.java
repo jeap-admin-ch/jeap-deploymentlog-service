@@ -130,6 +130,39 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void triggerRegenerateAggregatePages_oneFailingSystemDoesNotAbortTheBatch() {
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        SystemEnv failing = new SystemEnv(UUID.randomUUID(), "SYSTEM A", UUID.randomUUID());
+        SystemEnv succeeding = new SystemEnv(UUID.randomUUID(), "SYSTEM B", UUID.randomUUID());
+        doThrow(new IllegalStateException("boom")).when(documentationGenerator).regenerateAggregatePages(failing);
+
+        docgenAsyncService.triggerRegenerateAggregatePages(List.of(failing, succeeding));
+
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(documentationGenerator).regenerateAggregatePages(failing);
+        verify(documentationGenerator).regenerateAggregatePages(succeeding);
+        // The shared overview page is regenerated once per environment, not once per system
+        verify(documentationGenerator).regenerateDeploymentHistoryOverview(failing.getEnvId());
+        verify(documentationGenerator).regenerateDeploymentHistoryOverview(succeeding.getEnvId());
+        verify(simpleLockMock, times(2)).unlock();
+    }
+
+    @Test
+    void triggerRegenerateAggregatePages_regeneratesTheOverviewPageOncePerEnvironment() {
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        UUID environmentId = UUID.randomUUID();
+        SystemEnv systemA = new SystemEnv(UUID.randomUUID(), "SYSTEM A", environmentId);
+        SystemEnv systemB = new SystemEnv(UUID.randomUUID(), "SYSTEM B", environmentId);
+
+        docgenAsyncService.triggerRegenerateAggregatePages(List.of(systemA, systemB));
+
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(documentationGenerator).regenerateAggregatePages(systemA);
+        verify(documentationGenerator).regenerateAggregatePages(systemB);
+        verify(documentationGenerator, times(1)).regenerateDeploymentHistoryOverview(environmentId);
+    }
+
+    @Test
     void triggerDocgenForSystem() {
         Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
         when(lockProvider.lock(any())).thenReturn(presentLock);

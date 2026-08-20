@@ -75,9 +75,11 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
      * run that stopped before reaching them leaves them outdated without any deployment being reported as missing a
      * page.
      * <p>
-     * The system page is deliberately not part of the condition: every docgen run writes it before the deployment
-     * history page, so a system page older than the last deployment always comes with a history page that is older
-     * as well. Including it would only return the same system once per environment without finding anything new.
+     * The system page is deliberately not part of the condition: it is written by the same run that writes the
+     * deployment letter page, so a system page older than a deployment comes with a letter page that is outdated as
+     * well - and that is what {@link #getDeploymentIdsMissingOrOutdatedGeneratedPages} already reports. Including it
+     * here would only return the same system once per environment, as the condition does not depend on the
+     * environment.
      */
     @Query("""
             select distinct new ch.admin.bit.jeap.deploymentlog.domain.SystemEnv(\

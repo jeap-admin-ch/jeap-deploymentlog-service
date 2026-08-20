@@ -12,13 +12,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -116,6 +123,73 @@ class DocgenLocksTest {
 
         assertThat(taskExecuted).isTrue();
         verify(lockMock).unlock();
+    }
+
+    @Test
+    void keepAliveLockProvider_extendsTheLockWhileTheTaskIsRunning() {
+        ScheduledExecutorService lockExtenderMock = newLockExtenderMock();
+        doReturn(Optional.of(lockMock)).when(extensibleLockProviderMock).lock(any());
+        doReturn(Optional.of(lockMock)).when(lockMock).extend(any(), any());
+        LockProvider keepAlive = DocgenLocks.keepAliveLockProvider(extensibleLockProviderMock, lockExtenderMock);
+
+        keepAlive.lock(newLockConfiguration());
+
+        // Running the scheduled extension must extend the underlying lock, that is the whole point of the wrapping
+        runScheduledExtension(lockExtenderMock);
+        verify(lockMock).extend(any(), any());
+    }
+
+    @Test
+    void keepAliveLockProvider_stillReleasesTheUnderlyingLockAfterALostExtension() {
+        ScheduledExecutorService lockExtenderMock = newLockExtenderMock();
+        doReturn(Optional.of(lockMock)).when(extensibleLockProviderMock).lock(any());
+        doReturn(Optional.empty()).when(lockMock).extend(any(), any());
+        // In production this is the underlying lock refusing to be unlocked after shedlock invalidated it
+        doThrow(new IllegalStateException("Lock docgen-systemname is not valid")).when(lockMock).unlock();
+        LockProvider keepAlive = DocgenLocks.keepAliveLockProvider(extensibleLockProviderMock, lockExtenderMock);
+        SimpleLock keepAliveLock = keepAlive.lock(newLockConfiguration()).orElseThrow();
+
+        runScheduledExtension(lockExtenderMock);
+
+        // Shedlock keeps releasing the lock it just invalidated, and lets the failure propagate. That is exactly why
+        // DocgenLocks releases best-effort, see runIfLockAquiredBeforeTimeout_releasingALostLockDoesNotFailTheRun
+        assertThatThrownBy(keepAliveLock::unlock).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void lockExtender_keepsExtendingAfterAFailedExtension() throws Exception {
+        ScheduledExecutorService lockExtender = DocgenLocks.newLockExtender();
+        AtomicInteger executions = new AtomicInteger();
+        try {
+            // A periodic task is silently dropped by the JDK as soon as one execution throws
+            lockExtender.scheduleAtFixedRate(() -> {
+                executions.incrementAndGet();
+                throw new IllegalStateException("extension failed");
+            }, 0, 10, TimeUnit.MILLISECONDS);
+
+            await().atMost(Duration.ofSeconds(5)).until(() -> executions.get() >= 3);
+        } finally {
+            lockExtender.shutdownNow();
+        }
+    }
+
+    private static LockConfiguration newLockConfiguration() {
+        return new LockConfiguration(Instant.now(), "docgen-systemname",
+                DocgenLocks.MIN_LOCK_AT_MOST_FOR, Duration.ZERO);
+    }
+
+    private static ScheduledExecutorService newLockExtenderMock() {
+        ScheduledExecutorService lockExtenderMock = mock(ScheduledExecutorService.class);
+        // Shedlock cancels this future when it gives up on the lock
+        doReturn(mock(ScheduledFuture.class)).when(lockExtenderMock)
+                .scheduleAtFixedRate(any(), anyLong(), anyLong(), any());
+        return lockExtenderMock;
+    }
+
+    private static void runScheduledExtension(ScheduledExecutorService lockExtenderMock) {
+        ArgumentCaptor<Runnable> extension = ArgumentCaptor.forClass(Runnable.class);
+        verify(lockExtenderMock).scheduleAtFixedRate(extension.capture(), anyLong(), anyLong(), any());
+        extension.getValue().run();
     }
 
     @Test

@@ -41,7 +41,6 @@ class DocgenLocks {
     private static final int LOCK_EXTENDER_THREADS = 10;
     // Wait at most this duration until giving up trying to acquire the lock
     private Duration tryAcquireTimeout = Duration.ofMinutes(3);
-    private Duration lockAtMostFor = DEFAULT_LOCK_AT_MOST_FOR;
 
     private final LockProvider lockProvider;
     private final ScheduledExecutorService lockExtender;
@@ -52,7 +51,8 @@ class DocgenLocks {
     }
 
     /**
-     * A docgen run can take longer than {@link #LOCK_AT_MOST_FOR} when confluence updates have to be retried. Letting
+     * A docgen run can take longer than {@link #DEFAULT_LOCK_AT_MOST_FOR} when confluence updates have to be
+     * retried. Letting
      * the lock expire underneath a running task would allow a second run for the same system to start concurrently -
      * which produces exactly the page update conflicts that made the run slow in the first place. Shedlock extends
      * the lock periodically for as long as it is held instead.
@@ -66,7 +66,8 @@ class DocgenLocks {
         return lockProvider;
     }
 
-    private static ScheduledExecutorService newLockExtender() {
+    // Package-private so that the failure handling can be tested
+    static ScheduledExecutorService newLockExtender() {
         LockExtenderExecutor lockExtender = new LockExtenderExecutor();
         // Locks are released long before their extension would have been due again
         lockExtender.setRemoveOnCancelPolicy(true);
@@ -74,10 +75,11 @@ class DocgenLocks {
     }
 
     /**
-     * Shedlock schedules the lock extension with {@link ScheduledExecutorService#scheduleAtFixedRate}, which silently
-     * suppresses all further executions as soon as one of them throws. A single failing extension - a short database
-     * hiccup is enough - would therefore stop keeping the lock alive for the rest of the docgen run, without any
-     * trace in the log. Swallowing the exception here keeps the extension scheduled and makes the failure visible.
+     * A periodic task scheduled on a {@link ScheduledExecutorService} is silently dropped as soon as one of its
+     * executions throws. A single failing lock extension - a short database hiccup is enough - would therefore stop
+     * keeping the lock alive for the rest of the docgen run, without any trace in the log. Swallowing the exception
+     * here keeps the extension scheduled and makes the failure visible. Every scheduling method is wrapped, so this
+     * does not depend on which one shedlock happens to use.
      */
     private static final class LockExtenderExecutor extends ScheduledThreadPoolExecutor {
 
@@ -92,6 +94,16 @@ class DocgenLocks {
         @Override
         public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
             return super.scheduleAtFixedRate(keepScheduledOnFailure(command), initialDelay, period, unit);
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
+            return super.scheduleWithFixedDelay(keepScheduledOnFailure(command), initialDelay, delay, unit);
+        }
+
+        @Override
+        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            return super.schedule(keepScheduledOnFailure(command), delay, unit);
         }
 
         private static Runnable keepScheduledOnFailure(Runnable command) {
@@ -134,9 +146,11 @@ class DocgenLocks {
     }
 
     /**
-     * Releasing the lock must not fail the docgen run. Shedlock invalidates a lock as soon as extending it has been
-     * attempted, also when the extension failed, so releasing it afterwards throws - and that exception would
-     * otherwise escape and abort the remaining systems of a batch. The lock is gone in that case anyway.
+     * Releasing the lock must not fail the docgen run. When extending the lock returns empty - the lock was lost -
+     * shedlock has already invalidated the underlying lock but keeps holding on to it, so unlocking it afterwards
+     * throws. That exception would otherwise escape and abort the remaining systems of a batch. Swallowing it leaves
+     * the lock row behind to expire after {@link #DEFAULT_LOCK_AT_MOST_FOR}, which is the lesser evil. Note that an
+     * extension that throws does not invalidate the lock, so it can still be released normally.
      */
     private static void releaseLock(SimpleLock lock, String lockName) {
         try {
@@ -166,7 +180,7 @@ class DocgenLocks {
 
     private LockConfiguration newLockConfiguration(String lockName) {
         return new LockConfiguration(
-                Instant.now(), lockName.toLowerCase(), lockAtMostFor, LOCK_AT_LEAST_FOR);
+                Instant.now(), lockName.toLowerCase(), DEFAULT_LOCK_AT_MOST_FOR, LOCK_AT_LEAST_FOR);
     }
 
     // For usage in tests
@@ -174,8 +188,4 @@ class DocgenLocks {
         this.tryAcquireTimeout = tryAcquireTimeout;
     }
 
-    // For usage in tests
-    void setLockAtMostFor(Duration lockAtMostFor) {
-        this.lockAtMostFor = lockAtMostFor;
-    }
 }

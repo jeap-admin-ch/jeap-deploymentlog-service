@@ -115,6 +115,20 @@ public class DocgenAsyncService {
         systemEnvs.stream().collect(groupingBy(SystemEnv::getSystemName))
                 .forEach((systemName, systemEnvsOfSystem) ->
                         runLockedForSystem(systemName, () -> regenerateAggregatePages(systemEnvsOfSystem)));
+        // The overview page is shared by all systems of an environment, regenerating it per system would only render
+        // the same page again and again
+        systemEnvs.stream().map(SystemEnv::getEnvId).distinct()
+                .forEach(this::regenerateDeploymentHistoryOverview);
+    }
+
+    private void regenerateDeploymentHistoryOverview(UUID environmentId) {
+        try {
+            documentationGenerator.regenerateDeploymentHistoryOverview(environmentId);
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Failed to regenerate the deployment history overview page for environment {}",
+                    value("environmentId", environmentId), ex);
+        }
     }
 
     /**
