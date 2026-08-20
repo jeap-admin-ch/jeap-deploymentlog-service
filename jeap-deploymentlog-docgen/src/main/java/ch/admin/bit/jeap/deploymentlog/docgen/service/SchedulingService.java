@@ -52,6 +52,17 @@ public class SchedulingService {
         }
         deploymentIds.forEach(docgenAsyncService::triggerDocgenForDeployment);
 
+        // The pages aggregating several deployments are not tracked per deployment and therefore need their own check
+        List<SystemEnv> outdatedAggregatePages = deploymentService.getOutdatedAggregatePages(
+                configProperties.getRetriedPagesLimit(),
+                configProperties.getMinAgeMinutes(),
+                configProperties.getMaxAgeMinutes());
+        if (!outdatedAggregatePages.isEmpty()) {
+            log.warn("Re-generating outdated aggregate pages for {} system/environment combination(s): {}",
+                    outdatedAggregatePages.size(), outdatedAggregatePages);
+            docgenAsyncService.triggerRegenerateAggregatePages(outdatedAggregatePages);
+        }
+
         log.debug("Missing page check finished");
     }
 

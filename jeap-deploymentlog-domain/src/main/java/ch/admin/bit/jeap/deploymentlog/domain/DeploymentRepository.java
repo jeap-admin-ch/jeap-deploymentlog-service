@@ -32,6 +32,8 @@ public interface DeploymentRepository {
 
     long countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime from);
 
+    List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(int limit, ZonedDateTime from, ZonedDateTime to);
+
     Optional<Deployment> getLastDeploymentForComponent(Component component, Environment env);
 
     Optional<Deployment> getLastSuccessfulDeploymentForComponent(Component component, Environment env);

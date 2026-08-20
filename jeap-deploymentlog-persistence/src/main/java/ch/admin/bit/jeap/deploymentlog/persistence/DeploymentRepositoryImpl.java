@@ -4,6 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
+import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -85,6 +86,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     public List<UUID> getDeploymentIdsWithMissingOrOutdatedGeneratedPages(int limit, ZonedDateTime from, ZonedDateTime to) {
         Pageable pageable = PageRequest.of(0, limit, Sort.by("lastModified").descending());
         return jpaDeploymentRepository.getDeploymentIdsMissingOrOutdatedGeneratedPages(from, to, pageable);
+    }
+
+    @Override
+    public List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(int limit, ZonedDateTime from, ZonedDateTime to) {
+        Pageable pageable = PageRequest.of(0, limit);
+        return jpaDeploymentRepository.getSystemEnvsWithOutdatedAggregatePages(from, to, pageable);
     }
 
     @Override

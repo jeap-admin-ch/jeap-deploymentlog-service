@@ -18,8 +18,4 @@ public class DeploymentHistoryOverviewPageDto {
         return "Deployment History Overview " + environmentName;
     }
 
-    public String getPageTitle() {
-        return pageTitle(environmentName);
-    }
-
 }

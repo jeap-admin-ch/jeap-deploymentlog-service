@@ -62,7 +62,7 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
             updatePageWithRetryOnConflict(contentId, ancestorId, existingPage.getTitle(), existingPage.getContent(),
                     existingPage, ConfluencePage::getContent);
         } catch (RequestFailedException rfe) {
-            if (StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(NOT_FOUND_RESPONSE)) {
+            if (isNotFound(rfe)) {
                 log.info("Page with id {} not found. Ignoring...", contentId);
             } else {
                 throw rfe;
@@ -96,6 +96,10 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
      *                          re-read from confluence. Must not just return {@code content} again: writing an
      *                          outdated snapshot with an incremented version number would discard the change of the
      *                          concurrent writer without any error being reported.
+     *                          <p>
+     *                          Note that the callers render inside the transaction of the docgen run, so a re-render
+     *                          reliably picks up rows another instance has inserted meanwhile, while changes to
+     *                          entities the persistence context has already loaded are not refreshed.
      * @return the content that has been written to the page
      */
     private String updatePageWithRetryOnConflict(String contentId, String ancestorId, String pageName, String content,
@@ -125,6 +129,10 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         return StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(CONFLICT_RESPONSE);
     }
 
+    private static boolean isNotFound(RequestFailedException rfe) {
+        return StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(NOT_FOUND_RESPONSE);
+    }
+
     @SneakyThrows
     private void waitForRetry() {
         Thread.sleep(props.getRetryOnConflictWaitDuration().toMillis());
@@ -135,10 +143,9 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         try {
             confluenceClient.deletePage(pageId);
         } catch (RequestFailedException ex) {
-            String message = ex.getMessage();
             // See https://docs.atlassian.com/atlassian-confluence/REST/6.5.2/#content-delete for response codes
             // See RequestFailedException#RequestFailedException() - status code is only available in message
-            if (message.contains(NOT_FOUND_RESPONSE)) {
+            if (isNotFound(ex)) {
                 log.info("Page {} does not exist, already deleted (status code 404)", pageId);
             } else {
                 throw ex;

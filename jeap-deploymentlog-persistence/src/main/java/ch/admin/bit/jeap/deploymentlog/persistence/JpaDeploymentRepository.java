@@ -3,6 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
+import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
@@ -67,6 +68,31 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             """)
     List<UUID> getDeploymentIdsMissingOrOutdatedGeneratedPages(@Param("from") ZonedDateTime from,
                                                                @Param("to") ZonedDateTime to, Pageable pageable);
+
+    /**
+     * Finds the system/environment combinations whose aggregate pages (system page, deployment history page) have not
+     * been regenerated since the last deployment. In contrast to the deployment letter page these pages are not
+     * tracked per deployment, so a docgen run that stopped before reaching them leaves them outdated without any
+     * deployment being reported as missing a page.
+     */
+    @Query("""
+            select distinct new ch.admin.bit.jeap.deploymentlog.domain.SystemEnv(\
+            system.id, system.name, environment.id) \
+            from Deployment deployment \
+            join deployment.componentVersion componentVersion \
+            join componentVersion.component component \
+            join component.system system \
+            join deployment.environment environment \
+            left join EnvironmentHistoryPage historyPage \
+            on historyPage.systemId = system.id and historyPage.environmentId = environment.id \
+            left join SystemPage systemPage on systemPage.systemId = system.id \
+            where \
+            deployment.startedAt >= :from and deployment.startedAt <= :to and \
+            (historyPage.id is null or deployment.lastModified > historyPage.lastUpdatedAt or \
+            systemPage.id is null or deployment.lastModified > systemPage.lastUpdatedAt)
+            """)
+    List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(@Param("from") ZonedDateTime from,
+                                                            @Param("to") ZonedDateTime to, Pageable pageable);
 
     @Query("""
             select count(deployment.id) from Deployment deployment \

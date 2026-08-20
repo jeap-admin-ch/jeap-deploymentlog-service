@@ -266,6 +266,9 @@ public class DocumentationGenerator {
         return generateDeploymentLetter(parentPageId, deploymentLetterPageDto);
     }
 
+    // The letter page is rendered from exactly one deployment and is only ever written under the per-system docgen
+    // lock, so a re-render on conflict would reproduce the identical content by construction. The supplier therefore
+    // deliberately closes over the already built DTO - unlike the aggregate pages above, which have to re-query.
     private GeneratedDeploymentPageDto generateDeploymentLetter(String parentPageId, DeploymentLetterPageDto deploymentLetterPageDto) {
         String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(),
                 () -> templateRenderer.renderDeploymentLetterPage(deploymentLetterPageDto));
@@ -280,6 +283,9 @@ public class DocumentationGenerator {
                 .build();
     }
 
+    // The letter page is rendered from exactly one deployment and is only ever written under the per-system docgen
+    // lock, so a re-render on conflict would reproduce the identical content by construction. The supplier therefore
+    // deliberately closes over the already built DTO - unlike the aggregate pages above, which have to re-query.
     private GeneratedDeploymentPageDto generateUndeploymentLetter(String parentPageId, DeploymentLetterPageDto deploymentLetterPageDto) {
         String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(),
                 () -> templateRenderer.renderUndeploymentLetterPage(deploymentLetterPageDto));
@@ -291,6 +297,23 @@ public class DocumentationGenerator {
                 .deploymentLetterPageDto(deploymentLetterPageDto)
                 .pageId(pageId)
                 .build();
+    }
+
+    /**
+     * Regenerates the pages that aggregate several deployments: the system page, the deployment history page of the
+     * environment and the deployment history overview page. Unlike the deployment letter page these are not tracked
+     * per deployment, so a docgen run that stopped before reaching them leaves them outdated without any deployment
+     * being reported as missing a page. The scheduled job repairs them through this method.
+     */
+    @Timed("regenerate_aggregate_pages")
+    @Transactional
+    public void regenerateAggregatePages(SystemEnv systemEnv) {
+        String rootPageId = props.getRootPageId();
+        System system = systemRepository.getById(systemEnv.getSystemId());
+        Environment environment = environmentRepository.getById(systemEnv.getEnvId());
+        String systemPageId = generateSystemPage(rootPageId, system);
+        generateDeploymentHistoryPageForEnvironment(systemPageId, environment, system);
+        generateDeploymentHistoryOverviewPageForEnvironment(rootPageId, environment);
     }
 
     @Timed("update_deployment_history_pages")

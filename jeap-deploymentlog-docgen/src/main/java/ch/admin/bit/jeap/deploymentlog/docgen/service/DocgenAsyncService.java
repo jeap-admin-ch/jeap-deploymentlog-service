@@ -108,6 +108,21 @@ public class DocgenAsyncService {
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
+    public void triggerRegenerateAggregatePages(Collection<SystemEnv> systemEnvs) {
+        systemEnvs.forEach(systemEnv ->
+                locks.runIfLockAquiredBeforeTimeout(systemEnv.getSystemName(), () -> regenerateAggregatePages(systemEnv)));
+    }
+
+    private void regenerateAggregatePages(SystemEnv systemEnv) {
+        try {
+            documentationGenerator.regenerateAggregatePages(systemEnv);
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Failed to regenerate aggregate pages for system {}", value("systemName", systemEnv.getSystemName()), ex);
+        }
+    }
+
+    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerUpdateDeploymentListPages(Collection<SystemEnv> envsBySystems) {
         // Update deployment history page per system (docgen lock is held per system name to avoid race conditions when
         // generating confluence pages)

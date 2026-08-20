@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen.service;
 
+import jakarta.annotation.PreDestroy;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.core.LockConfiguration;
@@ -11,6 +12,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Ensures that mutually-exclusive docgen jobs (generating pages for the same system) are executed one after each
@@ -22,20 +29,29 @@ class DocgenLocks {
 
     private static final String LOCK_NAME_PREFIX = "docgen-";
     private static final Duration LOCK_RETRY_WAIT_DURATION = Duration.ofSeconds(3);
-    // Give docgen at most this duration to finish, then assume it has been interrupted without releasing the lock.
-    // Must stay above the worst-case duration of a docgen run: every confluence page update retries on a version
-    // conflict (see ConfluenceAdapterImpl) and the whole adapter call is retried again by @Retryable on top of that.
-    // If the lock expires while docgen is still running, a second run for the same system starts concurrently and
-    // both runs write the same confluence pages - which is exactly the conflict that made the run slow to begin with.
-    private static final Duration LOCK_AT_MOST_FOR = Duration.ofMinutes(10);
+    // The lock is kept alive by extending it while the task is running, so this duration only has to cover the time
+    // between two extensions. Keeping it short means that a lock left behind by an interrupted instance is released
+    // quickly, instead of blocking docgen for this system until a long lease expires.
+    private static final Duration LOCK_AT_MOST_FOR = Duration.ofMinutes(2);
     private static final Duration LOCK_AT_LEAST_FOR = Duration.ZERO;
     // Wait at most this duration until giving up trying to acquire the lock
     private Duration tryAcquireTimeout = Duration.ofMinutes(3);
+    private Duration lockExtendInterval = Duration.ofSeconds(30);
 
     private final LockProvider lockProvider;
+    private final ScheduledExecutorService lockExtender = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "DocgenLockExtender");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     DocgenLocks(LockProvider lockProvider) {
         this.lockProvider = lockProvider;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        lockExtender.shutdownNow();
     }
 
     /**
@@ -52,13 +68,54 @@ class DocgenLocks {
 
     }
 
+    /**
+     * Runs the task while keeping the lock alive: the lock is extended periodically for as long as the task runs. A
+     * docgen run can take longer than the lock duration when confluence updates have to be retried, and letting the
+     * lock expire underneath a running task would allow a second run for the same system to start concurrently -
+     * which produces exactly the page update conflicts that made the run slow in the first place.
+     */
     private void runLockedTask(Runnable task, String lockName, SimpleLock lock) {
+        AtomicReference<SimpleLock> heldLock = new AtomicReference<>(lock);
+        ScheduledFuture<?> lockExtension = scheduleLockExtension(heldLock, lockName);
         try {
             log.info("Acquired lock {}, running task", lockName);
             task.run();
         } finally {
+            lockExtension.cancel(false);
             log.info("Releasing lock {}", lockName);
-            lock.unlock();
+            heldLock.get().unlock();
+        }
+    }
+
+    private ScheduledFuture<?> scheduleLockExtension(AtomicReference<SimpleLock> heldLock, String lockName) {
+        AtomicReference<ScheduledFuture<?>> extension = new AtomicReference<>();
+        extension.set(lockExtender.scheduleWithFixedDelay(
+                () -> extendLock(heldLock, lockName, extension),
+                lockExtendInterval.toMillis(), lockExtendInterval.toMillis(), MILLISECONDS));
+        return extension.get();
+    }
+
+    private void extendLock(AtomicReference<SimpleLock> heldLock, String lockName, AtomicReference<ScheduledFuture<?>> extension) {
+        try {
+            Optional<SimpleLock> extendedLock = heldLock.get().extend(LOCK_AT_MOST_FOR, LOCK_AT_LEAST_FOR);
+            if (extendedLock.isPresent()) {
+                heldLock.set(extendedLock.get());
+                log.debug("Extended lock {} while docgen is still running", lockName);
+            } else {
+                // The lock is gone - stop trying, otherwise every further attempt would fail the same way
+                stopExtending(extension);
+                log.error("Unable to extend lock {} - docgen for this system might now run concurrently", lockName);
+            }
+        } catch (Exception ex) {
+            stopExtending(extension);
+            log.error("Failed to extend lock {} - docgen for this system might now run concurrently", lockName, ex);
+        }
+    }
+
+    private static void stopExtending(AtomicReference<ScheduledFuture<?>> extension) {
+        ScheduledFuture<?> scheduledExtension = extension.get();
+        if (scheduledExtension != null) {
+            scheduledExtension.cancel(false);
         }
     }
 
@@ -87,5 +144,10 @@ class DocgenLocks {
     // For usage in tests
     void setTryAcquireTimeout(Duration tryAcquireTimeout) {
         this.tryAcquireTimeout = tryAcquireTimeout;
+    }
+
+    // For usage in tests
+    void setLockExtendInterval(Duration lockExtendInterval) {
+        this.lockExtendInterval = lockExtendInterval;
     }
 }

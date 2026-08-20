@@ -29,6 +29,12 @@ class DeploymentRepositoryImplTest {
     private JpaDeploymentPageRepository jpaDeploymentPageRepository;
 
     @Autowired
+    private SystemPageRepository systemPageRepository;
+
+    @Autowired
+    private EnvironmentHistoryPageRepository environmentHistoryPageRepository;
+
+    @Autowired
     private SystemRepository systemRepository;
 
     @Autowired
@@ -279,6 +285,55 @@ class DeploymentRepositoryImplTest {
                 Set.copyOf(result),
                 "Should not return deploymentWithPage as it is up-to-date and has a generated page");
         assertEquals(2, deploymentRepository.countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime.now().minusDays(30)));
+    }
+
+    @Test
+    void getSystemEnvsWithOutdatedAggregatePages() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        Environment environmentDev = new Environment("DEV");
+        environmentRepository.save(environmentDev);
+        System systemUpToDate = new System("System up-to-date");
+        System systemWithOutdatedPages = new System("System outdated");
+        systemRepository.save(systemUpToDate);
+        systemRepository.save(systemWithOutdatedPages);
+        Component componentUpToDate = new Component("Microservice A", systemUpToDate);
+        Component componentOutdated = new Component("Microservice B", systemWithOutdatedPages);
+        componentRepository.save(componentUpToDate);
+        componentRepository.save(componentOutdated);
+
+        Deployment deploymentUpToDate = TestDataFactory.createDeployment(environmentDev, componentUpToDate, ZonedDateTime.now(), deploymentTarget);
+        Deployment deploymentOutdated = TestDataFactory.createDeployment(environmentDev, componentOutdated, ZonedDateTime.now(), deploymentTarget);
+        deploymentRepository.save(deploymentUpToDate);
+        deploymentRepository.save(deploymentOutdated);
+
+        // Aggregate pages generated after the deployment - nothing to repair
+        saveAggregatePages(systemUpToDate, environmentDev, deploymentUpToDate.getLastModified().plusMinutes(1));
+        // Aggregate pages generated before the deployment - the deployment is missing on them
+        saveAggregatePages(systemWithOutdatedPages, environmentDev, deploymentOutdated.getLastModified().minusMinutes(1));
+
+        List<SystemEnv> result = deploymentRepository.getSystemEnvsWithOutdatedAggregatePages(10,
+                ZonedDateTime.now().minusHours(1), ZonedDateTime.now().plusHours(1));
+
+        assertEquals(
+                List.of(new SystemEnv(systemWithOutdatedPages.getId(), systemWithOutdatedPages.getName(), environmentDev.getId())),
+                result,
+                "Should only return the system whose aggregate pages are older than its last deployment");
+    }
+
+    private void saveAggregatePages(System system, Environment environment, ZonedDateTime lastUpdatedAt) {
+        systemPageRepository.save(SystemPage.builder()
+                .id(UUID.randomUUID())
+                .systemId(system.getId())
+                .systemPageId("system-" + system.getName())
+                .lastUpdatedAt(lastUpdatedAt)
+                .build());
+        environmentHistoryPageRepository.save(EnvironmentHistoryPage.builder()
+                .id(UUID.randomUUID())
+                .systemId(system.getId())
+                .environmentId(environment.getId())
+                .pageId("history-" + system.getName())
+                .lastUpdatedAt(lastUpdatedAt)
+                .build());
     }
 
     @Test

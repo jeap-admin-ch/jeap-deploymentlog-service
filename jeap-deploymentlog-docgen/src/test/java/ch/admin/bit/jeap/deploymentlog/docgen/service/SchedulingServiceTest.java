@@ -4,6 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapter;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
 import io.micrometer.core.instrument.MeterRegistry;
 import net.javacrumbs.shedlock.core.LockAssert;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,23 @@ class SchedulingServiceTest {
         schedulingService.generateMissingPages();
 
         verify(docgenAsyncServiceMock).triggerDocgenForDeployment(outdatedDeploymentId);
+    }
+
+    @Test
+    void generateMissingPages_regeneratesOutdatedAggregatePages() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingConfigProperties props = new SchedulingConfigProperties();
+        SchedulingService schedulingService = new SchedulingService(
+                deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props, meterRegistryMock);
+        SystemEnv outdatedSystemEnv = new SystemEnv(UUID.randomUUID(), "SYSTEM A", UUID.randomUUID());
+        when(deploymentServiceMock.getMissingDeploymentPages(anyInt(), anyLong(), anyLong()))
+                .thenReturn(List.of());
+        when(deploymentServiceMock.getOutdatedAggregatePages(anyInt(), anyLong(), anyLong()))
+                .thenReturn(List.of(outdatedSystemEnv));
+
+        schedulingService.generateMissingPages();
+
+        verify(docgenAsyncServiceMock).triggerRegenerateAggregatePages(List.of(outdatedSystemEnv));
     }
 
     @Test

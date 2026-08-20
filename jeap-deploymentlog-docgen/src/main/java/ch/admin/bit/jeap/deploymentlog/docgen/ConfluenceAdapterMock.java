@@ -16,7 +16,10 @@ public class ConfluenceAdapterMock implements ConfluenceAdapter {
     @Override
     public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, Supplier<String> contentSupplier) {
         int fakePageId = (ancestorId + pageName).hashCode();
-        log.info("Add or update page: ancestorId={} pageName={} fakePageId={}", ancestorId, pageName, fakePageId);
+        // Render the content like the real adapter does, so that templates are exercised in mock mode as well
+        String content = contentSupplier.get();
+        log.info("Add or update page: ancestorId={} pageName={} fakePageId={} contentLength={}",
+                ancestorId, pageName, fakePageId, content.length());
         modifiedPages.add(pageName);
         return String.valueOf(fakePageId);
     }

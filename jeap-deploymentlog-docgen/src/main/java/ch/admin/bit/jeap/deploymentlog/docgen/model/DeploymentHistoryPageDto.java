@@ -17,8 +17,4 @@ public class DeploymentHistoryPageDto {
     public static String pageTitle(String systemName, String environmentName) {
         return "Deployment History " + environmentName + " (" + systemName + ")";
     }
-
-    public String getPageTitle() {
-        return pageTitle(systemName, environmentName);
-    }
 }
