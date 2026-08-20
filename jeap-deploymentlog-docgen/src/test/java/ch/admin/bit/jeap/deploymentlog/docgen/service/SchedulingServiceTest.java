@@ -15,10 +15,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +69,28 @@ class SchedulingServiceTest {
         schedulingService.generateMissingPages();
 
         verify(docgenAsyncServiceMock).triggerRegenerateAggregatePages(List.of(outdatedSystemEnv));
+    }
+
+    @Test
+    void generateMissingPages_skipsAggregatePagesAlreadyCoveredByARegeneratedDeployment() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingConfigProperties props = new SchedulingConfigProperties();
+        SchedulingService schedulingService = new SchedulingService(
+                deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props, meterRegistryMock);
+        UUID outdatedDeploymentId = UUID.randomUUID();
+        SystemEnv outdatedSystemEnv = new SystemEnv(UUID.randomUUID(), "SYSTEM A", UUID.randomUUID());
+        when(deploymentServiceMock.getMissingDeploymentPages(anyInt(), anyLong(), anyLong()))
+                .thenReturn(List.of(outdatedDeploymentId));
+        when(deploymentServiceMock.getOutdatedAggregatePages(anyInt(), anyLong(), anyLong()))
+                .thenReturn(List.of(outdatedSystemEnv));
+        // Re-generating the deployment already refreshes the aggregate pages of this system and environment
+        when(deploymentServiceMock.getSystemAndEnvsForDeploymentIds(Set.of(outdatedDeploymentId)))
+                .thenReturn(Set.of(outdatedSystemEnv));
+
+        schedulingService.generateMissingPages();
+
+        verify(docgenAsyncServiceMock).triggerDocgenForDeployment(outdatedDeploymentId);
+        verify(docgenAsyncServiceMock, never()).triggerRegenerateAggregatePages(any());
     }
 
     @Test

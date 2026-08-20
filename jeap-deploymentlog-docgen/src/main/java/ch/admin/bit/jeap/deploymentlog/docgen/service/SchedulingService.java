@@ -52,11 +52,15 @@ public class SchedulingService {
         }
         deploymentIds.forEach(docgenAsyncService::triggerDocgenForDeployment);
 
-        // The pages aggregating several deployments are not tracked per deployment and therefore need their own check
+        // The pages aggregating several deployments are not tracked per deployment and therefore need their own
+        // check. Re-generating a deployment above already refreshes them, so those are skipped here.
+        Set<SystemEnv> coveredByDeployments = deploymentService.getSystemAndEnvsForDeploymentIds(Set.copyOf(deploymentIds));
         List<SystemEnv> outdatedAggregatePages = deploymentService.getOutdatedAggregatePages(
-                configProperties.getRetriedPagesLimit(),
-                configProperties.getMinAgeMinutes(),
-                configProperties.getMaxAgeMinutes());
+                        configProperties.getRetriedPagesLimit(),
+                        configProperties.getMinAgeMinutes(),
+                        configProperties.getMaxAgeMinutes()).stream()
+                .filter(systemEnv -> !coveredByDeployments.contains(systemEnv))
+                .toList();
         if (!outdatedAggregatePages.isEmpty()) {
             log.warn("Re-generating outdated aggregate pages for {} system/environment combination(s): {}",
                     outdatedAggregatePages.size(), outdatedAggregatePages);

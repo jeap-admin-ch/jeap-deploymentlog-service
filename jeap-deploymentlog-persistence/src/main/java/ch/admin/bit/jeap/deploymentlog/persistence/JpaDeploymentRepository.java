@@ -89,7 +89,8 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             where \
             deployment.startedAt >= :from and deployment.startedAt <= :to and \
             (historyPage.id is null or deployment.lastModified > historyPage.lastUpdatedAt or \
-            systemPage.id is null or deployment.lastModified > systemPage.lastUpdatedAt)
+            systemPage.id is null or deployment.lastModified > systemPage.lastUpdatedAt) \
+            order by system.name, environment.id
             """)
     List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(@Param("from") ZonedDateTime from,
                                                             @Param("to") ZonedDateTime to, Pageable pageable);

@@ -109,16 +109,20 @@ public class DocgenAsyncService {
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerRegenerateAggregatePages(Collection<SystemEnv> systemEnvs) {
-        systemEnvs.forEach(systemEnv ->
-                locks.runIfLockAquiredBeforeTimeout(systemEnv.getSystemName(), () -> regenerateAggregatePages(systemEnv)));
+        // Acquire the docgen lock once per system instead of once per system and environment
+        systemEnvs.stream().collect(groupingBy(SystemEnv::getSystemName))
+                .forEach((systemName, systemEnvsOfSystem) ->
+                        locks.runIfLockAquiredBeforeTimeout(systemName, () -> regenerateAggregatePages(systemEnvsOfSystem)));
     }
 
-    private void regenerateAggregatePages(SystemEnv systemEnv) {
-        try {
-            documentationGenerator.regenerateAggregatePages(systemEnv);
-        } catch (Exception ex) {
-            errorCounter.increment();
-            log.warn("Failed to regenerate aggregate pages for system {}", value("systemName", systemEnv.getSystemName()), ex);
+    private void regenerateAggregatePages(List<SystemEnv> systemEnvs) {
+        for (SystemEnv systemEnv : systemEnvs) {
+            try {
+                documentationGenerator.regenerateAggregatePages(systemEnv);
+            } catch (Exception ex) {
+                errorCounter.increment();
+                log.warn("Failed to regenerate aggregate pages for system {}", value("systemName", systemEnv.getSystemName()), ex);
+            }
         }
     }
 
