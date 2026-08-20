@@ -17,7 +17,7 @@ public class LinkDto {
             return Set.of();
         }
         return links.stream()
-                .map(link -> new LinkDto(link.getLabel(), link.getLabel()))
+                .map(link -> new LinkDto(link.getLabel(), link.getUrl()))
                 .collect(toSet());
     }
 }

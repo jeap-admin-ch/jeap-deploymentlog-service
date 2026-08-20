@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   number, which silently overwrote the change of the concurrent writer. The content is now rendered again from the
   current state before the update is retried (`ConfluenceAdapter.addOrUpdatePageUnderAncestor` now takes a content
   supplier), and `movePage` keeps the content the concurrent writer stored.
+- `GET /api/deployment/{id}` returned the label of a deployment link as its url, because `LinkDto.allOf` mapped the
+  label into both fields. The url of the link is returned now.
 - The docgen lock is now kept alive while the docgen run is in progress instead of expiring after a fixed minute. A
   run retrying on conflicts can take longer than that, in which case the lock expired and a second run for the same
   system started concurrently - causing exactly the page conflicts that made the run slow in the first place.
