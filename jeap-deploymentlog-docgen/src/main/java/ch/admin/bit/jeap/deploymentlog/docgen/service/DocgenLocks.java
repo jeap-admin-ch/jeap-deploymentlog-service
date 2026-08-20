@@ -15,7 +15,9 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Ensures that mutually-exclusive docgen jobs (generating pages for the same system) are executed one after each
@@ -29,21 +31,24 @@ class DocgenLocks {
     private static final Duration LOCK_RETRY_WAIT_DURATION = Duration.ofSeconds(3);
     // The lock is kept alive for as long as the docgen run is in progress, so this duration only has to cover the
     // time between two extensions. Keeping it short means that a lock left behind by an instance that died without
-    // releasing it blocks docgen for that system for at most this duration.
-    private static final Duration LOCK_AT_MOST_FOR = Duration.ofMinutes(2);
+    // releasing it blocks docgen for that system for at most this duration. It must not go below
+    // MIN_LOCK_AT_MOST_FOR though, as KeepAliveLockProvider rejects anything shorter.
+    static final Duration MIN_LOCK_AT_MOST_FOR = Duration.ofSeconds(30);
+    private static final Duration DEFAULT_LOCK_AT_MOST_FOR = Duration.ofMinutes(2);
     private static final Duration LOCK_AT_LEAST_FOR = Duration.ZERO;
     // One thread per docgen thread (see DeploymentAsyncExecutorConfiguration), so that a slow lock extension cannot
     // delay the extension of the locks held by the other docgen runs
     private static final int LOCK_EXTENDER_THREADS = 10;
     // Wait at most this duration until giving up trying to acquire the lock
     private Duration tryAcquireTimeout = Duration.ofMinutes(3);
+    private Duration lockAtMostFor = DEFAULT_LOCK_AT_MOST_FOR;
 
     private final LockProvider lockProvider;
     private final ScheduledExecutorService lockExtender;
 
     DocgenLocks(LockProvider lockProvider) {
         this.lockExtender = newLockExtender();
-        this.lockProvider = keepAliveLockProvider(lockProvider);
+        this.lockProvider = keepAliveLockProvider(lockProvider, lockExtender);
     }
 
     /**
@@ -52,24 +57,52 @@ class DocgenLocks {
      * which produces exactly the page update conflicts that made the run slow in the first place. Shedlock extends
      * the lock periodically for as long as it is held instead.
      */
-    private LockProvider keepAliveLockProvider(LockProvider lockProvider) {
+    static LockProvider keepAliveLockProvider(LockProvider lockProvider, ScheduledExecutorService lockExtender) {
         if (lockProvider instanceof ExtensibleLockProvider extensibleLockProvider) {
             return new KeepAliveLockProvider(extensibleLockProvider, lockExtender);
         }
-        log.warn("Lock provider {} cannot extend locks - a docgen run taking longer than {} will lose its lock",
-                lockProvider.getClass().getName(), LOCK_AT_MOST_FOR);
+        log.warn("Lock provider {} cannot extend locks - a long running docgen run will lose its lock",
+                lockProvider.getClass().getName());
         return lockProvider;
     }
 
     private static ScheduledExecutorService newLockExtender() {
-        ScheduledThreadPoolExecutor lockExtender = new ScheduledThreadPoolExecutor(LOCK_EXTENDER_THREADS, runnable -> {
-            Thread thread = new Thread(runnable, "DocgenLockExtender");
-            thread.setDaemon(true);
-            return thread;
-        });
+        LockExtenderExecutor lockExtender = new LockExtenderExecutor();
         // Locks are released long before their extension would have been due again
         lockExtender.setRemoveOnCancelPolicy(true);
         return lockExtender;
+    }
+
+    /**
+     * Shedlock schedules the lock extension with {@link ScheduledExecutorService#scheduleAtFixedRate}, which silently
+     * suppresses all further executions as soon as one of them throws. A single failing extension - a short database
+     * hiccup is enough - would therefore stop keeping the lock alive for the rest of the docgen run, without any
+     * trace in the log. Swallowing the exception here keeps the extension scheduled and makes the failure visible.
+     */
+    private static final class LockExtenderExecutor extends ScheduledThreadPoolExecutor {
+
+        private LockExtenderExecutor() {
+            super(LOCK_EXTENDER_THREADS, runnable -> {
+                Thread thread = new Thread(runnable, "DocgenLockExtender");
+                thread.setDaemon(true);
+                return thread;
+            });
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
+            return super.scheduleAtFixedRate(keepScheduledOnFailure(command), initialDelay, period, unit);
+        }
+
+        private static Runnable keepScheduledOnFailure(Runnable command) {
+            return () -> {
+                try {
+                    command.run();
+                } catch (Exception ex) {
+                    log.error("Failed to extend a docgen lock - it might expire while docgen is still running", ex);
+                }
+            };
+        }
     }
 
     @PreDestroy
@@ -96,8 +129,21 @@ class DocgenLocks {
             log.info("Acquired lock {}, running task", lockName);
             task.run();
         } finally {
+            releaseLock(lock, lockName);
+        }
+    }
+
+    /**
+     * Releasing the lock must not fail the docgen run. Shedlock invalidates a lock as soon as extending it has been
+     * attempted, also when the extension failed, so releasing it afterwards throws - and that exception would
+     * otherwise escape and abort the remaining systems of a batch. The lock is gone in that case anyway.
+     */
+    private static void releaseLock(SimpleLock lock, String lockName) {
+        try {
             log.info("Releasing lock {}", lockName);
             lock.unlock();
+        } catch (Exception ex) {
+            log.warn("Failed to release lock {} - it was probably lost while the task was running", lockName, ex);
         }
     }
 
@@ -120,11 +166,16 @@ class DocgenLocks {
 
     private LockConfiguration newLockConfiguration(String lockName) {
         return new LockConfiguration(
-                Instant.now(), lockName.toLowerCase(), LOCK_AT_MOST_FOR, LOCK_AT_LEAST_FOR);
+                Instant.now(), lockName.toLowerCase(), lockAtMostFor, LOCK_AT_LEAST_FOR);
     }
 
     // For usage in tests
     void setTryAcquireTimeout(Duration tryAcquireTimeout) {
         this.tryAcquireTimeout = tryAcquireTimeout;
+    }
+
+    // For usage in tests
+    void setLockAtMostFor(Duration lockAtMostFor) {
+        this.lockAtMostFor = lockAtMostFor;
     }
 }

@@ -21,6 +21,8 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 @Slf4j
 public class DocgenAsyncService {
 
+    private static final String SYSTEM_NAME = "systemName";
+
     private final DocumentationGenerator documentationGenerator;
     private final DeploymentRepository deploymentRepository;
     private final Counter errorCounter;
@@ -88,7 +90,7 @@ public class DocgenAsyncService {
             documentationGenerator.migrateSystem(system);
         } catch (Exception ex) {
             errorCounter.increment();
-            log.warn("Failed to generate pages for system {}", value("systemName", system.getName()), ex);
+            log.warn("Failed to generate pages for system {}", value(SYSTEM_NAME, system.getName()), ex);
         }
     }
 
@@ -103,7 +105,7 @@ public class DocgenAsyncService {
             documentationGenerator.mergeSystems(system, oldSystem);
         } catch (Exception ex) {
             errorCounter.increment();
-            log.warn("Failed to generate pages for system {}", value("systemName", system.getName()), ex);
+            log.warn("Failed to generate pages for system {}", value(SYSTEM_NAME, system.getName()), ex);
         }
     }
 
@@ -112,7 +114,20 @@ public class DocgenAsyncService {
         // Acquire the docgen lock once per system instead of once per system and environment
         systemEnvs.stream().collect(groupingBy(SystemEnv::getSystemName))
                 .forEach((systemName, systemEnvsOfSystem) ->
-                        locks.runIfLockAquiredBeforeTimeout(systemName, () -> regenerateAggregatePages(systemEnvsOfSystem)));
+                        runLockedForSystem(systemName, () -> regenerateAggregatePages(systemEnvsOfSystem)));
+    }
+
+    /**
+     * Runs one system of a batch, making sure that a failure - including one while acquiring or releasing the lock -
+     * does not abort the systems that have not been processed yet.
+     */
+    private void runLockedForSystem(String systemName, Runnable task) {
+        try {
+            locks.runIfLockAquiredBeforeTimeout(systemName, task);
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Docgen failed for system {}", value(SYSTEM_NAME, systemName), ex);
+        }
     }
 
     private void regenerateAggregatePages(List<SystemEnv> systemEnvs) {
@@ -121,7 +136,7 @@ public class DocgenAsyncService {
                 documentationGenerator.regenerateAggregatePages(systemEnv);
             } catch (Exception ex) {
                 errorCounter.increment();
-                log.warn("Failed to regenerate aggregate pages for system {}", value("systemName", systemEnv.getSystemName()), ex);
+                log.warn("Failed to regenerate aggregate pages for system {}", value(SYSTEM_NAME, systemEnv.getSystemName()), ex);
             }
         }
     }
@@ -132,7 +147,7 @@ public class DocgenAsyncService {
         // generating confluence pages)
         envsBySystems.stream().collect(groupingBy(SystemEnv::getSystemName))
                 .forEach((systemName, systemEnvs) ->
-                        locks.runIfLockAquiredBeforeTimeout(systemName, () ->
+                        runLockedForSystem(systemName, () ->
                                 documentationGenerator.updateDeploymentHistoryPages(systemEnvs)));
     }
 }

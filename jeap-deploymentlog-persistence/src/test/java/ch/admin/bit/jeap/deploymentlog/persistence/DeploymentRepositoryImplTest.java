@@ -306,10 +306,13 @@ class DeploymentRepositoryImplTest {
         deploymentRepository.save(deploymentUpToDate);
         deploymentRepository.save(deploymentOutdated);
 
-        // Aggregate pages generated after the deployment - nothing to repair
-        saveAggregatePages(systemUpToDate, environmentDev, deploymentUpToDate.getLastModified().plusMinutes(1));
-        // Aggregate pages generated before the deployment - the deployment is missing on them
-        saveAggregatePages(systemWithOutdatedPages, environmentDev, deploymentOutdated.getLastModified().minusMinutes(1));
+        // History page generated after the deployment - nothing to repair. The system page is deliberately stale here:
+        // it is always written before the history page, so it never needs a repair of its own.
+        saveAggregatePages(systemUpToDate, environmentDev,
+                deploymentUpToDate.getLastModified().plusMinutes(1), deploymentUpToDate.getLastModified().minusMinutes(1));
+        // History page generated before the deployment - the deployment is missing on it
+        saveAggregatePages(systemWithOutdatedPages, environmentDev,
+                deploymentOutdated.getLastModified().minusMinutes(1), deploymentOutdated.getLastModified().minusMinutes(1));
 
         List<SystemEnv> result = deploymentRepository.getSystemEnvsWithOutdatedAggregatePages(10,
                 ZonedDateTime.now().minusHours(1), ZonedDateTime.now().plusHours(1));
@@ -317,22 +320,23 @@ class DeploymentRepositoryImplTest {
         assertEquals(
                 List.of(new SystemEnv(systemWithOutdatedPages.getId(), systemWithOutdatedPages.getName(), environmentDev.getId())),
                 result,
-                "Should only return the system whose aggregate pages are older than its last deployment");
+                "Should only return the system whose deployment history page is older than its last deployment");
     }
 
-    private void saveAggregatePages(System system, Environment environment, ZonedDateTime lastUpdatedAt) {
+    private void saveAggregatePages(System system, Environment environment,
+                                    ZonedDateTime historyPageLastUpdatedAt, ZonedDateTime systemPageLastUpdatedAt) {
         systemPageRepository.save(SystemPage.builder()
                 .id(UUID.randomUUID())
                 .systemId(system.getId())
                 .systemPageId("system-" + system.getName())
-                .lastUpdatedAt(lastUpdatedAt)
+                .lastUpdatedAt(systemPageLastUpdatedAt)
                 .build());
         environmentHistoryPageRepository.save(EnvironmentHistoryPage.builder()
                 .id(UUID.randomUUID())
                 .systemId(system.getId())
                 .environmentId(environment.getId())
                 .pageId("history-" + system.getName())
-                .lastUpdatedAt(lastUpdatedAt)
+                .lastUpdatedAt(historyPageLastUpdatedAt)
                 .build());
     }
 

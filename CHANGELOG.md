@@ -21,6 +21,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   page). Only the deployment letter page was tracked per deployment, so an outdated aggregate page was never detected
   and stayed outdated until the next deployment of that system happened to rewrite it.
 
+### Changed
+
+These signatures changed. They are only used inside this repository, which is why this ships as a patch release, but
+an external caller or implementor has to be adapted:
+
+- `ConfluenceAdapter.addOrUpdatePageUnderAncestor` takes a `Supplier<String>` instead of the rendered content.
+- `DeploymentHistoryPageDto.getPageTitle()` and `DeploymentHistoryOverviewPageDto.getPageTitle()` were replaced by the
+  static `pageTitle(...)` factories, so the title can be determined without rendering the page.
+- `DeploymentRepository` gained `getSystemEnvsWithOutdatedAggregatePages`.
+
 ## [11.0.0] - 2026-08-21
 
 ### Dependencies

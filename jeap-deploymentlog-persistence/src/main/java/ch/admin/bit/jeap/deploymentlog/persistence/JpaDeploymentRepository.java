@@ -70,10 +70,14 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
                                                                @Param("to") ZonedDateTime to, Pageable pageable);
 
     /**
-     * Finds the system/environment combinations whose aggregate pages (system page, deployment history page) have not
-     * been regenerated since the last deployment. In contrast to the deployment letter page these pages are not
-     * tracked per deployment, so a docgen run that stopped before reaching them leaves them outdated without any
-     * deployment being reported as missing a page.
+     * Finds the system/environment combinations whose deployment history page has not been regenerated since the last
+     * deployment. In contrast to the deployment letter page these pages are not tracked per deployment, so a docgen
+     * run that stopped before reaching them leaves them outdated without any deployment being reported as missing a
+     * page.
+     * <p>
+     * The system page is deliberately not part of the condition: every docgen run writes it before the deployment
+     * history page, so a system page older than the last deployment always comes with a history page that is older
+     * as well. Including it would only return the same system once per environment without finding anything new.
      */
     @Query("""
             select distinct new ch.admin.bit.jeap.deploymentlog.domain.SystemEnv(\
@@ -85,11 +89,9 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             join deployment.environment environment \
             left join EnvironmentHistoryPage historyPage \
             on historyPage.systemId = system.id and historyPage.environmentId = environment.id \
-            left join SystemPage systemPage on systemPage.systemId = system.id \
             where \
             deployment.startedAt >= :from and deployment.startedAt <= :to and \
-            (historyPage.id is null or deployment.lastModified > historyPage.lastUpdatedAt or \
-            systemPage.id is null or deployment.lastModified > systemPage.lastUpdatedAt) \
+            (historyPage.id is null or deployment.lastModified > historyPage.lastUpdatedAt) \
             order by system.name, environment.id
             """)
     List<SystemEnv> getSystemEnvsWithOutdatedAggregatePages(@Param("from") ZonedDateTime from,
