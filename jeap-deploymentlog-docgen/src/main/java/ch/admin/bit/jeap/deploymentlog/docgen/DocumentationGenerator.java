@@ -20,6 +20,8 @@ import java.util.*;
 public class DocumentationGenerator {
 
     public static final String UNDEPLOY_PAGE_SUFFIX = " (Undeploy)";
+    private static final String DEPLOYMENT_HISTORY_OVERVIEW_ROOT_PAGE_TITLE = "_Deployment History Overview";
+    private static final DateTimeFormatter MIN_STARTED_AT_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     private final ConfluenceAdapter confluenceAdapter;
     private final JiraAdapter jiraAdapter;
@@ -143,44 +145,53 @@ public class DocumentationGenerator {
     }
 
     private String generateSystemPage(String rootPageId, System system) {
-        String content = templateRenderer.renderSystemPage(generatorService.createSystemPageDto(system));
-        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(rootPageId, system.getName(), content);
+        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(rootPageId, system.getName(),
+                () -> templateRenderer.renderSystemPage(generatorService.createSystemPageDto(system)));
         generatorService.persistSystemPage(system, pageId);
         return pageId;
     }
 
     private String generateDeploymentHistoryPageForEnvironment(String systemPageId, Environment environment, System system) {
+        String pageTitle = DeploymentHistoryPageDto.pageTitle(system.getName(), environment.getName());
+        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(systemPageId, pageTitle,
+                () -> templateRenderer.renderDeploymentHistoryPage(createDeploymentHistoryPageDto(system, environment)));
+        generatorService.persistDeploymentHistoryPage(system, environment, pageId);
+        return pageId;
+    }
+
+    private DeploymentHistoryPageDto createDeploymentHistoryPageDto(System system, Environment environment) {
         List<DeploymentDto> deploymentDtoList = generatorService.getDeploymentsForSystemAndEnv(system, environment, props.getDeploymentHistoryMaxShow());
-        DeploymentHistoryPageDto deploymentHistoryPageDto = DeploymentHistoryPageDto.builder()
+        return DeploymentHistoryPageDto.builder()
                 .systemName(system.getName())
                 .environmentName(environment.getName())
                 .deployments(deploymentDtoList)
                 .deploymentHistoryMaxShow(props.getDeploymentHistoryMaxShow())
                 .build();
-        String content = templateRenderer.renderDeploymentHistoryPage(deploymentHistoryPageDto);
-        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(systemPageId, deploymentHistoryPageDto.getPageTitle(), content);
-        generatorService.persistDeploymentHistoryPage(system, environment, pageId);
-        return pageId;
     }
 
     private void generateDeploymentHistoryOverviewPageForEnvironment(String rootPageId, Environment environment) {
+        final String deploymentOverviewPageId = confluenceAdapter.addOrUpdatePageUnderAncestor(rootPageId,
+                DEPLOYMENT_HISTORY_OVERVIEW_ROOT_PAGE_TITLE, templateRenderer::renderDeploymentHistoryOverviewRootPage);
+        String pageTitle = DeploymentHistoryOverviewPageDto.pageTitle(environment.getName());
+        confluenceAdapter.addOrUpdatePageUnderAncestor(deploymentOverviewPageId, pageTitle,
+                () -> templateRenderer.renderDeploymentHistoryOverviewPage(createDeploymentHistoryOverviewPageDto(environment)));
+    }
+
+    private DeploymentHistoryOverviewPageDto createDeploymentHistoryOverviewPageDto(Environment environment) {
         ZonedDateTime minStartedAt = ZonedDateTime.now().minus(props.getDeploymentHistoryOverviewMaxTime());
-        final String deploymentOverviewPageId = confluenceAdapter.addOrUpdatePageUnderAncestor(rootPageId, "_Deployment History Overview", templateRenderer.renderDeploymentHistoryOverviewRootPage());
         List<DeploymentDto> deploymentDtoList = generatorService.getDeploymentsForEnv(environment, minStartedAt, props.getDeploymentHistoryMaxShow());
-        DeploymentHistoryOverviewPageDto deploymentHistoryOverviewPageDto = DeploymentHistoryOverviewPageDto.builder()
+        return DeploymentHistoryOverviewPageDto.builder()
                 .environmentName(environment.getName())
                 .deployments(deploymentDtoList)
                 .deploymentHistoryMaxShow(props.getDeploymentHistoryMaxShow())
-                .deploymentHistoryOverviewMinStartedAt(minStartedAt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")))
+                .deploymentHistoryOverviewMinStartedAt(minStartedAt.format(MIN_STARTED_AT_FORMATTER))
                 .build();
-        final String content = templateRenderer.renderDeploymentHistoryOverviewPage(deploymentHistoryOverviewPageDto);
-        confluenceAdapter.addOrUpdatePageUnderAncestor(deploymentOverviewPageId, deploymentHistoryOverviewPageDto.getPageTitle(), content);
     }
 
     private String generateDeploymentListPage(String parentPageId, Environment environment, System system, int year) {
         DeploymentListPageDto deploymentListPageDto = new DeploymentListPageDto(environment.getName(), system.getName(), year);
-        String content = templateRenderer.renderDeploymentListPage();
-        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentListPageDto.getPageTitle(), content);
+        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentListPageDto.getPageTitle(),
+                templateRenderer::renderDeploymentListPage);
         generatorService.persistDeploymentListPage(system, environment, pageId, year);
         return pageId;
     }
@@ -256,8 +267,8 @@ public class DocumentationGenerator {
     }
 
     private GeneratedDeploymentPageDto generateDeploymentLetter(String parentPageId, DeploymentLetterPageDto deploymentLetterPageDto) {
-        String content = templateRenderer.renderDeploymentLetterPage(deploymentLetterPageDto);
-        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(), content);
+        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(),
+                () -> templateRenderer.renderDeploymentLetterPage(deploymentLetterPageDto));
         generatorService.persistDeploymentPage(
                 UUID.fromString(deploymentLetterPageDto.getDeploymentId()),
                 pageId,
@@ -270,8 +281,8 @@ public class DocumentationGenerator {
     }
 
     private GeneratedDeploymentPageDto generateUndeploymentLetter(String parentPageId, DeploymentLetterPageDto deploymentLetterPageDto) {
-        String content = templateRenderer.renderUndeploymentLetterPage(deploymentLetterPageDto);
-        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(), content);
+        String pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(parentPageId, deploymentLetterPageDto.getPageTitle(),
+                () -> templateRenderer.renderUndeploymentLetterPage(deploymentLetterPageDto));
         generatorService.persistDeploymentPage(
                 UUID.fromString(deploymentLetterPageDto.getDeploymentId()),
                 pageId,

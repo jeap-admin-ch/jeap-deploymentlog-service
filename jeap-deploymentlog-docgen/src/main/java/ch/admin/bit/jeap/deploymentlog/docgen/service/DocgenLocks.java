@@ -22,8 +22,12 @@ class DocgenLocks {
 
     private static final String LOCK_NAME_PREFIX = "docgen-";
     private static final Duration LOCK_RETRY_WAIT_DURATION = Duration.ofSeconds(3);
-    // Give docgen at most one minute to finish, then assume it has been interrupted without releasing the lock
-    private static final Duration LOCK_AT_MOST_FOR = Duration.ofMinutes(1);
+    // Give docgen at most this duration to finish, then assume it has been interrupted without releasing the lock.
+    // Must stay above the worst-case duration of a docgen run: every confluence page update retries on a version
+    // conflict (see ConfluenceAdapterImpl) and the whole adapter call is retried again by @Retryable on top of that.
+    // If the lock expires while docgen is still running, a second run for the same system starts concurrently and
+    // both runs write the same confluence pages - which is exactly the conflict that made the run slow to begin with.
+    private static final Duration LOCK_AT_MOST_FOR = Duration.ofMinutes(10);
     private static final Duration LOCK_AT_LEAST_FOR = Duration.ZERO;
     // Wait at most this duration until giving up trying to acquire the lock
     private Duration tryAcquireTimeout = Duration.ofMinutes(3);

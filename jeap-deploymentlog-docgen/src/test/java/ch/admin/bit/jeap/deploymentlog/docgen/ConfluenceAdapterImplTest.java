@@ -12,6 +12,7 @@ import org.sahli.asciidoc.confluence.publisher.client.http.NotFoundException;
 import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedException;
 
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.List;
 
 import static ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapterImpl.CONTENT_HASH_PROPERTY_KEY;
@@ -45,7 +46,7 @@ class ConfluenceAdapterImplTest {
                 .when(confluenceClientMock)
                 .addPageUnderAncestor(eq(SPACE_KEY), eq(ancestorId), eq(pageName), eq(content), anyString());
 
-        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
+        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
 
         verify(confluenceClientMock).setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, contentHash);
 
@@ -67,7 +68,7 @@ class ConfluenceAdapterImplTest {
         doReturn("differenthash")
                 .when(confluenceClientMock).getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
 
-        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
+        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
 
         verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString(), eq(true));
         verify(confluenceClientMock).setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, contentHash);
@@ -100,7 +101,7 @@ class ConfluenceAdapterImplTest {
                 .doNothing() // Second attempt succeeds
                 .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
 
-        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
+        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
 
         verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version1 + 1), anyString(), eq(true));
         verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version2 + 1), anyString(), eq(true));
@@ -130,7 +131,7 @@ class ConfluenceAdapterImplTest {
                 .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
 
         assertThrows(RequestFailedException.class, () ->
-                confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content));
+                confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content));
 
         verify(confluenceClientMock, times(3))
                 .updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(version + 1), anyString(), eq(true));
@@ -152,9 +153,74 @@ class ConfluenceAdapterImplTest {
         doReturn(contentHash)
                 .when(confluenceClientMock).getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
 
-        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, content);
+        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
 
         verifyNoMoreInteractions(confluenceClientMock);
+    }
+
+    @Test
+    void addOrUpdatePageUnderAncestor_existingPageWithNewContent_rendersContentAgainOnConflict() {
+        String pageId = "pageId";
+        String pageName = "pageName";
+        String ancestorId = "ancestorId";
+        String staleContent = "content rendered before the concurrent change";
+        String freshContent = "content rendered after the concurrent change";
+        RequestFailedException ex = mock(RequestFailedException.class);
+        doReturn("request failed (request: PUT https://confluence-test.com/rest/api/content/361257046 , response: 409")
+                .when(ex).getMessage();
+
+        ConfluencePage existingPageV1 = new ConfluencePage(pageId, pageName, 1);
+        ConfluencePage existingPageV2 = new ConfluencePage(pageId, pageName, 2);
+        Iterator<String> renderedContent = List.of(staleContent, freshContent).iterator();
+
+        doReturn(pageId)
+                .when(confluenceClientMock).getPageByTitle(SPACE_KEY, ancestorId, pageName);
+        doReturn(existingPageV1)
+                .doReturn(existingPageV2)
+                .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+        doReturn("differenthash")
+                .when(confluenceClientMock).getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
+        doThrow(ex) // First attempt conflicts with a concurrent update
+                .doNothing() // Second attempt succeeds
+                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
+
+        confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, renderedContent::next);
+
+        // Writing the stale content again with an incremented version would discard the concurrent change
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(staleContent), eq(2), anyString(), eq(true));
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(freshContent), eq(3), anyString(), eq(true));
+        verify(confluenceClientMock).setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, sha256Hex(freshContent));
+    }
+
+    @Test
+    void movePage_keepsContentOfConcurrentWriterOnConflict() {
+        String pageId = "pageId";
+        String pageName = "pageName";
+        String ancestorId = "ancestorId";
+        String contentBeforeConflict = "content before the concurrent update";
+        String contentAfterConflict = "content written by the concurrent update";
+        RequestFailedException ex = mock(RequestFailedException.class);
+        doReturn("request failed (request: PUT https://confluence-test.com/rest/api/content/361257046 , response: 409")
+                .when(ex).getMessage();
+
+        ConfluencePage existingPageV1 = mock(ConfluencePage.class);
+        when(existingPageV1.getTitle()).thenReturn(pageName);
+        when(existingPageV1.getContent()).thenReturn(contentBeforeConflict);
+        when(existingPageV1.getVersion()).thenReturn(1);
+        ConfluencePage existingPageV2 = mock(ConfluencePage.class);
+        when(existingPageV2.getContent()).thenReturn(contentAfterConflict);
+        when(existingPageV2.getVersion()).thenReturn(2);
+
+        doReturn(existingPageV1)
+                .doReturn(existingPageV2)
+                .when(confluenceClientMock).getPageWithContentAndVersionById(pageId);
+        doThrow(ex)
+                .doNothing()
+                .when(confluenceClientMock).updatePage(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyBoolean());
+
+        confluenceAdapter.movePage(ancestorId, pageId);
+
+        verify(confluenceClientMock).updatePage(eq(pageId), eq(ancestorId), eq(pageName), eq(contentAfterConflict), eq(3), anyString(), eq(true));
     }
 
     @Test

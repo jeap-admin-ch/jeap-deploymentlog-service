@@ -14,7 +14,11 @@ public class DeploymentHistoryPageDto {
     Integer deploymentHistoryMaxShow;
     List<DeploymentDto> deployments;
 
-    public String getPageTitle() {
+    public static String pageTitle(String systemName, String environmentName) {
         return "Deployment History " + environmentName + " (" + systemName + ")";
+    }
+
+    public String getPageTitle() {
+        return pageTitle(systemName, environmentName);
     }
 }

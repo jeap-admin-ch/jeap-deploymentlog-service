@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -82,7 +83,7 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPages();
 
         // then
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), anyString());
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), any());
     }
 
     @Test
@@ -102,7 +103,7 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPagesForSystem(systemName, null);
 
         // then
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), anyString());
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), any());
     }
 
 
@@ -134,15 +135,13 @@ class DocumentationGeneratorTest {
         when(deploymentRepositoryMock.getById(deployment1Id)).thenReturn(deployment1Mock);
         when(deploymentRepositoryMock.getById(deployment2Id)).thenReturn(deployment2Mock);
 
-        when(confluenceAdapterMock.addOrUpdatePageUnderAncestor(anyString(), anyString(), anyString())).thenReturn(UUID.randomUUID().toString());
-
         doReturn(systemPageDto).when(generatorServiceMock).createSystemPageDto(system);
 
         // when
         documentationGenerator.migrateSystem(system);
 
         // then
-        verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), anyString());
+        verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(rootPageId), eq(systemName), any());
         verify(confluenceAdapterMock, times(2)).movePage(anyString(), anyString());
     }
 
@@ -177,13 +176,11 @@ class DocumentationGeneratorTest {
         when(deploymentRepositoryMock.getById(deployment1Id)).thenReturn(deployment1Mock);
         when(deploymentRepositoryMock.getById(deployment2Id)).thenReturn(deployment2Mock);
 
-        when(confluenceAdapterMock.addOrUpdatePageUnderAncestor(anyString(), anyString(), anyString())).thenReturn(UUID.randomUUID().toString());
-
         // when
         documentationGenerator.mergeSystems(system, oldSystem);
 
         // then
-        verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(systemPageId.toString()), eq("Deployment History null (SYSTEM A)"), anyString());
+        verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(systemPageId.toString()), eq("Deployment History null (SYSTEM A)"), any());
         verify(confluenceAdapterMock, times(2)).movePage(anyString(), anyString());
         verify(generatorServiceMock, never()).createSystemPageDto(any(System.class));
     }
@@ -258,11 +255,18 @@ class DocumentationGeneratorTest {
         generator.generateAllPages();
 
         // then - the top-level system page is created under exactly the configured root page id
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(configuredRootPageId), eq(systemName), anyString());
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(configuredRootPageId), eq(systemName), any());
     }
 
     @BeforeEach
     void setUp() {
+        // Render the page content just like the real adapter does, which invokes the supplier at least once
+        lenient().when(confluenceAdapterMock.addOrUpdatePageUnderAncestor(anyString(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    invocation.getArgument(2, Supplier.class).get();
+                    return UUID.randomUUID().toString();
+                });
+
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
         TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext));
         DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();

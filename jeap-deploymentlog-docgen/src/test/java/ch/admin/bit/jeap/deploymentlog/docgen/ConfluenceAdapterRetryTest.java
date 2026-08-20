@@ -55,7 +55,7 @@ class ConfluenceAdapterRetryTest {
         when(pageMock.getTitle())
                 .thenReturn("pageName");
 
-        confluenceAdapter.addOrUpdatePageUnderAncestor("ancestorId", "pageName", "content");
+        confluenceAdapter.addOrUpdatePageUnderAncestor("ancestorId", "pageName", () -> "content");
 
         verify(confluenceClientMock).updatePage(any(), any(), any(), any(), anyInt(), any(), anyBoolean());
     }

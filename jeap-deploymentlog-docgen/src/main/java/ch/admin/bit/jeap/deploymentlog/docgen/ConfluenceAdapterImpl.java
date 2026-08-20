@@ -11,6 +11,8 @@ import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedExceptio
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static org.apache.commons.codec.digest.DigestUtils.sha256Hex;
 
@@ -19,6 +21,9 @@ import static org.apache.commons.codec.digest.DigestUtils.sha256Hex;
 class ConfluenceAdapterImpl implements ConfluenceAdapter {
     static final String CONTENT_HASH_PROPERTY_KEY = "content-hash";
     private static final String VERSION_MESSAGE = "Documentation generated";
+    private static final String NOT_FOUND_RESPONSE = "response: 404";
+    private static final String CONFLICT_RESPONSE = "response: 409";
+    private static final int MAX_CONFLICT_RETRIES = 2;
 
     private final ConfluenceClient confluenceClient;
     private final DocumentationGeneratorConfluenceProperties props;
@@ -33,13 +38,14 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
     }
 
     @Override
-    public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, String content) {
+    public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, Supplier<String> contentSupplier) {
         String contentId;
         try {
             contentId = confluenceClient.getPageByTitle(props.getSpaceKey(), ancestorId, pageName);
-            updatePage(contentId, ancestorId, pageName, content);
+            updatePage(contentId, ancestorId, pageName, contentSupplier);
         } catch (NotFoundException e) {
             log.info("Creating page {}", pageName);
+            String content = contentSupplier.get();
             contentId = confluenceClient.addPageUnderAncestor(props.getSpaceKey(), ancestorId, pageName, content, VERSION_MESSAGE);
             confluenceClient.setPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY, hash(content));
         }
@@ -52,9 +58,11 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         try {
             ConfluencePage existingPage = confluenceClient.getPageWithContentAndVersionById(contentId);
             log.info("Moving page {}", existingPage.getTitle());
-            updatePageWithRetryOnConflict(contentId, ancestorId, existingPage.getTitle(), existingPage.getContent(), existingPage);
+            // The page content is not modified by a move - on conflict, keep the content the concurrent writer stored
+            updatePageWithRetryOnConflict(contentId, ancestorId, existingPage.getTitle(), existingPage.getContent(),
+                    existingPage, ConfluencePage::getContent);
         } catch (RequestFailedException rfe) {
-            if (StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains("response: 404")) {
+            if (StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(NOT_FOUND_RESPONSE)) {
                 log.info("Page with id {} not found. Ignoring...", contentId);
             } else {
                 throw rfe;
@@ -63,38 +71,58 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         }
     }
 
-    private void updatePage(String contentId, String ancestorId, String pageName, String content) {
+    private void updatePage(String contentId, String ancestorId, String pageName, Supplier<String> contentSupplier) {
         ConfluencePage existingPage = confluenceClient.getPageWithContentAndVersionById(contentId);
         String existingContentHash = confluenceClient.getPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY);
-        String newContentHash = hash(content);
+        String content = contentSupplier.get();
 
-        if (notSameHash(existingContentHash, newContentHash) || !existingPage.getTitle().equals(pageName)) {
+        if (notSameHash(existingContentHash, hash(content)) || !existingPage.getTitle().equals(pageName)) {
             log.info("Updating page {}", pageName);
-            updatePageWithRetryOnConflict(contentId, ancestorId, pageName, content, existingPage);
+            // On conflict, render the content again to include the change of the concurrent writer
+            String updatedContent = updatePageWithRetryOnConflict(contentId, ancestorId, pageName, content,
+                    existingPage, page -> contentSupplier.get());
             confluenceClient.deletePropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY);
-            confluenceClient.setPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY, newContentHash);
+            confluenceClient.setPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY, hash(updatedContent));
         } else {
             log.info("Page {} is up-to-date", pageName);
         }
     }
 
-    private void updatePageWithRetryOnConflict(String contentId, String ancestorId, String pageName, String content, ConfluencePage existingPage) {
+    /**
+     * Updates a page, retrying on a version conflict (HTTP 409) caused by a concurrent update of the same page.
+     *
+     * @param content           the content to write on the first attempt
+     * @param contentOnConflict provides the content to write after a conflict, based on the page as it has been
+     *                          re-read from confluence. Must not just return {@code content} again: writing an
+     *                          outdated snapshot with an incremented version number would discard the change of the
+     *                          concurrent writer without any error being reported.
+     * @return the content that has been written to the page
+     */
+    private String updatePageWithRetryOnConflict(String contentId, String ancestorId, String pageName, String content,
+                                                 ConfluencePage existingPage, Function<ConfluencePage, String> contentOnConflict) {
+        ConfluencePage currentPage = existingPage;
+        String currentContent = content;
         for (int retries = 0; ; retries++) {
             try {
-                int newPageVersion = existingPage.getVersion() + 1;
-                confluenceClient.updatePage(contentId, ancestorId, pageName, content, newPageVersion, VERSION_MESSAGE, true);
-                return; // success
+                int newPageVersion = currentPage.getVersion() + 1;
+                confluenceClient.updatePage(contentId, ancestorId, pageName, currentContent, newPageVersion, VERSION_MESSAGE, true);
+                return currentContent; // success
             } catch (RequestFailedException rfe) {
-                if (rfe.getMessage().contains("response: 409") && retries < 2) {
-                    log.warn("Failed to update page content for page {} - will try again in {}ms ({})",
+                if (isVersionConflict(rfe) && retries < MAX_CONFLICT_RETRIES) {
+                    log.warn("Failed to update page content for page {} - will re-read the page and try again in {}ms ({})",
                             contentId, props.getRetryOnConflictWaitDuration().toMillis(), rfe.getMessage());
                     waitForRetry();
-                    existingPage = confluenceClient.getPageWithContentAndVersionById(contentId);
+                    currentPage = confluenceClient.getPageWithContentAndVersionById(contentId);
+                    currentContent = contentOnConflict.apply(currentPage);
                 } else {
                     throw rfe;
                 }
             }
         }
+    }
+
+    private static boolean isVersionConflict(RequestFailedException rfe) {
+        return StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(CONFLICT_RESPONSE);
     }
 
     @SneakyThrows
@@ -110,7 +138,7 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
             String message = ex.getMessage();
             // See https://docs.atlassian.com/atlassian-confluence/REST/6.5.2/#content-delete for response codes
             // See RequestFailedException#RequestFailedException() - status code is only available in message
-            if (message.contains("response: 404")) {
+            if (message.contains(NOT_FOUND_RESPONSE)) {
                 log.info("Page {} does not exist, already deleted (status code 404)", pageId);
             } else {
                 throw ex;

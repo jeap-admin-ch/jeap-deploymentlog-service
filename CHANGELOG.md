@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [11.0.1] - 2026-08-21
+
+### Fixed
+
+- Confluence page updates no longer discard a concurrent modification when confluence rejects the update with a
+  version conflict (HTTP 409). Previously the already rendered content was written again with an incremented version
+  number, which silently overwrote the change of the concurrent writer. The content is now rendered again from the
+  current state before the update is retried (`ConfluenceAdapter.addOrUpdatePageUnderAncestor` now takes a content
+  supplier), and `movePage` keeps the content the concurrent writer stored.
+- The docgen lock is now held for at most 10 minutes instead of 1 minute. A docgen run retrying on conflicts can take
+  longer than a minute, in which case the lock expired and a second run for the same system started concurrently -
+  causing exactly the page conflicts that made the run slow in the first place.
+
 ## [11.0.0] - 2026-08-21
 
 ### Dependencies

@@ -14,8 +14,12 @@ public class DeploymentHistoryOverviewPageDto {
     String deploymentHistoryOverviewMinStartedAt;
     List<DeploymentDto> deployments;
 
-    public String getPageTitle() {
+    public static String pageTitle(String environmentName) {
         return "Deployment History Overview " + environmentName;
+    }
+
+    public String getPageTitle() {
+        return pageTitle(environmentName);
     }
 
 }

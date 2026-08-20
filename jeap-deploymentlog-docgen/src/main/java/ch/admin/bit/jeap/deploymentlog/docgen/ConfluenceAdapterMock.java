@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.function.Supplier;
 
 @Getter
 @Slf4j
@@ -13,7 +14,7 @@ public class ConfluenceAdapterMock implements ConfluenceAdapter {
     private final Set<String> modifiedPages = new ConcurrentSkipListSet<>();
 
     @Override
-    public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, String content) {
+    public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, Supplier<String> contentSupplier) {
         int fakePageId = (ancestorId + pageName).hashCode();
         log.info("Add or update page: ancestorId={} pageName={} fakePageId={}", ancestorId, pageName, fakePageId);
         modifiedPages.add(pageName);
