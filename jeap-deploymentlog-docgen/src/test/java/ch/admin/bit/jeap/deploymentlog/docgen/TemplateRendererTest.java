@@ -66,7 +66,9 @@ class TemplateRendererTest {
 
         String content = templateRenderer.renderDeploymentHistoryPage(pageDto);
 
-        assertThat(content).contains("Abgebrochen", "Vorzeitig beendet");
+        assertThat(content)
+                .contains("<ac:emoticon ac:name=\"minus\"/>", "Vorzeitig beendet")
+                .doesNotContain("Abgebrochen");
     }
 
     @Test
@@ -239,11 +241,9 @@ class TemplateRendererTest {
         assertNotNull(content);
         assertThat(content)
                 .contains("Build Job")
-                .contains("https://my-build-job-link.com");
-        assertThat(content)
+                .contains("https://my-build-job-link.com")
                 .contains("AWS Task Definition")
-                .contains("arn:foo:bar");
-        assertThat(content)
+                .contains("arn:foo:bar")
                 .contains("Some linked resource")
                 .contains("""
                         <a href="https://foo/bar" target="_blank">https://foo/bar</a>""");
