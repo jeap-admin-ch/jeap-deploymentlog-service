@@ -9,6 +9,7 @@ import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentCreateDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.DeploymentUpdateStateDto;
 import tools.jackson.databind.ObjectMapper;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -31,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-public class IntegrationTestBase {
+class IntegrationTestBase {
 
     @Autowired
     protected MockMvc mockMvc;
@@ -40,11 +41,20 @@ public class IntegrationTestBase {
     protected ThreadPoolTaskExecutor asyncDocgenExecutor;
     @Autowired
     protected DeploymentRepository deploymentRepository;
+    @Autowired
+    protected EnvironmentRepository environmentRepository;
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     protected ConfluenceAdapterMock confluenceAdapterMock;
     @Autowired
     protected ObjectMapper objectMapper;
+
+    @BeforeEach
+    void ensureFlowStageConfiguration() {
+        if (environmentRepository.findByName("PROD").isEmpty()) {
+            environmentRepository.save(new Environment("PROD"));
+        }
+    }
 
     void awaitUntilAsyncTasksCompleted() {
         Awaitility.await()

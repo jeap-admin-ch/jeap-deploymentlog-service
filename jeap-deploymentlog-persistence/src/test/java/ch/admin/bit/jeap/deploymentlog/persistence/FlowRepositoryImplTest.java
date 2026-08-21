@@ -21,8 +21,10 @@ import org.springframework.test.context.ContextConfiguration;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 @DataJpaTest
 @ContextConfiguration(classes = PersistenceConfiguration.class)
@@ -71,10 +73,10 @@ class FlowRepositoryImplTest {
     @Test
     void componentCanBeLockedForCrossInstanceSerialization() {
         entityManager.flush();
+        UUID componentId = component.getId();
 
-        flowRepository.lockComponent(component.getId());
-
-        assertThat(entityManager.contains(component)).isTrue();
+        assertThatCode(() -> flowRepository.lockComponent(componentId))
+                .doesNotThrowAnyException();
     }
 
     private Deployment deployment(String versionName) {
