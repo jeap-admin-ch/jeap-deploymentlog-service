@@ -13,6 +13,7 @@ import ch.admin.bit.jeap.security.resource.properties.ResourceServerProperties;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -56,6 +57,12 @@ class DeploymentControllerTest {
     private DocgenAsyncService docgenAsyncService;
     @MockitoBean
     private FlowStageResolver flowStageResolver;
+
+    @BeforeEach
+    void configureFinalEnvironment() {
+        when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(any()))
+                .thenReturn(new Environment("PROD"));
+    }
 
     @Test
     void putNewDeployment_whenNotExists_thenReturnsCreated() throws Exception {
@@ -103,6 +110,7 @@ class DeploymentControllerTest {
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),
                 deploymentCreateDto.getEnvironmentName(),
+                "PROD",
                 new DeploymentTarget(deploymentCreateDto.getTarget().getType(),
                      deploymentCreateDto.getTarget().getUrl(),
                      deploymentCreateDto.getTarget().getDetails()),
@@ -148,7 +156,7 @@ class DeploymentControllerTest {
         verifyNoInteractions(flowStageResolver);
         verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any());
+                any(), any(), any(), any(), any());
     }
 
     @Test
@@ -167,7 +175,7 @@ class DeploymentControllerTest {
 
         verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any());
+                any(), any(), any(), any(), any());
     }
 
     @Test
@@ -268,7 +276,7 @@ class DeploymentControllerTest {
         verify(deploymentService, never()).findByExternalId(externalId);
 
         verify(deploymentService, never()).createDeployment(
-                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
     private static DeploymentCreateDto getDeploymentCreateDto() {
@@ -344,7 +352,7 @@ class DeploymentControllerTest {
         //then: a NOK check result blocks the deployment - no deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
         verify(deploymentService, never()).createDeployment(
-                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
     @Test
@@ -377,7 +385,7 @@ class DeploymentControllerTest {
         //then: a WARNING check result does not block the deployment - the deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
         verify(deploymentService, times(1)).createDeployment(
-                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
     @Test
@@ -402,7 +410,7 @@ class DeploymentControllerTest {
         //then
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
         verify(deploymentService, never()).createDeployment(
-                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
+                any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
     private DeploymentCreateDto generateDeploymentCreateDto(Set<String> issues){

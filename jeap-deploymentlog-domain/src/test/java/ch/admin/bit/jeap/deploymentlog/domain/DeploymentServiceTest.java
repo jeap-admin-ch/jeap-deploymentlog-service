@@ -47,6 +47,8 @@ class DeploymentServiceTest {
     @Mock
     private EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     @Mock
+    private FlowAssignmentService flowAssignmentService;
+    @Mock
     private SystemService systemService;
     @InjectMocks
     private DeploymentService deploymentService;
@@ -63,7 +65,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null, null);
@@ -77,12 +79,12 @@ class DeploymentServiceTest {
     @Test
     void createDeployment_envNotExists_envCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
-        when(environmentRepository.save(any(Environment.class))).thenReturn(new Environment("test"));
+        when(environmentRepository.save(any(Environment.class))).thenReturn(new Environment("environment"));
         when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
 
         deploymentService.createDeployment("externalId", "1.2.3-4", ZonedDateTime.now(),
                 "test", "test", ZonedDateTime.now(), true,
-                "system", "component", "environment",
+                "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(),
                 "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
@@ -102,7 +104,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 null,
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null, null);
@@ -420,7 +422,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null, null);
@@ -444,7 +446,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null,
@@ -470,7 +472,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.0.0",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null, null);
@@ -489,7 +491,7 @@ class DeploymentServiceTest {
         deploymentService.createDeployment(
                 "externalId", "1.0.0",
                 ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
-                true, "system", "component", "environment",
+                true, "system", "component", "environment", "environment",
                 new DeploymentTarget("CF", "http://localhost/cf", "details"),
                 ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
                 "comment", "1.1.0", Set.of("PROJ-123"), null, null);

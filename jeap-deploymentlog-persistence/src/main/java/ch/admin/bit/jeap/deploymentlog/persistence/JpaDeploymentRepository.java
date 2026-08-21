@@ -119,4 +119,31 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             and s = c.system
             """)
     String getSystemNameForDeployment(@Param("deploymentId") UUID deploymentId);
+
+    @Query("""
+            select d from Deployment d
+            where d.componentVersion.component = :component
+            and d.environment = :environment
+            and d.componentVersion.versionName = :versionName
+            and d.id <> :excludedDeploymentId
+            order by d.startedAt desc, d.id desc
+            """)
+    List<Deployment> findLastDeploymentForBusinessVersion(@Param("component") Component component,
+                                                          @Param("environment") Environment environment,
+                                                          @Param("versionName") String versionName,
+                                                          @Param("excludedDeploymentId") UUID excludedDeploymentId,
+                                                          Pageable pageable);
+
+    @Query("""
+            select count(d) > 0 from Deployment d
+            where d.componentVersion.component = :component
+            and d.environment = :environment
+            and d.componentVersion.versionName = :versionName
+            and d.id <> :excludedDeploymentId
+            and d.state = 'SUCCESS'
+            """)
+    boolean existsSuccessfulDeploymentForBusinessVersion(@Param("component") Component component,
+                                                          @Param("environment") Environment environment,
+                                                          @Param("versionName") String versionName,
+                                                          @Param("excludedDeploymentId") UUID excludedDeploymentId);
 }

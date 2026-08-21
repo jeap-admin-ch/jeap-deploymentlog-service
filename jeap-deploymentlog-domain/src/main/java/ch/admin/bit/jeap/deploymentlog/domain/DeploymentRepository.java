@@ -39,4 +39,14 @@ public interface DeploymentRepository {
     Optional<Deployment> getLastSuccessfulDeploymentForComponentDifferentToVersion(Component component, Environment env, String version);
 
     String getSystemNameForDeployment(UUID deploymentId);
+
+    Optional<Deployment> getLastDeploymentForBusinessVersion(Component component,
+                                                              Environment environment,
+                                                              String versionName,
+                                                              UUID excludedDeploymentId);
+
+    boolean hasSuccessfulDeploymentForBusinessVersion(Component component,
+                                                       Environment environment,
+                                                       String versionName,
+                                                       UUID excludedDeploymentId);
 }

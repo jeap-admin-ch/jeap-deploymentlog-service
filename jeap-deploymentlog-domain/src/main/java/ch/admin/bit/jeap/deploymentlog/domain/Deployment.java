@@ -86,6 +86,10 @@ public class Deployment {
     @Enumerated(EnumType.STRING)
     private Set<DeploymentType> deploymentTypes = new HashSet<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private Flow flow;
+
     @Builder
     @SuppressWarnings("java:S107")
     private Deployment(@NonNull String externalId,
@@ -138,6 +142,13 @@ public class Deployment {
         this.lastModified = ZonedDateTime.now();
         this.state = DeploymentState.CANCELLED;
         this.stateMessage = StringUtils.abbreviate(stateMessage, 1000);
+    }
+
+    void assignTo(Flow flow) {
+        if (this.flow != null && this.flow != flow) {
+            throw new IllegalStateException("Deployment is already assigned to another flow");
+        }
+        this.flow = flow;
     }
 
 }

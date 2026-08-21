@@ -50,10 +50,9 @@ public class DeploymentController {
             return new ResponseEntity<>(HttpStatus.OK);
         }
 
-        // Flow persistence is introduced in a later story. Resolve here already to validate the API input
-        // atomically before any deployment data is persisted.
-        flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
-                deploymentCreateDto.getFinalDeploymentEnvironments());
+        // Resolve before persisting so invalid target stages reject the complete request.
+        String finalDeploymentEnvironmentName = flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
+                deploymentCreateDto.getFinalDeploymentEnvironments()).getName();
 
         DeploymentCreateResultDto deploymentCreateResultDto = null;
 
@@ -89,6 +88,7 @@ public class DeploymentController {
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),
                 deploymentCreateDto.getEnvironmentName(),
+                finalDeploymentEnvironmentName,
                 deploymentCreateDto.getTarget(),
                 deploymentCreateDto.getStartedAt(),
                 deploymentCreateDto.getStartedBy(),

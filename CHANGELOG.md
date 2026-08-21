@@ -10,6 +10,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - Add configurable start and default final environments for version flows.
 - Accept optional `finalDeploymentEnvironments` when creating deployments.
+- Persist CODE deployment flows and assign deployments idempotently using their business component version.
+- Classify new flows deterministically as `NEW`, `RETRY`, `ROLLBACK`, or `AD_HOC`.
 
 ### Changed
 - Require `componentVersion.committedAt` in the deployment API and database schema.

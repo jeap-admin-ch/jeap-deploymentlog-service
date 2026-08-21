@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
+import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
@@ -9,14 +10,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Component;
 
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-@Component
+@org.springframework.stereotype.Component
 @RequiredArgsConstructor
 public class DeploymentRepositoryImpl implements DeploymentRepository {
 
@@ -115,5 +115,25 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     public String getSystemNameForDeployment(UUID deploymentId) {
         return jpaDeploymentRepository.getSystemNameForDeployment(deploymentId);
+    }
+
+    @Override
+    public Optional<Deployment> getLastDeploymentForBusinessVersion(Component component,
+                                                                    Environment environment,
+                                                                    String versionName,
+                                                                    UUID excludedDeploymentId) {
+        return jpaDeploymentRepository.findLastDeploymentForBusinessVersion(component, environment, versionName,
+                        excludedDeploymentId, PageRequest.of(0, 1))
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public boolean hasSuccessfulDeploymentForBusinessVersion(Component component,
+                                                              Environment environment,
+                                                              String versionName,
+                                                              UUID excludedDeploymentId) {
+        return jpaDeploymentRepository.existsSuccessfulDeploymentForBusinessVersion(component, environment,
+                versionName, excludedDeploymentId);
     }
 }

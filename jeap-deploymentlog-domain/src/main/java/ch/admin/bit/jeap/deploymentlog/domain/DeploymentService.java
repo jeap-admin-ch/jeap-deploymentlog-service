@@ -29,6 +29,7 @@ public class DeploymentService {
     private final EnvironmentRepository environmentRepository;
     private final SystemService systemService;
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
+    private final FlowAssignmentService flowAssignmentService;
 
     @SuppressWarnings("java:S107")
     public UUID createDeployment(String externalId,
@@ -41,6 +42,7 @@ public class DeploymentService {
                                  String systemName,
                                  String componentName,
                                  String environmentName,
+                                 String finalDeploymentEnvironmentName,
                                  DeploymentTarget target,
                                  ZonedDateTime startedAt,
                                  String startedBy,
@@ -84,7 +86,14 @@ public class DeploymentService {
                 .deploymentTypes(deploymentTypes)
                 .build();
 
-        return deploymentRepository.save(deployment).getId();
+        Deployment savedDeployment = deploymentRepository.save(deployment);
+        Environment finalDeploymentEnvironment = environment.getName().equals(finalDeploymentEnvironmentName)
+                ? environment
+                : environmentRepository.findByName(finalDeploymentEnvironmentName)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Resolved final deployment environment no longer exists: " + finalDeploymentEnvironmentName));
+        flowAssignmentService.assign(savedDeployment, finalDeploymentEnvironment);
+        return savedDeployment.getId();
     }
 
     @SuppressWarnings("java:S107")
