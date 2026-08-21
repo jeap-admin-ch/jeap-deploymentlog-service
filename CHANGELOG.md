@@ -20,7 +20,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run retrying on conflicts can take longer than that, in which case the lock expired and a second run for the same
   system started concurrently - causing exactly the page conflicts that made the run slow in the first place.
 
-
 ## [11.0.0] - 2026-08-21
 
 ### Dependencies
