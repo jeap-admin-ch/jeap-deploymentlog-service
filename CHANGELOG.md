@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [12.0.0] - 2026-08-21
 
 ### Added
 - Add configurable start and default final environments for version flows.
@@ -14,7 +14,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Classify new flows deterministically as `NEW`, `RETRY`, `ROLLBACK`, or `AD_HOC`.
 
 ### Changed
-- Require `componentVersion.committedAt` in the deployment API and database schema.
+- **Breaking:** Require `componentVersion.committedAt` in the create-deployment API and database schema.
+
+### Migration
+
+Before upgrading the DeploymentLog service to 12.0.0:
+
+1. Update every deployment client and pipeline to provide the authoritative commit timestamp in
+   `componentVersion.committedAt`. Deploy these client changes before upgrading the DeploymentLog service.
+2. Check the existing database for component versions without a commit timestamp:
+
+   ```sql
+   SELECT id, component_id, version_name
+   FROM component_version
+   WHERE committed_at IS NULL;
+   ```
+
+3. If the query returns rows, determine their authoritative commit timestamps from the corresponding source-code
+   repository or build metadata and update `component_version.committed_at` before starting 12.0.0. Do not derive the
+   value from a deployment timestamp: `committed_at` is used as the functional age of a component version.
+4. Verify that no null values remain:
+
+   ```sql
+   SELECT COUNT(*)
+   FROM component_version
+   WHERE committed_at IS NULL;
+   ```
+
+Version 12.0.0 rejects create-deployment requests without a valid `componentVersion.committedAt` with HTTP 400. Its
+Flyway migration adds a `NOT NULL` constraint to `component_version.committed_at` and intentionally provides no
+automatic fallback. The service upgrade fails during migration while historical null values remain.
 
 ## [11.1.0] - 2026-08-24
 
