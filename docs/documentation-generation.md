@@ -106,9 +106,12 @@ Two safeguards keep concurrent runs from corrupting the tree:
   across all service instances. A run that cannot acquire the lock within three minutes gives up and leaves
   the work to the scheduled repair job.
 - When Confluence rejects an update because the page was modified concurrently (HTTP 409), the adapter
-  waits `retry-on-conflict-wait-duration`, re-reads the page and **re-renders** the content from the current
-  state before retrying. Writing an already rendered snapshot would silently discard the concurrent change.
-  On top of that, every Confluence request is retried up to four times with exponential backoff.
+  waits `retry-on-conflict-wait-duration` (a constant wait, 10 seconds by default), re-reads the page and
+  **re-renders** the content from the current state before retrying. Writing an already rendered snapshot
+  would silently discard the concurrent change. One call makes up to three such update attempts.
+  On top of that, every Confluence request is retried up to four times with exponential backoff (2 seconds,
+  doubling). Both retries nest: a conflict that never resolves therefore causes up to twelve update requests,
+  with the constant conflict wait and the exponential backoff alternating in between.
 
 ## Jira integration
 

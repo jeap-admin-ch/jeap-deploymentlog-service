@@ -150,9 +150,9 @@ ShedLock uses a JDBC lock provider on the service's own datasource.
 - **Error handling** — `RestResponseExceptionHandler` maps the domain exceptions onto HTTP status codes
   (not-found exceptions to `404`, already-defined/invalid-state exceptions to `400`, Jira unavailability to
   `503`) and passes errors of synchronously called upstream systems through with their original status.
-- **Resilience** — the Confluence adapter retries on request failures (four attempts, exponential backoff)
-  and re-renders the page content before retrying an update rejected as a conflict. The Jira client retries
-  with an exponential backoff too.
+- **Resilience** — the Confluence adapter retries on request failures (four attempts, exponential backoff).
+  Within a single call, an update rejected as a conflict is retried up to two more times with a constant
+  wait, re-rendering the page content each time. The Jira client retries with an exponential backoff too.
 - **Read replica** — read-only endpoints and queries are annotated with `@TransactionalReadReplica`
   (`jeap-spring-boot-tx`), so an instance configured with a read replica routes them there.
 - **Observability** — the jEAP monitoring starter provides the actuator endpoints; the service adds its own

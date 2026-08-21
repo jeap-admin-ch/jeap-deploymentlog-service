@@ -99,7 +99,7 @@ more than two stages, has to adjust the `productive`, `development` and `staging
 | Situation                                  | Effect                                                                                                    |
 |--------------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | Confluence unreachable or failing          | The request that recorded the deployment already succeeded. The generation fails, the error counter is incremented and the lag gauge rises; the repair job retries. |
-| Confluence rejects an update as a conflict | The adapter waits, re-reads the page, re-renders the content and retries — up to four attempts with exponential backoff. |
+| Confluence rejects an update as a conflict | The adapter waits `retry-on-conflict-wait-duration`, re-reads the page, re-renders the content and retries — up to three update attempts per call. If the conflict persists, the retry around the whole call repeats it up to four times with exponential backoff, so at most twelve update requests are sent. |
 | Jira issue cannot be updated               | Logged as a warning; the page generation succeeds. Use `repairJiraLinks` to catch up.                       |
 | Jira unavailable during a ready-for-deploy check | The request fails with `503` and the deployment is **not** recorded — the check is synchronous by design. |
 | Docgen lock cannot be acquired within 3 minutes | The run is skipped with a warning; the repair job picks the deployment up later.                        |
