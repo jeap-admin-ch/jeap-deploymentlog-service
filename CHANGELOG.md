@@ -9,12 +9,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - Add configurable start and default final environments for version flows.
+- Add `jeap.deploymentlog.flow.enabled` (default `true`) and validate enabled flow stage configuration at startup.
 - Accept optional `finalDeploymentEnvironments` when creating deployments.
 - Persist CODE deployment flows and assign deployments idempotently using their business component version.
 - Classify new flows deterministically as `NEW`, `RETRY`, `ROLLBACK`, or `AD_HOC`.
+- Close flows at their effective target stage and abort older open version flows after a successful productive deployment.
 
 ### Changed
 - **Breaking:** Require `componentVersion.committedAt` in the create-deployment API and database schema.
+- Resolve final deployment environments only for CODE deployments while flow processing is enabled. Requests without
+  deployment types remain valid and are stored without a flow.
 
 ### Migration
 
@@ -40,6 +44,10 @@ Before upgrading the DeploymentLog service to 12.0.0:
    FROM component_version
    WHERE committed_at IS NULL;
    ```
+5. Ensure the database contains exactly one start environment (`development=true`) and one default target environment
+   (`productive=true`), or configure both explicitly with `jeap.deploymentlog.flow.start-environment` and
+   `jeap.deploymentlog.flow.default-final-deployment-environment`. Invalid enabled flow configuration aborts startup.
+   Set `jeap.deploymentlog.flow.enabled=false` to start the service without flow processing during migration.
 
 Version 12.0.0 rejects create-deployment requests without a valid `componentVersion.committedAt` with HTTP 400. Its
 Flyway migration adds a `NOT NULL` constraint to `component_version.committed_at` and intentionally provides no

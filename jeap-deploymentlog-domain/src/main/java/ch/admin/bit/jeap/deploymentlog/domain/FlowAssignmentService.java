@@ -14,9 +14,10 @@ public class FlowAssignmentService {
 
     private final FlowRepository flowRepository;
     private final FlowTypeClassifier flowTypeClassifier;
+    private final FlowStageProperties flowStageProperties;
 
     public Optional<Flow> assign(Deployment deployment, Environment finalDeploymentEnvironment) {
-        if (!isFlowRelevant(deployment)) {
+        if (!flowStageProperties.isEnabled() || !isFlowRelevant(deployment)) {
             return Optional.empty();
         }
 

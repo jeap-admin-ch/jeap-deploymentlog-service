@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,18 @@ interface JpaFlowRepository extends CrudRepository<Flow, UUID> {
     List<Flow> findByBusinessVersionAndState(@Param("componentId") UUID componentId,
                                              @Param("versionName") String versionName,
                                              @Param("state") FlowState state);
+
+    @Query("""
+            select flow from Flow flow
+            where flow.componentVersion.component.id = :componentId
+            and flow.state = :state
+            and flow.id <> :excludedFlowId
+            and flow.componentVersion.committedAt < :committedBefore
+            """)
+    List<Flow> findOlderByComponentAndState(@Param("componentId") UUID componentId,
+                                            @Param("committedBefore") ZonedDateTime committedBefore,
+                                            @Param("excludedFlowId") UUID excludedFlowId,
+                                            @Param("state") FlowState state);
 
     @Query("select deployment.flow from Deployment deployment where deployment.id = :deploymentId")
     Optional<Flow> findByDeploymentId(@Param("deploymentId") UUID deploymentId);

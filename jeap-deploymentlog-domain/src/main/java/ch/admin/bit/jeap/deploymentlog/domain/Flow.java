@@ -17,6 +17,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import static lombok.AccessLevel.PROTECTED;
@@ -76,8 +77,8 @@ public class Flow {
         if (state != FlowState.OPEN) {
             throw new IllegalStateException("Cannot add a deployment to terminal flow " + id);
         }
-        if (!componentVersion.getComponent().getId()
-                .equals(deployment.getComponentVersion().getComponent().getId())
+        if (!Objects.equals(componentVersion.getComponent().getId(),
+                deployment.getComponentVersion().getComponent().getId())
                 || !componentVersion.getVersionName()
                 .equals(deployment.getComponentVersion().getVersionName())) {
             throw new IllegalArgumentException("Deployment does not belong to flow's business component version");
@@ -86,6 +87,46 @@ public class Flow {
             deployments.add(deployment);
             deployment.assignTo(this);
         }
+    }
+
+    public boolean closeIfTargetReached(@NonNull Deployment deployment) {
+        if (state != FlowState.OPEN) {
+            return false;
+        }
+        if (deployments.stream().noneMatch(flowDeployment ->
+                Objects.equals(flowDeployment.getId(), deployment.getId()))) {
+            return false;
+        }
+        if (deployment.getState() != DeploymentState.SUCCESS
+                || !Objects.equals(finalDeploymentEnvironment.getId(), deployment.getEnvironment().getId())) {
+            return false;
+        }
+        state = FlowState.CLOSED;
+        return true;
+    }
+
+    public boolean abortBy(@NonNull Flow abortingFlow) {
+        if (state != FlowState.OPEN) {
+            return false;
+        }
+        if (Objects.equals(id, abortingFlow.getId())) {
+            throw new IllegalArgumentException("A flow cannot abort itself");
+        }
+        if (!Objects.equals(componentVersion.getComponent().getId(),
+                abortingFlow.getComponentVersion().getComponent().getId())) {
+            throw new IllegalArgumentException("Only a flow of the same component can abort this flow");
+        }
+        ZonedDateTime committedAt = componentVersion.getCommittedAt();
+        ZonedDateTime abortingCommittedAt = abortingFlow.getComponentVersion().getCommittedAt();
+        if (committedAt == null || abortingCommittedAt == null) {
+            throw new IllegalStateException("Cannot compare flow versions without componentVersion.committedAt");
+        }
+        if (!committedAt.isBefore(abortingCommittedAt)) {
+            throw new IllegalArgumentException("Only a strictly newer component version can abort this flow");
+        }
+        state = FlowState.ABORTED;
+        abortedBy = abortingFlow;
+        return true;
     }
 
     public List<Deployment> getDeployments() {

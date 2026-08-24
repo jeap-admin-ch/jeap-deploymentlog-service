@@ -30,6 +30,7 @@ public class DeploymentService {
     private final SystemService systemService;
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     private final FlowAssignmentService flowAssignmentService;
+    private final FlowLifecycleService flowLifecycleService;
 
     @SuppressWarnings("java:S107")
     public UUID createDeployment(String externalId,
@@ -87,12 +88,14 @@ public class DeploymentService {
                 .build();
 
         Deployment savedDeployment = deploymentRepository.save(deployment);
-        Environment finalDeploymentEnvironment = environment.getName().equals(finalDeploymentEnvironmentName)
-                ? environment
-                : environmentRepository.findByName(finalDeploymentEnvironmentName)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Resolved final deployment environment no longer exists: " + finalDeploymentEnvironmentName));
-        flowAssignmentService.assign(savedDeployment, finalDeploymentEnvironment);
+        if (finalDeploymentEnvironmentName != null) {
+            Environment finalDeploymentEnvironment = environment.getName().equals(finalDeploymentEnvironmentName)
+                    ? environment
+                    : environmentRepository.findByName(finalDeploymentEnvironmentName)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Resolved final deployment environment no longer exists: " + finalDeploymentEnvironmentName));
+            flowAssignmentService.assign(savedDeployment, finalDeploymentEnvironment);
+        }
         return savedDeployment.getId();
     }
 
@@ -166,6 +169,7 @@ public class DeploymentService {
         switch (state) {
             case SUCCESS -> {
                 deployment.success(endedAt, stateMessage);
+                flowLifecycleService.process(deployment);
                 if (deployment.getSequence() != DeploymentSequence.UNDEPLOYED) {
                     updateEnvironmentComponentVersionState(deployment);
                 }

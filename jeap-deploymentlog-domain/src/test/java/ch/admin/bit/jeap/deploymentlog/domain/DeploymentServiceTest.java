@@ -49,6 +49,8 @@ class DeploymentServiceTest {
     @Mock
     private FlowAssignmentService flowAssignmentService;
     @Mock
+    private FlowLifecycleService flowLifecycleService;
+    @Mock
     private SystemService systemService;
     @InjectMocks
     private DeploymentService deploymentService;
@@ -133,6 +135,7 @@ class DeploymentServiceTest {
                 .findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never())
                 .save(any(EnvironmentComponentVersionState.class));
+        verify(flowLifecycleService).process(deployment);
         assertThat(deployment.getProperties())
                 .containsEntry("test-prop", "test-value");
     }
@@ -208,6 +211,7 @@ class DeploymentServiceTest {
 
         verify(environmentComponentVersionStateRepository, never()).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never()).save(any(EnvironmentComponentVersionState.class));
+        verify(flowLifecycleService, never()).process(any());
 
     }
 

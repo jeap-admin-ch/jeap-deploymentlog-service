@@ -34,10 +34,23 @@ class FlowAssignmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new FlowAssignmentService(flowRepository, classifier);
+        FlowStageProperties properties = new FlowStageProperties();
+        service = new FlowAssignmentService(flowRepository, classifier, properties);
         component = new Component("service", new System("SYSTEM"));
         dev = new Environment("DEV");
         prod = new Environment("PROD");
+    }
+
+    @Test
+    void ignoresCodeDeploymentsWhenFlowProcessingIsDisabled() {
+        FlowStageProperties properties = new FlowStageProperties();
+        properties.setEnabled(false);
+        service = new FlowAssignmentService(flowRepository, classifier, properties);
+        Deployment deployment = deployment("disabled", "1.0.0", DeploymentSequence.NEW, DeploymentType.CODE);
+
+        assertThat(service.assign(deployment, prod)).isEmpty();
+
+        verify(flowRepository, never()).lockComponent(any());
     }
 
     @Test

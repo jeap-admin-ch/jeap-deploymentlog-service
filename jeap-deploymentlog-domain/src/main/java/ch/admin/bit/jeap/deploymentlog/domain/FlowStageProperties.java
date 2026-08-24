@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "jeap.deploymentlog.flow", ignoreUnknownFields = false)
 public class FlowStageProperties {
 
+    private boolean enabled = true;
     private String startEnvironment;
     private String defaultFinalDeploymentEnvironment;
 }

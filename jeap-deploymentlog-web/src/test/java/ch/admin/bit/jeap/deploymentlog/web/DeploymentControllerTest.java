@@ -57,9 +57,12 @@ class DeploymentControllerTest {
     private DocgenAsyncService docgenAsyncService;
     @MockitoBean
     private FlowStageResolver flowStageResolver;
+    @MockitoBean
+    private FlowStageProperties flowStageProperties;
 
     @BeforeEach
     void configureFinalEnvironment() {
+        when(flowStageProperties.isEnabled()).thenReturn(true);
         when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(any()))
                 .thenReturn(new Environment("PROD"));
     }
@@ -131,6 +134,7 @@ class DeploymentControllerTest {
     @Test
     void putNewDeployment_resolvesRequestedFinalDeploymentEnvironments() throws Exception {
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE));
         deploymentCreateDto.setFinalDeploymentEnvironments(List.of("ABN", "PROD"));
 
         mockMvc.perform(put("/api/deployment/{externalId}", "target-stages")
@@ -140,6 +144,49 @@ class DeploymentControllerTest {
                 .andExpect(status().isCreated());
 
         verify(flowStageResolver).resolveEffectiveFinalDeploymentEnvironment(List.of("ABN", "PROD"));
+    }
+
+    @Test
+    void putNewDeployment_withoutDeploymentTypes_doesNotResolveFlowStage() throws Exception {
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setDeploymentTypes(null);
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "no-deployment-types")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isCreated());
+
+        verifyNoInteractions(flowStageResolver);
+    }
+
+    @Test
+    void putNewDeployment_withConfigType_doesNotResolveFlowStage() throws Exception {
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CONFIG));
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "config-deployment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isCreated());
+
+        verifyNoInteractions(flowStageResolver);
+    }
+
+    @Test
+    void putNewCodeDeployment_whenFlowProcessingDisabled_doesNotResolveFlowStage() throws Exception {
+        when(flowStageProperties.isEnabled()).thenReturn(false);
+        DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE));
+
+        mockMvc.perform(put("/api/deployment/{externalId}", "flow-disabled")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentCreateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isCreated());
+
+        verifyNoInteractions(flowStageResolver);
     }
 
     @Test
@@ -162,6 +209,7 @@ class DeploymentControllerTest {
     @Test
     void putNewDeployment_withInvalidFinalEnvironment_returnsBadRequest() throws Exception {
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
+        deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE));
         deploymentCreateDto.setFinalDeploymentEnvironments(List.of("UNKNOWN"));
         when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(List.of("UNKNOWN")))
                 .thenThrow(new InvalidFlowStageRequestException("Unknown final deployment environment(s): UNKNOWN"));

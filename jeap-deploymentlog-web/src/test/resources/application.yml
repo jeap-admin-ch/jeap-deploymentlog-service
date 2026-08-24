@@ -10,6 +10,8 @@ spring:
 
 jeap:
   deploymentlog:
+    flow:
+      enabled: false
     documentation:
       root-url: "https://confluence.ch"
     documentation-generator:

@@ -72,6 +72,20 @@ Prefix `jeap.deploymentlog.documentation-generator.config`.
 |--------------------------------|---------|--------------------------------------------------------------------------------------------------------------------------|
 | `remedy-change-link-root-url`  | —       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
 
+## Deployment flows
+
+Prefix `jeap.deploymentlog.flow`.
+
+| Property                               | Default | Description |
+|----------------------------------------|---------|-------------|
+| `enabled`                              | `true`  | Enables creation and lifecycle processing of CODE deployment flows. When enabled, the flow stage configuration is validated at startup. |
+| `start-environment`                    | —       | Explicit start environment. If unset, exactly one persisted environment with `development=true` is required. |
+| `default-final-deployment-environment` | —       | Explicit default target environment. If unset, exactly one persisted environment with `productive=true` is required. |
+
+With flow processing enabled, both effective stages must resolve when the application starts. A blank or unknown
+explicit environment, no matching fallback environment, or multiple matching fallback environments aborts startup.
+Set `enabled=false` to run without flow creation and lifecycle processing; deployment recording remains available.
+
 ## Scheduled jobs
 
 Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekeeping cron expression. See

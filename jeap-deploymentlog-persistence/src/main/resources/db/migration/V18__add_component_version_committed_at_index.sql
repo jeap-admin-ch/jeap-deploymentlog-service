@@ -1,0 +1,1 @@
+CREATE INDEX component_version_component_committed_at_idx ON component_version (component_id, committed_at);

@@ -7,6 +7,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +29,20 @@ public class FlowRepositoryImpl implements FlowRepository {
     @Override
     public List<Flow> findOpenFlows(UUID componentId, String versionName) {
         return jpaFlowRepository.findByBusinessVersionAndState(componentId, versionName, FlowState.OPEN);
+    }
+
+    @Override
+    public List<Flow> findOlderOpenFlows(UUID componentId, ZonedDateTime committedBefore, UUID excludedFlowId) {
+        return jpaFlowRepository.findOlderByComponentAndState(
+                componentId, committedBefore, excludedFlowId, FlowState.OPEN);
+    }
+
+    @Override
+    public Optional<Flow> findByDeploymentIdAndLockComponent(UUID deploymentId) {
+        if (jpaComponentRepository.lockByDeploymentId(deploymentId).isEmpty()) {
+            return Optional.empty();
+        }
+        return jpaFlowRepository.findByDeploymentId(deploymentId);
     }
 
     @Override

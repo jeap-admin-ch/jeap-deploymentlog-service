@@ -15,10 +15,19 @@ public class TestDataFactory {
     }
 
     public static Deployment createDeployment(Environment environment, Component component, ZonedDateTime startedAt, String versionName, DeploymentTarget deploymentTarget) {
+        return createDeployment(environment, component, startedAt, versionName, ZonedDateTime.now(), deploymentTarget);
+    }
+
+    public static Deployment createDeployment(Environment environment,
+                                              Component component,
+                                              ZonedDateTime startedAt,
+                                              String versionName,
+                                              ZonedDateTime committedAt,
+                                              DeploymentTarget deploymentTarget) {
         ComponentVersion componentVersion = ComponentVersion.builder()
                 .commitRef("test")
                 .taggedAt(ZonedDateTime.now())
-                .committedAt(ZonedDateTime.now())
+                .committedAt(committedAt)
                 .versionControlUrl("test")
                 .publishedVersion(false)
                 .component(component)

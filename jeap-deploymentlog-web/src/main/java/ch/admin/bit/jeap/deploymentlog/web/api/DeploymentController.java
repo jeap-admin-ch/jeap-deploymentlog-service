@@ -3,6 +3,8 @@ package ch.admin.bit.jeap.deploymentlog.web.api;
 import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
@@ -31,6 +33,7 @@ public class DeploymentController {
     private final DocgenAsyncService docgenAsyncService;
     private final DeploymentCheckService deploymentCheckService;
     private final FlowStageResolver flowStageResolver;
+    private final FlowStageProperties flowStageProperties;
 
     @PutMapping("/{id}")
     @Operation(summary = "Create a new deployment")
@@ -50,9 +53,19 @@ public class DeploymentController {
             return new ResponseEntity<>(HttpStatus.OK);
         }
 
-        // Resolve before persisting so invalid target stages reject the complete request.
-        String finalDeploymentEnvironmentName = flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
-                deploymentCreateDto.getFinalDeploymentEnvironments()).getName();
+        String finalDeploymentEnvironmentName = null;
+        Set<DeploymentType> deploymentTypes = deploymentCreateDto.getDeploymentTypes();
+        boolean flowEnabled = flowStageProperties.isEnabled();
+        boolean isCodeDeployment = deploymentTypes != null && deploymentTypes.contains(DeploymentType.CODE);
+        boolean hasNoDeploymentTypes = deploymentTypes == null || deploymentTypes.isEmpty();
+        if (flowEnabled && isCodeDeployment) {
+            // Resolve before persisting so invalid target stages reject the complete request.
+            finalDeploymentEnvironmentName = flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
+                    deploymentCreateDto.getFinalDeploymentEnvironments()).getName();
+        } else if (flowEnabled && hasNoDeploymentTypes) {
+            log.warn("Deployment with externalId '{}' has no deploymentTypes and will be stored without flow tracking. " +
+                    "Add deployment type CODE to enable flow tracking", externalId);
+        }
 
         DeploymentCreateResultDto deploymentCreateResultDto = null;
 
