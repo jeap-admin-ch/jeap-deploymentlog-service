@@ -5,13 +5,14 @@ spring:
   flyway:
     init-sqls:
       - SET NON_KEYWORDS year
+    locations:
+      - classpath:db/migration
+      - classpath:db/testdata
   jpa:
     show-sql: true
 
 jeap:
   deploymentlog:
-    flow:
-      enabled: false
     documentation:
       root-url: "https://confluence.ch"
     documentation-generator:

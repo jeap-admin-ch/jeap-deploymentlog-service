@@ -1,0 +1,3 @@
+INSERT INTO environment (id, name, productive, staging_order, development)
+VALUES ('00000000-0000-0000-0000-000000000001', 'DEV', FALSE, 0, TRUE),
+       ('00000000-0000-0000-0000-000000000002', 'PROD', TRUE, 2147483647, FALSE);
