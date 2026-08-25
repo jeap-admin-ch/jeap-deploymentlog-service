@@ -31,6 +31,16 @@ public class FlowStageResolver {
                 "default final deployment environment", "productive=true");
     }
 
+    public void validateProductiveEnvironmentExists() {
+        for (Environment environment : environmentRepository.findAll()) {
+            if (environment.isProductive()) {
+                return;
+            }
+        }
+        throw new InvalidFlowStageConfigurationException(
+                "Cannot process deployment flows: expected at least one environment with productive=true, found 0");
+    }
+
     public Environment resolveEffectiveFinalDeploymentEnvironment(Collection<String> requestedEnvironmentNames) {
         if (requestedEnvironmentNames == null || requestedEnvironmentNames.isEmpty()) {
             return resolveDefaultFinalDeploymentEnvironment();

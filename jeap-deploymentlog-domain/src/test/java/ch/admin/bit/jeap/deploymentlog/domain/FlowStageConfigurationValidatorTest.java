@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.DefaultApplicationArguments;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +30,7 @@ class FlowStageConfigurationValidatorTest {
 
         verify(flowStageResolver).resolveStartEnvironment();
         verify(flowStageResolver).resolveDefaultFinalDeploymentEnvironment();
+        verify(flowStageResolver).validateProductiveEnvironmentExists();
     }
 
     @Test
@@ -46,6 +48,22 @@ class FlowStageConfigurationValidatorTest {
     }
 
     @Test
+    void abortsStartupWhenNoProductiveEnvironmentExists() {
+        FlowStageProperties properties = new FlowStageProperties();
+        when(flowStageResolver.resolveStartEnvironment()).thenReturn(new Environment("DEV"));
+        when(flowStageResolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(new Environment("REF"));
+        doThrow(new InvalidFlowStageConfigurationException("No productive environment"))
+                .when(flowStageResolver).validateProductiveEnvironmentExists();
+        FlowStageConfigurationValidator validator =
+                new FlowStageConfigurationValidator(properties, flowStageResolver);
+        DefaultApplicationArguments arguments = new DefaultApplicationArguments();
+
+        assertThatThrownBy(() -> validator.run(arguments))
+                .isInstanceOf(InvalidFlowStageConfigurationException.class)
+                .hasMessage("No productive environment");
+    }
+
+    @Test
     void skipsValidationWhenDisabled() {
         FlowStageProperties properties = new FlowStageProperties();
         properties.setEnabled(false);
@@ -55,5 +73,6 @@ class FlowStageConfigurationValidatorTest {
 
         verify(flowStageResolver, never()).resolveStartEnvironment();
         verify(flowStageResolver, never()).resolveDefaultFinalDeploymentEnvironment();
+        verify(flowStageResolver, never()).validateProductiveEnvironmentExists();
     }
 }

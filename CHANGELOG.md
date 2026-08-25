@@ -19,6 +19,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Require `componentVersion.committedAt` in the create-deployment API and database schema.
 - Resolve final deployment environments only for CODE deployments while flow processing is enabled. Requests without
   deployment types remain valid and are stored without a flow.
+- Validate at startup that at least one environment has `productive=true` whenever flow processing is enabled, also
+  when an explicit default final deployment environment is configured.
 
 ### Migration
 
@@ -44,10 +46,12 @@ Before upgrading the DeploymentLog service to 12.0.0:
    FROM component_version
    WHERE committed_at IS NULL;
    ```
-5. Ensure the database contains exactly one start environment (`development=true`) and one default target environment
-   (`productive=true`), or configure both explicitly with `jeap.deploymentlog.flow.start-environment` and
-   `jeap.deploymentlog.flow.default-final-deployment-environment`. Invalid enabled flow configuration aborts startup.
-   Set `jeap.deploymentlog.flow.enabled=false` to start the service without flow processing during migration.
+5. Ensure the database contains at least one productive environment (`productive=true`). If no explicit defaults are
+   configured, exactly one start environment (`development=true`) and exactly one productive environment are required
+   as fallbacks. Explicit stages can be configured with `jeap.deploymentlog.flow.start-environment` and
+   `jeap.deploymentlog.flow.default-final-deployment-environment`, but an explicit final environment does not replace
+   the requirement for a productive environment. Invalid enabled flow configuration aborts startup. Set
+   `jeap.deploymentlog.flow.enabled=false` to start the service without flow processing during migration.
 
 Version 12.0.0 rejects create-deployment requests without a valid `componentVersion.committedAt` with HTTP 400. Its
 Flyway migration adds a `NOT NULL` constraint to `component_version.committed_at` and intentionally provides no

@@ -82,9 +82,12 @@ Prefix `jeap.deploymentlog.flow`.
 | `start-environment`                    | —       | Explicit start environment. If unset, exactly one persisted environment with `development=true` is required. |
 | `default-final-deployment-environment` | —       | Explicit default target environment. If unset, exactly one persisted environment with `productive=true` is required. |
 
-With flow processing enabled, both effective stages must resolve when the application starts. A blank or unknown
-explicit environment, no matching fallback environment, or multiple matching fallback environments aborts startup.
-Set `enabled=false` to run without flow creation and lifecycle processing; deployment recording remains available.
+With flow processing enabled, both effective stages must resolve and at least one persisted environment must have
+`productive=true` when the application starts. An explicitly configured default final environment may be
+non-productive, but it does not replace this requirement: productive deployments trigger the abortion of older open
+flows. A blank or unknown explicit environment, no productive environment, no matching fallback environment, or
+multiple matching fallback environments aborts startup. Set `enabled=false` to run without flow creation and lifecycle
+processing; deployment recording remains available.
 
 ## Scheduled jobs
 
