@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [12.0.0] - 2026-08-21
+## [12.0.0] - 2026-08-25
 
 ### Added
 - Add configurable start and default final environments for version flows.
@@ -27,7 +27,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Before upgrading the DeploymentLog service to 12.0.0:
 
 1. Update every deployment client and pipeline to provide the authoritative commit timestamp in
-   `componentVersion.committedAt`. Deploy these client changes before upgrading the DeploymentLog service.
+   `componentVersion.committedAt`. Clients participating in flow tracking must additionally send `CODE` in
+   `deploymentTypes`; requests without `CODE` continue to be stored, but do not create or advance a flow. Deploy these
+   client changes before upgrading the DeploymentLog service.
 2. Check the existing database for component versions without a commit timestamp:
 
    ```sql
@@ -46,16 +48,25 @@ Before upgrading the DeploymentLog service to 12.0.0:
    FROM component_version
    WHERE committed_at IS NULL;
    ```
-5. Ensure the database contains at least one productive environment (`productive=true`). If no explicit defaults are
+5. Ensure the database contains at least one productive environment (`productive=true`). If no explicit stages are
    configured, exactly one start environment (`development=true`) and exactly one productive environment are required
    as fallbacks. Explicit stages can be configured with `jeap.deploymentlog.flow.start-environment` and
-   `jeap.deploymentlog.flow.default-final-deployment-environment`, but an explicit final environment does not replace
-   the requirement for a productive environment. Invalid enabled flow configuration aborts startup. Set
-   `jeap.deploymentlog.flow.enabled=false` to start the service without flow processing during migration.
+   `jeap.deploymentlog.flow.default-final-deployment-environment`; both names must reference existing environments.
+   An explicit final environment does not replace the requirement for at least one productive environment. Invalid
+   enabled flow configuration aborts startup.
+6. Plan an appropriate database maintenance window for large installations. The migrations add the flow schema, apply
+   the `NOT NULL` constraint, and create a regular (non-concurrent) index on
+   `component_version(component_id, committed_at)` during startup.
 
 Version 12.0.0 rejects create-deployment requests without a valid `componentVersion.committedAt` with HTTP 400. Its
 Flyway migration adds a `NOT NULL` constraint to `component_version.committed_at` and intentionally provides no
-automatic fallback. The service upgrade fails during migration while historical null values remain.
+automatic fallback. The service upgrade fails during migration while historical null values remain. The feature flag
+`jeap.deploymentlog.flow.enabled=false` disables only flow creation, assignment, lifecycle processing, and flow-stage
+startup validation; it does not disable the API requirement or any Flyway migration.
+
+The migration does not create flows for historical deployments. Deployments recorded while flow processing is
+disabled also remain without a flow after the feature is enabled; there is no automatic backfill. Keep such a
+transition period short or pause CODE deployments until flow processing is enabled.
 
 ## [11.1.0] - 2026-08-24
 
