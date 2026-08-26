@@ -17,7 +17,6 @@ import org.springframework.test.context.ContextConfiguration;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -97,7 +96,7 @@ class EnvironmentRepositoryImplTest {
         // 4nd Deployment --> Environment DEV, REF, PROD, ABN --> order has to be DEV, REF, ABN, PROD
         deploymentRepository.save(TestDataFactory.createDeployment(environmentAbn, systemAMicroserviceA, ZonedDateTime.now(), deploymentTarget));
         List<Environment> environmentList4 = environmentRepository.findEnvironmentsForSystem(systemA);
-        List<String> envNameList = environmentList4.stream().map(Environment::getName).collect(Collectors.toList());
+        List<String> envNameList = environmentList4.stream().map(Environment::getName).toList();
 
         List<String> expectedList = List.of("DEV", "REF", "ABN", "PROD");
         assertEquals(expectedList, envNameList);
