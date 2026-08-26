@@ -11,6 +11,8 @@ public interface SystemRepository {
 
     Optional<System> findByNameIgnoreCase(String name);
 
+    Optional<System> findById(UUID systemId);
+
     System getById(UUID systemId);
 
     System save(System system);

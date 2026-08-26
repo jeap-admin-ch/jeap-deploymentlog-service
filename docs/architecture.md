@@ -44,6 +44,7 @@ so an instance only has to add the dependency and the configuration.
 ```mermaid
 flowchart LR
   System["System"]
+  Group["SystemGroup"]
   Alias["SystemAlias"]
   Component["Component"]
   CV["ComponentVersion"]
@@ -54,6 +55,7 @@ flowchart LR
 
   System -->|" 1..n "| Component
   System -->|" 0..n "| Alias
+  Group -->|" 0..n systems<br/>system belongs to 0..1 group "| System
   Component -->|" 1..n "| CV
   CV -->|" 1 "| Deployment
   Deployment -->|" 1 "| Env
@@ -73,7 +75,8 @@ flowchart LR
   may carry several types.
 - **`System`, `Component`, `Environment`** are created on the fly when a deployment references them for
   the first time. Environment names are upper-cased. A system can be renamed (keeping the old name as a
-  `SystemAlias`) or merged into another system.
+  `SystemAlias`) or merged into another system. Administrative `SystemGroup` records can structure systems;
+  a nullable foreign key on `System` enforces that it belongs to at most one group.
 - **`EnvironmentComponentVersionState`** holds the current state of an environment: which version of which
   component is deployed there. It is updated when a deployment is reported as `SUCCESS`, and it is what the
   system and environment query endpoints read.

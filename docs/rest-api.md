@@ -29,15 +29,18 @@ document at `/api-docs`. Both are denied by default: set `jeap.swagger.status` (
 
 ## Common status codes
 
-Beyond the codes listed per endpoint, `RestResponseExceptionHandler` maps errors uniformly. The response
-body is the plain exception message.
+Beyond the codes listed per endpoint, `RestResponseExceptionHandler` maps domain errors to HTTP status codes.
+Existing endpoints generally return the exception message as plain text. System-group errors use
+`application/problem+json` with a stable `errorCode` and a user-facing `detail`; internal exception messages are not
+exposed.
 
 | Status | Raised when                                                                                                   |
 |--------|-----------------------------------------------------------------------------------------------------------------|
-| `400`  | The deployment state cannot be applied, or a system/alias name is already taken.                                |
+| `400`  | The request is invalid, the deployment state cannot be applied, or a system/alias name is already taken.         |
 | `401`  | Missing or wrong credentials.                                                                                   |
 | `403`  | Authenticated, but the role required by the endpoint is missing.                                                |
-| `404`  | The referenced deployment, deployment page, system, component or environment does not exist.                    |
+| `404`  | The referenced deployment, deployment page, system, system group, component or environment does not exist.       |
+| `409`  | A system group already uses the requested name (case-insensitive).                                               |
 | `503`  | Jira is unavailable or rejects the service's technical user during a ready-for-deploy check.                     |
 | upstream status | An error of a synchronously called upstream system (for example Confluence when creating a blog post) is passed through with its original status. |
 
@@ -198,6 +201,41 @@ the generated pages under a page tree for the new name and deletes the old syste
 Role `deploymentlog-write`. Moves the components and the generated pages of `oldSystemName` into
 `systemName` and keeps the old name as an alias. Returns `200`, `400` if both names resolve to the same
 system, `404` if either system does not exist.
+
+## System groups
+
+System groups are administrative structure data. They do not create or move Confluence pages. Every system is
+ungrouped or belongs to exactly one group. Group responses contain the stable group `id`, its trimmed `name`, and a
+deterministically sorted `systems` array whose entries contain at least `id` and `name`. Group lists are sorted
+case-insensitively by group name and then by ID.
+
+Read operations require `deploymentlog-read` or `deploymentlog-write`; mutations require `deploymentlog-write`.
+These endpoints are part of the protected administrative `/api` surface, not the public
+`GET /api/deployment-doc/**` endpoint.
+
+| Endpoint | Success | Errors | Purpose |
+|----------|---------|--------|---------|
+| `GET /api/system-groups` | `200` | — | Lists every group in deterministic order. |
+| `GET /api/system-groups/{groupId}` | `200` | `404` unknown group | Reads one group and its assigned systems. |
+| `POST /api/system-groups` | `201` with group | `400` invalid name, `409` duplicate name | Creates a group from `{ "name": "Border Control" }`. Names are trimmed, non-empty, have no application-defined length limit and are case-insensitively unique. |
+| `PUT /api/system-groups/{groupId}` | `200` with group | `400` invalid name, `404` unknown group, `409` duplicate name | Renames a group without changing its ID or assignments. |
+| `DELETE /api/system-groups/{groupId}` | `204` | `404` unknown group | Deletes the group and removes its assignments; systems remain present and ungrouped. |
+| `PUT /api/system-groups/{groupId}/systems/{systemId}` | `204` | `404` unknown group or system | Assigns the system, atomically replacing a previous group assignment. Repeating the same assignment is idempotent. |
+| `DELETE /api/system-groups/{groupId}/systems/{systemId}` | `204` | `404` unknown group or system | Removes the assignment only when it points to this group. Repetition is idempotent. |
+
+System-group error responses follow RFC 9457 Problem Details. For example, a duplicate name returns:
+
+```json
+{
+  "title": "Conflict",
+  "status": 409,
+  "detail": "System group name already exists",
+  "errorCode": "SYSTEM_GROUP_NAME_CONFLICT"
+}
+```
+
+The API uses the stable error codes `INVALID_SYSTEM_GROUP_NAME`, `SYSTEM_GROUP_NAME_CONFLICT`,
+`SYSTEM_GROUP_NOT_FOUND`, and `SYSTEM_NOT_FOUND`.
 
 ## Environments
 

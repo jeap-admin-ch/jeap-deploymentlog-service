@@ -4,6 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.exception.*;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -14,6 +15,31 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 @RestControllerAdvice
 public class RestResponseExceptionHandler {
+
+    @ExceptionHandler(SystemGroupNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleSystemGroupNotFoundException(SystemGroupNotFoundException ex) {
+        log.warn("System group not found", ex);
+        return problem(HttpStatus.NOT_FOUND, "System group not found", "SYSTEM_GROUP_NOT_FOUND");
+    }
+
+    @ExceptionHandler(SystemNotFoundByIdException.class)
+    public ResponseEntity<ProblemDetail> handleSystemNotFoundByIdException(SystemNotFoundByIdException ex) {
+        log.warn("System not found for system group operation", ex);
+        return problem(HttpStatus.NOT_FOUND, "System not found", "SYSTEM_NOT_FOUND");
+    }
+
+    @ExceptionHandler(SystemGroupNameAlreadyExistsException.class)
+    public ResponseEntity<ProblemDetail> handleSystemGroupNameAlreadyExistsException(
+            SystemGroupNameAlreadyExistsException ex) {
+        log.warn("System group name conflict", ex);
+        return problem(HttpStatus.CONFLICT, "System group name already exists", "SYSTEM_GROUP_NAME_CONFLICT");
+    }
+
+    @ExceptionHandler(InvalidSystemGroupNameException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidSystemGroupNameException(InvalidSystemGroupNameException ex) {
+        log.warn("Invalid system group name", ex);
+        return problem(HttpStatus.BAD_REQUEST, "Invalid system group name", "INVALID_SYSTEM_GROUP_NAME");
+    }
 
     @ExceptionHandler(InvalidFlowStageRequestException.class)
     public ResponseEntity<String> handleInvalidFlowStageRequestException(InvalidFlowStageRequestException ex) {
@@ -92,5 +118,12 @@ public class RestResponseExceptionHandler {
     public ResponseEntity<String> handleSystemNameAlreadyDefinedException(SystemNameAlreadyDefinedException ex) {
         log.warn(ex.getMessage());
         return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    private static ResponseEntity<ProblemDetail> problem(HttpStatus status, String detail, String errorCode) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
+        problemDetail.setTitle(status.getReasonPhrase());
+        problemDetail.setProperty("errorCode", errorCode);
+        return ResponseEntity.status(status).body(problemDetail);
     }
 }

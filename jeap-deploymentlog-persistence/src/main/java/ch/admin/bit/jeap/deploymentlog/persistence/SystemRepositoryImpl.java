@@ -24,6 +24,11 @@ public class SystemRepositoryImpl implements SystemRepository {
     }
 
     @Override
+    public Optional<System> findById(UUID systemId) {
+        return jpaSystemRepository.findById(systemId);
+    }
+
+    @Override
     public Optional<System> findByNameIgnoreCase(String name) {
         return jpaSystemRepository.findByNameIgnoreCase(name);
     }

@@ -37,6 +37,10 @@ public class System {
             orphanRemoval = true)
     private Set<SystemAlias> aliases;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private SystemGroup systemGroup;
+
     public System(@NonNull String name) {
         this.id = UUID.randomUUID();
         this.name = name;
@@ -46,5 +50,18 @@ public class System {
 
     public void updateName(String name) {
         this.name = name;
+    }
+
+    void assignToSystemGroup(SystemGroup group) {
+        if (systemGroup == group) {
+            return;
+        }
+        if (systemGroup != null) {
+            systemGroup.removeSystem(this);
+        }
+        systemGroup = group;
+        if (group != null) {
+            group.addSystem(this);
+        }
     }
 }
