@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,7 +67,7 @@ class SystemGroupServiceTest {
         SystemGroup group = new SystemGroup("Old name");
         System system = new System("my-system");
         system.assignToSystemGroup(group);
-        when(systemGroupRepository.findById(group.getId())).thenReturn(Optional.of(group));
+        when(systemGroupRepository.findByIdForUpdate(group.getId())).thenReturn(Optional.of(group));
         when(systemGroupRepository.findByNormalizedName("new name")).thenReturn(Optional.empty());
         when(systemGroupRepository.save(group)).thenReturn(group);
 
@@ -83,7 +84,7 @@ class SystemGroupServiceTest {
         SystemGroup newGroup = new SystemGroup("New");
         System system = new System("my-system");
         system.assignToSystemGroup(oldGroup);
-        when(systemGroupRepository.findById(newGroup.getId())).thenReturn(Optional.of(newGroup));
+        when(systemGroupRepository.findByIdForUpdate(newGroup.getId())).thenReturn(Optional.of(newGroup));
         when(systemRepository.findById(system.getId())).thenReturn(Optional.of(system));
 
         systemGroupService.assignSystem(newGroup.getId(), system.getId());
@@ -95,14 +96,28 @@ class SystemGroupServiceTest {
     }
 
     @Test
+    void assignmentIsIdempotentForDifferentGroupInstanceWithSameId() {
+        SystemGroup assignedGroup = new SystemGroup("Assigned");
+        SystemGroup samePersistedGroup = mock(SystemGroup.class);
+        when(samePersistedGroup.getId()).thenReturn(assignedGroup.getId());
+        System system = new System("my-system");
+        system.assignToSystemGroup(assignedGroup);
+
+        system.assignToSystemGroup(samePersistedGroup);
+
+        assertThat(system.getSystemGroup()).isSameAs(assignedGroup);
+        assertThat(assignedGroup.getSystems()).containsExactly(system);
+    }
+
+    @Test
     void removeOnlyRemovesAssignmentToRequestedGroupAndIsIdempotent() {
         SystemGroup assignedGroup = new SystemGroup("Assigned");
         SystemGroup otherGroup = new SystemGroup("Other");
         System system = new System("my-system");
         system.assignToSystemGroup(assignedGroup);
         when(systemRepository.findById(system.getId())).thenReturn(Optional.of(system));
-        when(systemGroupRepository.findById(otherGroup.getId())).thenReturn(Optional.of(otherGroup));
-        when(systemGroupRepository.findById(assignedGroup.getId())).thenReturn(Optional.of(assignedGroup));
+        when(systemGroupRepository.findByIdForUpdate(otherGroup.getId())).thenReturn(Optional.of(otherGroup));
+        when(systemGroupRepository.findByIdForUpdate(assignedGroup.getId())).thenReturn(Optional.of(assignedGroup));
 
         systemGroupService.removeSystem(otherGroup.getId(), system.getId());
         assertThat(system.getSystemGroup()).isSameAs(assignedGroup);
@@ -114,18 +129,12 @@ class SystemGroupServiceTest {
     }
 
     @Test
-    void deleteUngroupsSystemsBeforeDeletingGroup() {
+    void deleteDelegatesToRepository() {
         SystemGroup group = new SystemGroup("Group");
-        System first = new System("first");
-        System second = new System("second");
-        first.assignToSystemGroup(group);
-        second.assignToSystemGroup(group);
-        when(systemGroupRepository.findById(group.getId())).thenReturn(Optional.of(group));
+        when(systemGroupRepository.findByIdForUpdate(group.getId())).thenReturn(Optional.of(group));
 
         systemGroupService.delete(group.getId());
 
-        assertThat(first.getSystemGroup()).isNull();
-        assertThat(second.getSystemGroup()).isNull();
         verify(systemGroupRepository).delete(group);
     }
 
@@ -133,7 +142,7 @@ class SystemGroupServiceTest {
     void associationRequiresExistingGroupAndSystem() {
         UUID unknownGroupId = UUID.randomUUID();
         UUID arbitrarySystemId = UUID.randomUUID();
-        when(systemGroupRepository.findById(unknownGroupId)).thenReturn(Optional.empty());
+        when(systemGroupRepository.findByIdForUpdate(unknownGroupId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> systemGroupService.assignSystem(unknownGroupId, arbitrarySystemId))
                 .isInstanceOf(SystemGroupNotFoundException.class);
@@ -141,7 +150,7 @@ class SystemGroupServiceTest {
         SystemGroup group = new SystemGroup("Group");
         UUID groupId = group.getId();
         UUID unknownSystemId = UUID.randomUUID();
-        when(systemGroupRepository.findById(groupId)).thenReturn(Optional.of(group));
+        when(systemGroupRepository.findByIdForUpdate(groupId)).thenReturn(Optional.of(group));
         when(systemRepository.findById(unknownSystemId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> systemGroupService.assignSystem(groupId, unknownSystemId))

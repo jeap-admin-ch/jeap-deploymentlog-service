@@ -1,6 +1,5 @@
 package ch.admin.bit.jeap.deploymentlog.web.api;
 
-import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemGroupService;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupNameDto;
@@ -9,10 +8,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +18,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,7 +34,6 @@ public class SystemGroupController {
     private final SystemGroupService systemGroupService;
 
     @GetMapping
-    @TransactionalReadReplica
     @PreAuthorize("hasAnyRole('deploymentlog-read','deploymentlog-write')")
     @Operation(summary = "List all system groups")
     @ApiResponse(responseCode = "200", description = "System groups sorted deterministically by name")
@@ -45,7 +42,6 @@ public class SystemGroupController {
     }
 
     @GetMapping("/{groupId}")
-    @TransactionalReadReplica
     @PreAuthorize("hasAnyRole('deploymentlog-read','deploymentlog-write')")
     @Operation(summary = "Get a system group by id")
     @ApiResponse(responseCode = "200", description = "System group found")
@@ -55,19 +51,21 @@ public class SystemGroupController {
     }
 
     @PostMapping
-    @Transactional
     @PreAuthorize("hasRole('deploymentlog-write')")
     @Operation(summary = "Create a system group")
     @ApiResponse(responseCode = "201", description = "System group created")
     @ApiResponse(responseCode = "400", description = "Invalid group name")
     @ApiResponse(responseCode = "409", description = "Group name already exists")
     public ResponseEntity<SystemGroupDto> create(@Valid @RequestBody SystemGroupNameDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(SystemGroupDto.of(systemGroupService.create(request.getName())));
+        SystemGroupDto group = SystemGroupDto.of(systemGroupService.create(request.getName()));
+        return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentRequest()
+                        .path("/{groupId}")
+                        .buildAndExpand(group.getId())
+                        .toUri())
+                .body(group);
     }
 
     @PutMapping("/{groupId}")
-    @Transactional
     @PreAuthorize("hasRole('deploymentlog-write')")
     @Operation(summary = "Rename a system group")
     @ApiResponse(responseCode = "200", description = "System group renamed")

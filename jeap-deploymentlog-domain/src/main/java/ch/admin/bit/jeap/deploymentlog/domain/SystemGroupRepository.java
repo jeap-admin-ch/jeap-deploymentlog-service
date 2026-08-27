@@ -10,9 +10,13 @@ public interface SystemGroupRepository {
 
     Optional<SystemGroup> findById(UUID id);
 
+    Optional<SystemGroup> findByIdWithSystems(UUID id);
+
+    Optional<SystemGroup> findByIdForUpdate(UUID id);
+
     Optional<SystemGroup> findByNormalizedName(String normalizedName);
 
-    List<SystemGroup> findAllSorted();
+    List<SystemGroup> findAllSortedWithSystems();
 
     void delete(SystemGroup systemGroup);
 }

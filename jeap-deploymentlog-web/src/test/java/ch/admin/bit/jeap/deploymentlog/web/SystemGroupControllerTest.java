@@ -32,6 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = SystemGroupController.class)
@@ -76,11 +77,14 @@ class SystemGroupControllerTest {
             return group;
         });
 
-        mockMvc.perform(post("/api/system-groups")
+        mockMvc.perform(post("/deploymentlog/api/system-groups")
+                        .contextPath("/deploymentlog")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\" Border Control \"}")
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Location",
+                        "http://localhost/deploymentlog/api/system-groups/" + group.getId()))
                 .andExpect(jsonPath("$.id").value(group.getId().toString()));
 
         mockMvc.perform(put("/api/system-groups/{groupId}", group.getId())

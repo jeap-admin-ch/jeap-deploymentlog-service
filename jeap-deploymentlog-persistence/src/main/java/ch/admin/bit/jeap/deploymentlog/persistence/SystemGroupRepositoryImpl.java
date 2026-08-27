@@ -40,13 +40,23 @@ public class SystemGroupRepositoryImpl implements SystemGroupRepository {
     }
 
     @Override
+    public Optional<SystemGroup> findByIdWithSystems(UUID id) {
+        return jpaSystemGroupRepository.findByIdWithSystems(id);
+    }
+
+    @Override
+    public Optional<SystemGroup> findByIdForUpdate(UUID id) {
+        return jpaSystemGroupRepository.findByIdForUpdate(id);
+    }
+
+    @Override
     public Optional<SystemGroup> findByNormalizedName(String normalizedName) {
         return jpaSystemGroupRepository.findByNormalizedName(normalizedName);
     }
 
     @Override
-    public List<SystemGroup> findAllSorted() {
-        return jpaSystemGroupRepository.findAllByOrderByNormalizedNameAscIdAsc();
+    public List<SystemGroup> findAllSortedWithSystems() {
+        return jpaSystemGroupRepository.findAllSortedWithSystems();
     }
 
     @Override

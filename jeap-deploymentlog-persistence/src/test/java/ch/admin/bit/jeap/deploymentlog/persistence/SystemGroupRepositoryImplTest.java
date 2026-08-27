@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.SystemGroupService;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyExistsException;
 import jakarta.persistence.EntityManager;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -32,12 +33,17 @@ class SystemGroupRepositoryImplTest {
     void persistsAndFindsGroupsInDeterministicOrder() {
         SystemGroup zebra = systemGroupService.create("Zebra");
         SystemGroup alpha = systemGroupService.create("alpha");
+        entityManager.clear();
 
-        assertThat(systemGroupRepository.findAllSorted())
+        var groups = systemGroupRepository.findAllSortedWithSystems();
+        assertThat(groups)
                 .extracting(SystemGroup::getId)
                 .containsExactly(alpha.getId(), zebra.getId());
+        assertThat(groups).allMatch(group -> Hibernate.isInitialized(group.getSystems()));
         assertThat(systemGroupRepository.findByNormalizedName("zebra"))
-                .contains(zebra);
+                .get()
+                .extracting(SystemGroup::getId)
+                .isEqualTo(zebra.getId());
     }
 
     @Test
@@ -86,6 +92,8 @@ class SystemGroupRepositoryImplTest {
         System system = systemRepository.save(new System("my-system"));
         SystemGroup group = systemGroupService.create("Group");
         systemGroupService.assignSystem(group.getId(), system.getId());
+        entityManager.flush();
+        entityManager.clear();
 
         systemGroupService.delete(group.getId());
         entityManager.flush();

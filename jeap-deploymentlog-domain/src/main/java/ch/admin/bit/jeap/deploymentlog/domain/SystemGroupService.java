@@ -5,6 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyEx
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundByIdException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,7 @@ import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SystemGroupService {
 
     private final SystemGroupRepository systemGroupRepository;
@@ -23,12 +25,14 @@ public class SystemGroupService {
     public SystemGroup create(String name) {
         SystemGroupName groupName = SystemGroupName.of(name);
         rejectDuplicateName(groupName, null);
-        return systemGroupRepository.save(new SystemGroup(groupName));
+        SystemGroup group = systemGroupRepository.save(new SystemGroup(groupName));
+        log.info("Created system group {}", group.getId());
+        return group;
     }
 
     @TransactionalReadReplica
     public List<SystemGroup> findAll() {
-        return systemGroupRepository.findAllSorted();
+        return systemGroupRepository.findAllSortedWithSystems();
     }
 
     @TransactionalReadReplica
@@ -38,41 +42,52 @@ public class SystemGroupService {
 
     @Transactional
     public SystemGroup rename(UUID groupId, String name) {
-        SystemGroup group = getExistingGroup(groupId);
+        SystemGroup group = getExistingGroupForUpdate(groupId);
         SystemGroupName groupName = SystemGroupName.of(name);
         rejectDuplicateName(groupName, groupId);
         group.rename(groupName);
-        return systemGroupRepository.save(group);
+        SystemGroup renamedGroup = systemGroupRepository.save(group);
+        log.info("Renamed system group {}", groupId);
+        return renamedGroup;
     }
 
     @Transactional
     public void delete(UUID groupId) {
-        SystemGroup group = getExistingGroup(groupId);
-        for (System system : List.copyOf(group.getSystems())) {
-            system.assignToSystemGroup(null);
-        }
+        SystemGroup group = getExistingGroupForUpdate(groupId);
         systemGroupRepository.delete(group);
+        log.info("Deleted system group {}", groupId);
     }
 
     @Transactional
     public void assignSystem(UUID groupId, UUID systemId) {
-        SystemGroup group = getExistingGroup(groupId);
+        SystemGroup group = getExistingGroupForUpdate(groupId);
         System system = getExistingSystem(systemId);
         system.assignToSystemGroup(group);
+        log.info("Assigned system {} to system group {}", systemId, groupId);
     }
 
     @Transactional
     public void removeSystem(UUID groupId, UUID systemId) {
-        SystemGroup group = getExistingGroup(groupId);
+        SystemGroup group = getExistingGroupForUpdate(groupId);
         System system = getExistingSystem(systemId);
         if (system.getSystemGroup() != null
                 && Objects.equals(system.getSystemGroup().getId(), group.getId())) {
             system.assignToSystemGroup(null);
+            log.info("Removed system {} from system group {}", systemId, groupId);
         }
     }
 
     private SystemGroup getExistingGroup(UUID groupId) {
-        return systemGroupRepository.findById(groupId)
+        return systemGroupRepository.findByIdWithSystems(groupId)
+                .orElseThrow(() -> new SystemGroupNotFoundException(groupId));
+    }
+
+    /**
+     * All group mutations acquire the lock for exactly one target group before loading or changing a system.
+     * Keeping this lock order consistent serializes delete and assignment operations without cross-group deadlocks.
+     */
+    private SystemGroup getExistingGroupForUpdate(UUID groupId) {
+        return systemGroupRepository.findByIdForUpdate(groupId)
                 .orElseThrow(() -> new SystemGroupNotFoundException(groupId));
     }
 

@@ -4,6 +4,7 @@ import lombok.*;
 
 import jakarta.persistence.*;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -54,6 +55,9 @@ public class System {
 
     void assignToSystemGroup(SystemGroup group) {
         if (systemGroup == group) {
+            return;
+        }
+        if (systemGroup != null && group != null && Objects.equals(systemGroup.getId(), group.getId())) {
             return;
         }
         if (systemGroup != null) {
