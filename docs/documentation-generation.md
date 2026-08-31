@@ -12,8 +12,8 @@ flowchart TD
   Changes["Changes"]
   Systems["Systems"]
   Group["Example Group"]
-  Components["Components MySystem"]
-  SystemDeployments["Deployments MySystem"]
+  Components["Components (MySystem)"]
+  SystemDeployments["Deployments (MySystem)"]
   Stages["Stages"]
   OverviewEnv["Deployment History Overview DEV<br/>Deployment History Overview PROD<br/>…"]
   Sys["MySystem"]
@@ -44,8 +44,8 @@ flowchart TD
 | Deployment page               | `<yyyy-MM-dd HH:mm:ss> <componentName> (<ENV>)`     | One deployment in detail, see below.                                                                                                |
 | Undeployment page             | same, plus the suffix ` (Undeploy)`                 | The removal of a component from an environment.                                                                                     |
 | System group                  | `<SystemGroupName>`, below `Systems`                 | A structural page generated only while at least one system belongs to the group.                                                     |
-| Components container          | `Components <SystemName>`, below the system page     | Reserved container for future component pages; the system overview itself remains on the system page.                               |
-| Deployments container         | `Deployments <SystemName>`, below the system page    | Parent of the system's environment, year and deployment hierarchy.                                                                  |
+| Components container          | `Components (<SystemName>)`, below the system page   | Reserved container for future component pages; the system overview itself remains on the system page.                               |
+| Deployments container         | `Deployments (<SystemName>)`, below the system page    | Parent of the system's environment, year and deployment hierarchy.                                                                  |
 | Deployment history overview   | `Deployment History Overview <ENV>`, directly below `Stages` | The recent deployments of **all** systems onto one environment, limited to `deployment-history-overview-max-time` and `deployment-history-max-show`. |
 
 Only the `Deployments` root page is created manually and configured through `root-page-id`; the generator does
@@ -102,7 +102,7 @@ flowchart TD
 ```
 
 Generating the pages for one deployment first reconciles the structural pages, then walks the deployment path —
-the grouped or ungrouped system page, its `Deployments <SystemName>` container, the environment history page, the year page,
+the grouped or ungrouped system page, its `Deployments (<SystemName>)` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. All ancestor pages are therefore
 refreshed with the same run, which is why recording a deployment also keeps the aggregated views current.
 
@@ -152,8 +152,8 @@ Because the page tree is keyed by the system name, renaming or merging a system 
 pages:
 
 - **Rename** (`POST /api/system/{oldSystemName}/migrate-to/{newSystemName}`) — the existing system page is renamed
-  by its stable page id and moved to its current group target if necessary. Its `Components <SystemName>`,
-  `Deployments <SystemName>`,
+  by its stable page id and moved to its current group target if necessary. Its `Components (<SystemName>)`,
+  `Deployments (<SystemName>)`,
   environment, year and deployment descendants are retained.
 - **Merge** (`POST /api/system/{systemName}/merge-from/{oldSystemName}`) — the deployment pages of the old
   system are moved into the grouped or ungrouped tree of the target system, and only the obsolete source system's

@@ -377,9 +377,13 @@ public class DocumentationGenerator {
                     : groupPageIds.get(system.getSystemGroup().getId());
             String systemPageId = generateSystemPage(systemParentPageId, system);
             ensureStructurePage(systemComponentsPageKey(system.getId()), systemPageId,
-                    "Components " + system.getName(), () -> EMPTY_STRUCTURE_PAGE, systemPageId, "Components");
+                    "Components (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
+                    List.of(new LegacyPageLocation(systemPageId, "Components " + system.getName()),
+                            new LegacyPageLocation(systemPageId, "Components")));
             String deploymentsPageId = ensureStructurePage(systemDeploymentsPageKey(system.getId()), systemPageId,
-                    "Deployments " + system.getName(), () -> EMPTY_STRUCTURE_PAGE, systemPageId, "Deployments");
+                    "Deployments (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
+                    List.of(new LegacyPageLocation(systemPageId, "Deployments " + system.getName()),
+                            new LegacyPageLocation(systemPageId, "Deployments")));
             systemStructures.put(system.getId(), new SystemStructure(deploymentsPageId));
         }
 
@@ -411,6 +415,17 @@ public class DocumentationGenerator {
                                        Supplier<String> contentSupplier,
                                        String legacyParentPageId,
                                        String legacyTitle) {
+        List<LegacyPageLocation> legacyLocations = legacyParentPageId == null || legacyTitle == null
+                ? List.of()
+                : List.of(new LegacyPageLocation(legacyParentPageId, legacyTitle));
+        return ensureStructurePage(structureKey, parentPageId, title, contentSupplier, legacyLocations);
+    }
+
+    private String ensureStructurePage(String structureKey,
+                                       String parentPageId,
+                                       String title,
+                                       Supplier<String> contentSupplier,
+                                       List<LegacyPageLocation> legacyLocations) {
         Optional<DocumentationStructurePage> trackedPage = documentationStructurePageRepository
                 .findByStructureKey(structureKey);
         String pageId = trackedPage.map(DocumentationStructurePage::getPageId).orElse(null);
@@ -420,9 +435,13 @@ public class DocumentationGenerator {
             pageId = confluenceAdapter.findPageByTitle(parentPageId, title).orElse(null);
             knownParentPageId = pageId == null ? null : parentPageId;
         }
-        if (pageId == null && legacyParentPageId != null && legacyTitle != null) {
-            pageId = confluenceAdapter.findPageByTitle(legacyParentPageId, legacyTitle).orElse(null);
-            knownParentPageId = pageId == null ? null : legacyParentPageId;
+        for (LegacyPageLocation legacyLocation : legacyLocations) {
+            if (pageId != null) {
+                break;
+            }
+            pageId = confluenceAdapter.findPageByTitle(
+                    legacyLocation.parentPageId(), legacyLocation.title()).orElse(null);
+            knownParentPageId = pageId == null ? null : legacyLocation.parentPageId();
         }
 
         boolean moveRequired = !Objects.equals(knownParentPageId, parentPageId);
@@ -472,6 +491,9 @@ public class DocumentationGenerator {
     }
 
     private record SystemStructure(String deploymentsPageId) {
+    }
+
+    private record LegacyPageLocation(String parentPageId, String title) {
     }
 
     private record DocumentationStructure(String stagesPageId,

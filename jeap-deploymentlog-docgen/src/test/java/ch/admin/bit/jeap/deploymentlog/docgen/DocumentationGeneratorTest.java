@@ -149,7 +149,7 @@ class DocumentationGeneratorTest {
         // then
         verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
         verify(confluenceAdapterMock).updatePageById(eq("existing-stage-page"),
-                eq(rootPageId + "/Systems/" + systemName + "/Deployments " + systemName),
+                eq(rootPageId + "/Systems/" + systemName + "/Deployments (" + systemName + ")"),
                 eq("Deployment History REF (SYSTEM A)"), any(), eq(true));
     }
 
@@ -189,7 +189,7 @@ class DocumentationGeneratorTest {
 
         // then
         verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(
-                eq(ROOT_PAGE_ID + "/Systems/" + systemName + "/Deployments " + systemName),
+                eq(ROOT_PAGE_ID + "/Systems/" + systemName + "/Deployments (" + systemName + ")"),
                 eq("Deployment History null (SYSTEM A)"), any());
         verify(confluenceAdapterMock, times(2)).movePage(anyString(), anyString());
     }
@@ -289,13 +289,13 @@ class DocumentationGeneratorTest {
 
         String systemPageId = ROOT_PAGE_ID + "/Systems/" + system.getName();
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
-                eq(systemPageId), eq("Components SYSTEM A"), any());
+                eq(systemPageId), eq("Components (SYSTEM A)"), any());
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
-                eq(systemPageId), eq("Deployments SYSTEM A"), any());
+                eq(systemPageId), eq("Deployments (SYSTEM A)"), any());
     }
 
     @Test
-    void generateAllPages_adoptsGenericSystemContainersAndRenamesThem() {
+    void generateAllPages_adoptsPreviousSystemContainerTitlesAndRenamesThem() {
         System system = new System("SYSTEM A");
         when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
         when(generatorServiceMock.createSystemPageDto(system))
@@ -304,14 +304,14 @@ class DocumentationGeneratorTest {
         lenient().doReturn(Optional.of("legacy-components-page")).when(confluenceAdapterMock)
                 .findPageByTitle(systemPageId, "Components");
         lenient().doReturn(Optional.of("legacy-deployments-page")).when(confluenceAdapterMock)
-                .findPageByTitle(systemPageId, "Deployments");
+                .findPageByTitle(systemPageId, "Deployments SYSTEM A");
 
         documentationGenerator.generateAllPages();
 
         verify(confluenceAdapterMock).updatePageById(eq("legacy-components-page"), eq(systemPageId),
-                eq("Components SYSTEM A"), any(), eq(false));
+                eq("Components (SYSTEM A)"), any(), eq(false));
         verify(confluenceAdapterMock).updatePageById(eq("legacy-deployments-page"), eq(systemPageId),
-                eq("Deployments SYSTEM A"), any(), eq(false));
+                eq("Deployments (SYSTEM A)"), any(), eq(false));
     }
 
     @Test

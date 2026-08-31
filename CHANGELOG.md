@@ -15,7 +15,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Place systems below their non-empty system group or directly below `Systems` when ungrouped. Empty or deleted group
   pages are removed only after all system pages have been reconciled to their current target. Group rename, delete,
   assignment and removal operations trigger this reconciliation asynchronously.
-- Add persistent tracking for top-level, group, per-system `Components <System>` and `Deployments <System>`, and
+- Add persistent tracking for top-level, group, per-system `Components (<System>)` and `Deployments (<System>)`, and
   global stage pages.
 
 ### Changed
@@ -23,9 +23,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Move global stage histories from the existing `_Deployment History Overview` or
   `Stages / Deployment History` intermediate page directly below `Stages` while retaining their page ids, content and
   children, then remove the obsolete intermediate page.
-- Rename or create the per-system containers as `Components <System>` and `Deployments <System>` to keep their titles
-  unique across the Confluence space. Move existing system stage pages below `<System> / Deployments <System>`; new
-  deployment pages are generated exclusively below `<System> / Deployments <System> / <Stage> / <Year>`.
+- Rename or create the per-system containers as `Components (<System>)` and `Deployments (<System>)` to keep their
+  titles unique across the Confluence space. Move existing system stage pages below
+  `<System> / Deployments (<System>)`; new deployment pages are generated exclusively below
+  `<System> / Deployments (<System>) / <Stage> / <Year>`.
 - Rename and regroup system pages by their persisted Confluence page id so their children and Confluence history are
   retained. Full and system-specific regeneration reconcile the same target structure idempotently.
 - Address systems by their unique, case-insensitively matched name instead of their internal UUID in the system-group

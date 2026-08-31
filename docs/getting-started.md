@@ -226,7 +226,7 @@ curl -u write:secret -X PUT \
 3. `GET /api/system/MySystem/component/my-component/currentVersion/DEV` returns `1.15.2` as `text/plain`.
 4. The Confluence `Deployments` root now contains `Changes`, `Systems` and `Stages`. The system is located below
    `Systems` or its assigned group, and its deployment page below
-   `<System> / Deployments <System> / <Stage> / <Year>` — see
+   `<System> / Deployments (<System>) / <Stage> / <Year>` — see
    [Documentation Generation](documentation-generation.md) for the full page tree.
 5. `GET /api/deployment-doc/my-component-dev-192` redirects (`302`) to that generated page. This endpoint
    is intentionally unauthenticated so that the link can be handed out freely.
