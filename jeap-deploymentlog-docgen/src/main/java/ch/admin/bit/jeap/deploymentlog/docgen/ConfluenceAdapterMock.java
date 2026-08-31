@@ -3,6 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Supplier;
@@ -22,6 +23,21 @@ public class ConfluenceAdapterMock implements ConfluenceAdapter {
                 ancestorId, pageName, fakePageId, content.length());
         modifiedPages.add(pageName);
         return String.valueOf(fakePageId);
+    }
+
+    @Override
+    public Optional<String> findPageByTitle(String ancestorId, String pageName) {
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean updatePageById(String pageId, String ancestorId, String pageName,
+                                  Supplier<String> contentSupplier, boolean moveRequired) {
+        contentSupplier.get();
+        log.info("Update page: pageId={} ancestorId={} pageName={} moveRequired={}",
+                pageId, ancestorId, pageName, moveRequired);
+        modifiedPages.add(pageName);
+        return true;
     }
 
     @Override

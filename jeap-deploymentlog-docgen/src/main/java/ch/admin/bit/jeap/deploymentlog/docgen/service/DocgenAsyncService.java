@@ -56,6 +56,11 @@ public class DocgenAsyncService {
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
+    public void triggerDocumentationStructureReconciliation() {
+        runLockedForSystem("documentation-structure", documentationGenerator::reconcileDocumentationStructure);
+    }
+
+    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerGenerateJiraLinksForSystem(String systemName, ZonedDateTime from, ZonedDateTime to) {
        documentationGenerator.generateJiraLinksForSystem(systemName, from, to);
     }

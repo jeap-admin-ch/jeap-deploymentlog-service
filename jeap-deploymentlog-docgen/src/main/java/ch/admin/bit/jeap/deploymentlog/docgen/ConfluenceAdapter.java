@@ -4,6 +4,7 @@ import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedExceptio
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 
+import java.util.Optional;
 import java.util.function.Supplier;
 
 @Retryable(retryFor = RequestFailedException.class,
@@ -21,6 +22,16 @@ public interface ConfluenceAdapter {
      * @return Page ID
      */
     String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, Supplier<String> contentSupplier);
+
+    Optional<String> findPageByTitle(String ancestorId, String pageName);
+
+    /**
+     * Updates a page addressed by its stable id and optionally moves it below a new ancestor.
+     *
+     * @return {@code false} when the tracked page no longer exists
+     */
+    boolean updatePageById(String pageId, String ancestorId, String pageName,
+                           Supplier<String> contentSupplier, boolean moveRequired);
 
     void movePage(String ancestorId, String contentId);
 

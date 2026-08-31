@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.System;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
@@ -16,4 +17,8 @@ interface JpaSystemRepository extends CrudRepository<System, UUID> {
 
     @Query("select system.id from System system")
     List<UUID> getAllSystemIds();
+
+    @EntityGraph(attributePaths = "systemGroup")
+    @Query("select system from System system")
+    List<System> findAllWithSystemGroup();
 }

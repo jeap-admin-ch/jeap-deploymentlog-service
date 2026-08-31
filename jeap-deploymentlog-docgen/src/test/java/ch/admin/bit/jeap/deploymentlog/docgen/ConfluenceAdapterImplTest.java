@@ -14,11 +14,15 @@ import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedExceptio
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 import static ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapterImpl.CONTENT_HASH_PROPERTY_KEY;
 import static org.apache.commons.codec.digest.DigestUtils.sha256Hex;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +37,51 @@ class ConfluenceAdapterImplTest {
     ConfluenceCustomRestClient confluenceClientImplMock;
 
     private ConfluenceAdapterImpl confluenceAdapter;
+
+    @Test
+    void findPageByTitle_returnsStablePageId() {
+        when(confluenceClientMock.getPageByTitle(SPACE_KEY, "ancestor", "title"))
+                .thenReturn("existing-page");
+
+        Optional<String> pageId = confluenceAdapter.findPageByTitle("ancestor", "title");
+
+        assertEquals(Optional.of("existing-page"), pageId);
+    }
+
+    @Test
+    void findPageByTitle_returnsEmptyWhenPageDoesNotExist() {
+        when(confluenceClientMock.getPageByTitle(SPACE_KEY, "ancestor", "title"))
+                .thenThrow(new NotFoundException());
+
+        assertEquals(Optional.empty(), confluenceAdapter.findPageByTitle("ancestor", "title"));
+    }
+
+    @Test
+    void updatePageById_movesExistingPageWithoutChangingItsId() {
+        ConfluencePage existingPage = new ConfluencePage("existing-page", "Old title", 3);
+        when(confluenceClientMock.getPageWithContentAndVersionById("existing-page")).thenReturn(existingPage);
+        when(confluenceClientMock.getPropertyByKey("existing-page", CONTENT_HASH_PROPERTY_KEY))
+                .thenReturn(sha256Hex("content"));
+
+        boolean updated = confluenceAdapter.updatePageById(
+                "existing-page", "new-parent", "New title", () -> "content", true);
+
+        assertTrue(updated);
+        verify(confluenceClientMock).updatePage(
+                eq("existing-page"), eq("new-parent"), eq("New title"), eq("content"), eq(4), anyString(), eq(true));
+    }
+
+    @Test
+    void updatePageById_signalsMissingTrackedPage() {
+        RequestFailedException exception = mock(RequestFailedException.class);
+        when(exception.getMessage()).thenReturn("request failed, response: 404");
+        when(confluenceClientMock.getPageWithContentAndVersionById("missing-page")).thenThrow(exception);
+
+        boolean updated = confluenceAdapter.updatePageById(
+                "missing-page", "parent", "title", () -> "content", false);
+
+        assertFalse(updated);
+    }
 
     @Test
     void addOrUpdatePageUnderAncestor_newPage() {

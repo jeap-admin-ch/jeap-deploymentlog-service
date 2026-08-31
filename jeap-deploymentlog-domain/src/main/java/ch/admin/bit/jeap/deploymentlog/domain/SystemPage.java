@@ -27,6 +27,9 @@ public class SystemPage {
     @Setter
     private String systemPageId;
 
+    @Setter
+    private String parentPageId;
+
     @NonNull
     @Setter
     private ZonedDateTime lastUpdatedAt;

@@ -84,9 +84,11 @@ flowchart LR
   They can be published before the deployment happens and are resolved at page-generation time — via the
   deployment-unit coordinates for artifact versions, and via the reference identifiers of the deployment
   for references.
-- **Page entities** (`DeploymentPage`, `DeploymentListPage`, `SystemPage`, `EnvironmentHistoryPage`) record
+- **Page entities** (`DeploymentPage`, `DeploymentListPage`, `SystemPage`, `EnvironmentHistoryPage` and
+  `DocumentationStructurePage`) record
   which Confluence page was generated for which entity and when. They are what makes the generation
-  idempotent and repairable.
+  idempotent and repairable. Structural tracking also records the expected parent so existing pages can be moved
+  without replacing their Confluence ids.
 
 ## Recording a deployment
 

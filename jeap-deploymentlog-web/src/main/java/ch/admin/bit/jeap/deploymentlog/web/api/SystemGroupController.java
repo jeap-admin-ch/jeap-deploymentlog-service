@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.web.api;
 
 import ch.admin.bit.jeap.deploymentlog.domain.SystemGroupService;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupNameDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,7 @@ import java.util.UUID;
 public class SystemGroupController {
 
     private final SystemGroupService systemGroupService;
+    private final DocgenAsyncService docgenAsyncService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('deploymentlog-read','deploymentlog-write')")
@@ -73,7 +75,9 @@ public class SystemGroupController {
     @ApiResponse(responseCode = "404", description = "System group not found")
     @ApiResponse(responseCode = "409", description = "Group name already exists")
     public SystemGroupDto rename(@PathVariable UUID groupId, @Valid @RequestBody SystemGroupNameDto request) {
-        return SystemGroupDto.of(systemGroupService.rename(groupId, request.getName()));
+        SystemGroupDto group = SystemGroupDto.of(systemGroupService.rename(groupId, request.getName()));
+        docgenAsyncService.triggerDocumentationStructureReconciliation();
+        return group;
     }
 
     @DeleteMapping("/{groupId}")
@@ -83,6 +87,7 @@ public class SystemGroupController {
     @ApiResponse(responseCode = "404", description = "System group not found")
     public ResponseEntity<Void> delete(@PathVariable UUID groupId) {
         systemGroupService.delete(groupId);
+        docgenAsyncService.triggerDocumentationStructureReconciliation();
         return ResponseEntity.noContent().build();
     }
 
@@ -93,6 +98,7 @@ public class SystemGroupController {
     @ApiResponse(responseCode = "404", description = "System group or system not found")
     public ResponseEntity<Void> assignSystem(@PathVariable UUID groupId, @PathVariable UUID systemId) {
         systemGroupService.assignSystem(groupId, systemId);
+        docgenAsyncService.triggerDocumentationStructureReconciliation();
         return ResponseEntity.noContent().build();
     }
 
@@ -103,6 +109,7 @@ public class SystemGroupController {
     @ApiResponse(responseCode = "404", description = "System group or system not found")
     public ResponseEntity<Void> removeSystem(@PathVariable UUID groupId, @PathVariable UUID systemId) {
         systemGroupService.removeSystem(groupId, systemId);
+        docgenAsyncService.triggerDocumentationStructureReconciliation();
         return ResponseEntity.noContent().build();
     }
 }

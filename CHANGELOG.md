@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [13.0.0] - 2026-08-31
+
+### Added
+
+- Generate `Changes`, `Systems` and `Stages` directly below the configured `Deployments` root page. The configured
+  `root-page-id` continues to identify the existing root itself; no duplicate `Deployments` child is created.
+- Place systems below their non-empty system group or directly below `Systems` when ungrouped. Empty or deleted group
+  pages are removed only after all system pages have been reconciled to their current target. Group rename, delete,
+  assignment and removal operations trigger this reconciliation asynchronously.
+- Add persistent tracking for top-level, group, per-system `Components` and `Deployments`, global deployment-history
+  and stage pages.
+
+### Changed
+
+- Move the existing global `_Deployment History Overview` page below `Stages`, rename it to `Deployment History` and
+  retain its page id, content and children. Global stage histories are generated below that page.
+- Move existing system stage pages below `<System> / Deployments`; new deployment pages are generated exclusively
+  below `<System> / Deployments / <Stage> / <Year>`.
+- Rename and regroup system pages by their persisted Confluence page id so their children and Confluence history are
+  retained. Full and system-specific regeneration reconcile the same target structure idempotently.
+
+### Migration
+
+Flyway creates `documentation_structure_page` and adds nullable `parent_page_id` columns to the existing system,
+environment-history and deployment-list page tracking tables. No data backfill or configuration change is required.
+After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
+pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
+`root-page-id` must continue to reference the existing `Deployments` page.
+
+
 ## [13.1.0] - 2026-09-09
 
 ### Dependencies

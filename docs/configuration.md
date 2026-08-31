@@ -43,7 +43,7 @@ startup.
 |---------------------------------------|---------|------------------------------------------------------------------------------------------------------------------|
 | `url`                                 | —       | Base URL of the Confluence instance.                                                                            |
 | `space-key`                           | —       | Key of the Confluence space the documentation is generated into.                                                |
-| `root-page-id`                        | —       | Id of the existing page below which the whole page tree is generated. Has to be created manually once.          |
+| `root-page-id`                        | —       | Id of the existing `Deployments` page used as the generated tree's root. No additional `Deployments` child is created. |
 | `username`                            | —       | Technical user with write permission on the page tree.                                                          |
 | `password`                            | —       | Password of the technical user. Excluded from the configuration log output.                                     |
 | `deployment-history-max-show`         | `50`    | Number of deployments listed on a deployment history page and on a deployment history overview page.            |

@@ -397,29 +397,33 @@ public class GeneratorService {
     /**
      * Persists the generated SystemPage or update the Timestamp
      */
-    public void persistSystemPage(System system, String pageId) {
+    public void persistSystemPage(System system, String pageId, String parentPageId) {
         Optional<SystemPage> systemPageOpt = systemPageRepository.findSystemPageBySystemId(system.getId());
         systemPageOpt.ifPresentOrElse(systemPage -> {
             systemPage.setLastUpdatedAt(ZonedDateTime.now());
             systemPage.setSystemPageId(pageId);
+            systemPage.setParentPageId(parentPageId);
             systemPageRepository.save(systemPage);
         }, () -> {
             SystemPage systemPage = SystemPage.builder()
                     .id(UUID.randomUUID())
                     .systemId(system.getId())
                     .systemPageId(pageId)
+                    .parentPageId(parentPageId)
                     .lastUpdatedAt(ZonedDateTime.now())
                     .build();
             systemPageRepository.save(systemPage);
         });
     }
 
-    public void persistDeploymentHistoryPage(System system, Environment environment, String pageId) {
+    public void persistDeploymentHistoryPage(System system, Environment environment, String pageId,
+                                             String parentPageId) {
         Optional<EnvironmentHistoryPage> environmentHistoryPageOpt = environmentHistoryPageRepository
                 .findEnvironmentHistoryPageBySystemIdAndEnvironmentId(system.getId(), environment.getId());
         environmentHistoryPageOpt.ifPresentOrElse(environmentHistoryPage -> {
             environmentHistoryPage.setLastUpdatedAt(ZonedDateTime.now());
             environmentHistoryPage.setPageId(pageId);
+            environmentHistoryPage.setParentPageId(parentPageId);
             environmentHistoryPageRepository.save(environmentHistoryPage);
         }, () -> {
             EnvironmentHistoryPage environmentHistoryPage = EnvironmentHistoryPage.builder()
@@ -427,19 +431,22 @@ public class GeneratorService {
                     .systemId(system.getId())
                     .environmentId(environment.getId())
                     .pageId(pageId)
+                    .parentPageId(parentPageId)
                     .lastUpdatedAt(ZonedDateTime.now())
                     .build();
             environmentHistoryPageRepository.save(environmentHistoryPage);
         });
     }
 
-    public void persistDeploymentListPage(System system, Environment environment, String pageId, int year) {
+    public void persistDeploymentListPage(System system, Environment environment, String pageId, int year,
+                                          String parentPageId) {
         Optional<DeploymentListPage> deploymentListPageOpt = deploymentListPageRepository
                 .findDeploymentListPageBySystemIdAndEnvironmentIdAndYear(system.getId(), environment.getId(), year);
 
         deploymentListPageOpt.ifPresentOrElse(deploymentListPage -> {
             deploymentListPage.setLastUpdatedAt(ZonedDateTime.now());
             deploymentListPage.setPageId(pageId);
+            deploymentListPage.setParentPageId(parentPageId);
             deploymentListPageRepository.save(deploymentListPage);
         }, () -> {
             DeploymentListPage deploymentListPage = DeploymentListPage.builder()
@@ -447,6 +454,7 @@ public class GeneratorService {
                     .systemId(system.getId())
                     .environmentId(environment.getId())
                     .pageId(pageId)
+                    .parentPageId(parentPageId)
                     .lastUpdatedAt(ZonedDateTime.now())
                     .year(year)
                     .build();

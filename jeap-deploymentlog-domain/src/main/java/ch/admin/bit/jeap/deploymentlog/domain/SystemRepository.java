@@ -19,6 +19,8 @@ public interface SystemRepository {
 
     List<System> findAll();
 
+    List<System> findAllWithSystemGroup();
+
     List<UUID> getAllSystemIds();
 
     void delete(System system);

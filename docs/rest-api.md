@@ -209,10 +209,14 @@ system, `404` if either system does not exist.
 
 ## System groups
 
-System groups are administrative structure data. They do not create or move Confluence pages. Every system is
-ungrouped or belongs to exactly one group. Group responses contain the stable group `id`, its trimmed `name`, and a
-deterministically sorted `systems` array whose entries contain at least `id` and `name`. Group lists are sorted
-case-insensitively by group name and then by ID.
+System groups are administrative structure data. Every system is ungrouped or belongs to exactly one group. Group
+responses contain the stable group `id`, its trimmed `name`, and a deterministically sorted `systems` array whose
+entries contain at least `id` and `name`. Group lists are sorted case-insensitively by group name and then by ID.
+
+Renaming or deleting a group and assigning or removing a system triggers Confluence structure reconciliation
+asynchronously after the domain change. The API response does not wait for Confluence; failures are handled by the
+existing Docgen error path and can be repaired by regeneration. Creating an empty group does not create a Confluence
+page because only non-empty groups are represented.
 
 Read operations require `deploymentlog-read` or `deploymentlog-write`; mutations require `deploymentlog-write`.
 These endpoints are part of the protected administrative `/api` surface, not the public

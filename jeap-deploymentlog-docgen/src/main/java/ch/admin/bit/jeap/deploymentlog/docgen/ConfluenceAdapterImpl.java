@@ -11,6 +11,7 @@ import org.sahli.asciidoc.confluence.publisher.client.http.RequestFailedExceptio
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -51,6 +52,41 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         }
 
         return contentId;
+    }
+
+    @Override
+    public Optional<String> findPageByTitle(String ancestorId, String pageName) {
+        try {
+            return Optional.of(confluenceClient.getPageByTitle(props.getSpaceKey(), ancestorId, pageName));
+        } catch (NotFoundException ex) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public boolean updatePageById(String pageId, String ancestorId, String pageName,
+                                  Supplier<String> contentSupplier, boolean moveRequired) {
+        try {
+            ConfluencePage existingPage = confluenceClient.getPageWithContentAndVersionById(pageId);
+            String existingContentHash = confluenceClient.getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
+            String content = contentSupplier.get();
+            if (moveRequired || notSameHash(existingContentHash, hash(content))
+                    || !existingPage.getTitle().equals(pageName)) {
+                String updatedContent = updatePageWithRetryOnConflict(pageId, ancestorId, pageName, content,
+                        existingPage, page -> contentSupplier.get());
+                if (existingContentHash != null) {
+                    confluenceClient.deletePropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY);
+                }
+                confluenceClient.setPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY, hash(updatedContent));
+            }
+            return true;
+        } catch (RequestFailedException ex) {
+            if (isNotFound(ex)) {
+                log.info("Tracked page {} no longer exists", pageId);
+                return false;
+            }
+            throw ex;
+        }
     }
 
     @Override

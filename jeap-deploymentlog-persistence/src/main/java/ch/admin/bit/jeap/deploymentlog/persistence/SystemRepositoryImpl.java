@@ -45,6 +45,11 @@ public class SystemRepositoryImpl implements SystemRepository {
     }
 
     @Override
+    public List<System> findAllWithSystemGroup() {
+        return jpaSystemRepository.findAllWithSystemGroup();
+    }
+
+    @Override
     public List<UUID> getAllSystemIds() {
         return jpaSystemRepository.getAllSystemIds();
     }

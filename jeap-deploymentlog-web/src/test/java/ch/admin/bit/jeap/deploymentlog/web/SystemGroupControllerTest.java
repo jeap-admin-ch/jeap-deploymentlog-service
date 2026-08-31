@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidSystemGroupNameEx
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyExistsException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundByIdException;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.web.api.SystemGroupController;
 import ch.admin.bit.jeap.deploymentlog.web.config.WebSecurityConfig;
 import ch.admin.bit.jeap.security.resource.properties.ResourceServerProperties;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -44,6 +46,8 @@ class SystemGroupControllerTest {
     private MockMvc mockMvc;
     @MockitoBean
     private SystemGroupService systemGroupService;
+    @MockitoBean
+    private DocgenAsyncService docgenAsyncService;
 
     @Test
     void readerCanListAndReadGroups() throws Exception {
@@ -107,6 +111,7 @@ class SystemGroupControllerTest {
         verify(systemGroupService).assignSystem(group.getId(), systemId);
         verify(systemGroupService).removeSystem(group.getId(), systemId);
         verify(systemGroupService).delete(group.getId());
+        verify(docgenAsyncService, times(4)).triggerDocumentationStructureReconciliation();
     }
 
     @Test

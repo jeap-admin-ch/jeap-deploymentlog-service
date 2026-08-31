@@ -96,9 +96,10 @@ configure them separately under `jeap.deploymentlog.documentation-generator.conf
 
 ## 3. Prepare the Confluence root page
 
-The documentation is generated **below an existing Confluence page** that has to be created manually once.
-Note its page id — it is configured as `root-page-id`. Restrict the write permissions on that page tree to
-the technical user: everything below it is generated, and manual changes are overwritten or removed.
+Create the Confluence page **Deployments** manually once and configure its page id as `root-page-id`. The generator
+uses that page itself as its root and creates `Changes`, `Systems` and `Stages` directly below it; it does not create
+a second `Deployments` page. Restrict the write permissions on that page tree to the technical user: everything below
+the configured root is generated, and manual changes are overwritten or removed.
 
 ## 4. Prepare the database
 
@@ -223,8 +224,9 @@ curl -u write:secret -X PUT \
    including its state.
 2. `GET /api/system/MySystem` returns the component with its version per environment.
 3. `GET /api/system/MySystem/component/my-component/currentVersion/DEV` returns `1.15.2` as `text/plain`.
-4. The Confluence root page now has a child page named after the system, containing the deployment history
-   and the deployment page — see [Documentation Generation](documentation-generation.md) for the page tree.
+4. The Confluence `Deployments` root now contains `Changes`, `Systems` and `Stages`. The system is located below
+   `Systems` or its assigned group, and its deployment page below `<System> / Deployments / <Stage> / <Year>` — see
+   [Documentation Generation](documentation-generation.md) for the full page tree.
 5. `GET /api/deployment-doc/my-component-dev-192` redirects (`302`) to that generated page. This endpoint
    is intentionally unauthenticated so that the link can be handed out freely.
 

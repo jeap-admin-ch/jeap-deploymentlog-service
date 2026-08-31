@@ -30,6 +30,9 @@ public class EnvironmentHistoryPage {
     @Setter
     private String pageId;
 
+    @Setter
+    private String parentPageId;
+
     @NonNull
     @Setter
     private ZonedDateTime lastUpdatedAt;

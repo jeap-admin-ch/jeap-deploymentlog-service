@@ -142,6 +142,18 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void triggerDocumentationStructureReconciliation() {
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+
+        docgenAsyncService.triggerDocumentationStructureReconciliation();
+
+        verify(documentationGenerator, timeout(Duration.ofSeconds(10).toMillis()))
+                .reconcileDocumentationStructure();
+        verify(simpleLockMock).unlock();
+        await().until(this::asyncTaskExecutorIsDone);
+    }
+
+    @Test
     void triggerUpdateDeploymentListPages() {
         Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
         when(lockProvider.lock(any())).thenReturn(presentLock);
