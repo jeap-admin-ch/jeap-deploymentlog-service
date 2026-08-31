@@ -5,6 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.SystemGroupNameDto;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -91,24 +92,28 @@ public class SystemGroupController {
         return ResponseEntity.noContent().build();
     }
 
-    @PutMapping("/{groupId}/systems/{systemId}")
+    @PutMapping("/{groupId}/systems/{systemName}")
     @PreAuthorize("hasRole('deploymentlog-write')")
     @Operation(summary = "Assign a system to a system group, replacing a previous assignment")
     @ApiResponse(responseCode = "204", description = "System assigned")
     @ApiResponse(responseCode = "404", description = "System group or system not found")
-    public ResponseEntity<Void> assignSystem(@PathVariable UUID groupId, @PathVariable UUID systemId) {
-        systemGroupService.assignSystem(groupId, systemId);
+    public ResponseEntity<Void> assignSystem(@PathVariable UUID groupId,
+                                             @Parameter(description = "Unique system name", example = "my-system")
+                                             @PathVariable String systemName) {
+        systemGroupService.assignSystem(groupId, systemName);
         docgenAsyncService.triggerDocumentationStructureReconciliation();
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping("/{groupId}/systems/{systemId}")
+    @DeleteMapping("/{groupId}/systems/{systemName}")
     @PreAuthorize("hasRole('deploymentlog-write')")
     @Operation(summary = "Remove a system from a system group")
     @ApiResponse(responseCode = "204", description = "Assignment removed or did not exist")
     @ApiResponse(responseCode = "404", description = "System group or system not found")
-    public ResponseEntity<Void> removeSystem(@PathVariable UUID groupId, @PathVariable UUID systemId) {
-        systemGroupService.removeSystem(groupId, systemId);
+    public ResponseEntity<Void> removeSystem(@PathVariable UUID groupId,
+                                             @Parameter(description = "Unique system name", example = "my-system")
+                                             @PathVariable String systemName) {
+        systemGroupService.removeSystem(groupId, systemName);
         docgenAsyncService.triggerDocumentationStructureReconciliation();
         return ResponseEntity.noContent().build();
     }

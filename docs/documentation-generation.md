@@ -11,11 +11,10 @@ flowchart TD
   Root["Deployments<br/><i>configured root page, created manually</i>"]
   Changes["Changes"]
   Systems["Systems"]
-  Group["Border Applications"]
-  Components["Components"]
-  SystemDeployments["Deployments"]
+  Group["Example Group"]
+  Components["Components MySystem"]
+  SystemDeployments["Deployments MySystem"]
   Stages["Stages"]
-  Overview["Deployment History"]
   OverviewEnv["Deployment History Overview DEV<br/>Deployment History Overview PROD<br/>…"]
   Sys["MySystem"]
   Ungrouped["UngroupedSystem"]
@@ -32,8 +31,7 @@ flowchart TD
   Sys --> SystemDeployments
   SystemDeployments --> Hist
   Root --> Stages
-  Stages --> Overview
-  Overview --> OverviewEnv
+  Stages --> OverviewEnv
   Hist --> List
   List --> Letter
 ```
@@ -46,9 +44,9 @@ flowchart TD
 | Deployment page               | `<yyyy-MM-dd HH:mm:ss> <componentName> (<ENV>)`     | One deployment in detail, see below.                                                                                                |
 | Undeployment page             | same, plus the suffix ` (Undeploy)`                 | The removal of a component from an environment.                                                                                     |
 | System group                  | `<SystemGroupName>`, below `Systems`                 | A structural page generated only while at least one system belongs to the group.                                                     |
-| Components container          | `Components`, below the system page                  | Reserved container for future component pages; the system overview itself remains on the system page.                               |
-| Deployments container         | `Deployments`, below the system page                 | Parent of the system's environment, year and deployment hierarchy.                                                                  |
-| Deployment history overview   | `Deployment History Overview <ENV>`, below `Stages / Deployment History` | The recent deployments of **all** systems onto one environment, limited to `deployment-history-overview-max-time` and `deployment-history-max-show`. |
+| Components container          | `Components <SystemName>`, below the system page     | Reserved container for future component pages; the system overview itself remains on the system page.                               |
+| Deployments container         | `Deployments <SystemName>`, below the system page    | Parent of the system's environment, year and deployment hierarchy.                                                                  |
+| Deployment history overview   | `Deployment History Overview <ENV>`, directly below `Stages` | The recent deployments of **all** systems onto one environment, limited to `deployment-history-overview-max-time` and `deployment-history-max-show`. |
 
 Only the `Deployments` root page is created manually and configured through `root-page-id`; the generator does
 not create another page named `Deployments` below it. Everything else is generated. Grouped systems are placed
@@ -104,14 +102,15 @@ flowchart TD
 ```
 
 Generating the pages for one deployment first reconciles the structural pages, then walks the deployment path —
-the grouped or ungrouped system page, its `Deployments` container, the environment history page, the year page,
+the grouped or ungrouped system page, its `Deployments <SystemName>` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. All ancestor pages are therefore
 refreshed with the same run, which is why recording a deployment also keeps the aggregated views current.
 
 Every step is idempotent. Stable Confluence page ids and their expected parents are persisted. Existing pages are
 updated or moved by id, preserving their content, children and Confluence history; a missing tracked page is created
-again. The legacy `_Deployment History Overview` page is adopted, renamed to `Deployment History` and moved below
-`Stages` instead of being recreated.
+again. Global environment overview pages below the legacy `_Deployment History Overview` or
+`Stages / Deployment History` intermediate page are moved directly below `Stages` by their stable ids; the obsolete
+intermediate page is then deleted.
 
 The service remembers which Confluence page belongs to which deployment (and to which system, environment
 and year), together with the deployment state timestamp the page was rendered from. That record is what
@@ -153,7 +152,8 @@ Because the page tree is keyed by the system name, renaming or merging a system 
 pages:
 
 - **Rename** (`POST /api/system/{oldSystemName}/migrate-to/{newSystemName}`) — the existing system page is renamed
-  by its stable page id and moved to its current group target if necessary. Its `Components`, `Deployments`,
+  by its stable page id and moved to its current group target if necessary. Its `Components <SystemName>`,
+  `Deployments <SystemName>`,
   environment, year and deployment descendants are retained.
 - **Merge** (`POST /api/system/{systemName}/merge-from/{oldSystemName}`) — the deployment pages of the old
   system are moved into the grouped or ungrouped tree of the target system, and only the obsolete source system's

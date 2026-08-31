@@ -48,8 +48,8 @@ class SystemGroupRepositoryImplTest {
 
     @Test
     void databaseConstraintRejectsCaseInsensitiveDuplicateNames() {
-        systemGroupRepository.save(new SystemGroup("Border Control"));
-        SystemGroup duplicate = new SystemGroup("border control");
+        systemGroupRepository.save(new SystemGroup("Example Group"));
+        SystemGroup duplicate = new SystemGroup("example group");
 
         assertThatThrownBy(() -> systemGroupRepository.save(duplicate))
                 .isInstanceOf(SystemGroupNameAlreadyExistsException.class);
@@ -74,8 +74,8 @@ class SystemGroupRepositoryImplTest {
         SystemGroup first = systemGroupService.create("First");
         SystemGroup second = systemGroupService.create("Second");
 
-        systemGroupService.assignSystem(first.getId(), system.getId());
-        systemGroupService.assignSystem(second.getId(), system.getId());
+        systemGroupService.assignSystem(first.getId(), system.getName());
+        systemGroupService.assignSystem(second.getId(), system.getName());
         entityManager.flush();
         entityManager.clear();
 
@@ -91,7 +91,7 @@ class SystemGroupRepositoryImplTest {
     void deletingAGroupKeepsItsSystemsUngrouped() {
         System system = systemRepository.save(new System("my-system"));
         SystemGroup group = systemGroupService.create("Group");
-        systemGroupService.assignSystem(group.getId(), system.getId());
+        systemGroupService.assignSystem(group.getId(), system.getName());
         entityManager.flush();
         entityManager.clear();
 

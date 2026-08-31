@@ -25,7 +25,7 @@ class SystemGroupRepositoryImplUnitTest {
 
     @Test
     void translatesNormalizedNameConstraintViolation() {
-        SystemGroup group = new SystemGroup("Border Control");
+        SystemGroup group = new SystemGroup("Example Group");
         ConstraintViolationException constraintViolation = new ConstraintViolationException(
                 "Duplicate system group name",
                 new SQLException("duplicate key"),
@@ -41,7 +41,7 @@ class SystemGroupRepositoryImplUnitTest {
 
     @Test
     void preservesUnrelatedDataIntegrityViolation() {
-        SystemGroup group = new SystemGroup("Border Control");
+        SystemGroup group = new SystemGroup("Example Group");
         DataIntegrityViolationException dataIntegrityViolation =
                 new DataIntegrityViolationException("Unrelated integrity violation");
         when(jpaSystemGroupRepository.saveAndFlush(group)).thenThrow(dataIntegrityViolation);

@@ -22,8 +22,8 @@ public class RestResponseExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "System group not found", "SYSTEM_GROUP_NOT_FOUND");
     }
 
-    @ExceptionHandler(SystemNotFoundByIdException.class)
-    public ResponseEntity<ProblemDetail> handleSystemNotFoundByIdException(SystemNotFoundByIdException ex) {
+    @ExceptionHandler(SystemNotFoundForGroupException.class)
+    public ResponseEntity<ProblemDetail> handleSystemNotFoundForGroupException(SystemNotFoundForGroupException ex) {
         log.warn("System not found for system group operation", ex);
         return problem(HttpStatus.NOT_FOUND, "System not found", "SYSTEM_NOT_FOUND");
     }

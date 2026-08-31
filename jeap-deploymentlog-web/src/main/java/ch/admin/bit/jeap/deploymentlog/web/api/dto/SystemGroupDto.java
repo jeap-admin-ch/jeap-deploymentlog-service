@@ -16,7 +16,7 @@ public class SystemGroupDto {
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
     UUID id;
 
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "Border Control")
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "Example Group")
     String name;
 
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED)

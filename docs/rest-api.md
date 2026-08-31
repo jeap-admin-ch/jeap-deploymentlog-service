@@ -226,11 +226,11 @@ These endpoints are part of the protected administrative `/api` surface, not the
 |----------|---------|--------|---------|
 | `GET /api/system-groups` | `200` | — | Lists every group in deterministic order. |
 | `GET /api/system-groups/{groupId}` | `200` | `404` unknown group | Reads one group and its assigned systems. |
-| `POST /api/system-groups` | `201` with group | `400` invalid name, `409` duplicate name | Creates a group from `{ "name": "Border Control" }`. Names are trimmed, non-empty, have no application-defined length limit and are case-insensitively unique. |
+| `POST /api/system-groups` | `201` with group | `400` invalid name, `409` duplicate name | Creates a group from `{ "name": "Example Group" }`. Names are trimmed, non-empty, have no application-defined length limit and are case-insensitively unique. |
 | `PUT /api/system-groups/{groupId}` | `200` with group | `400` invalid name, `404` unknown group, `409` duplicate name | Renames a group without changing its ID or assignments. |
 | `DELETE /api/system-groups/{groupId}` | `204` | `404` unknown group | Deletes the group and removes its assignments; systems remain present and ungrouped. |
-| `PUT /api/system-groups/{groupId}/systems/{systemId}` | `204` | `404` unknown group or system | Assigns the system, atomically replacing a previous group assignment. Repeating the same assignment is idempotent. |
-| `DELETE /api/system-groups/{groupId}/systems/{systemId}` | `204` | `404` unknown group or system | Removes the assignment only when it points to this group. Repetition is idempotent. |
+| `PUT /api/system-groups/{groupId}/systems/{systemName}` | `204` | `404` unknown group or system | Assigns the case-insensitively matched system, atomically replacing a previous group assignment. Repeating the same assignment is idempotent. |
+| `DELETE /api/system-groups/{groupId}/systems/{systemName}` | `204` | `404` unknown group or system | Removes the assignment only when the case-insensitively matched system points to this group. Repetition is idempotent. |
 
 System-group error responses follow RFC 9457 Problem Details. For example, a duplicate name returns:
 

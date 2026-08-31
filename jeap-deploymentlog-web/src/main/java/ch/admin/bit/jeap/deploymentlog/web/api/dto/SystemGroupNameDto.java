@@ -8,6 +8,6 @@ import lombok.Data;
 public class SystemGroupNameDto {
 
     @NotBlank
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "Border Control")
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, example = "Example Group")
     private String name;
 }

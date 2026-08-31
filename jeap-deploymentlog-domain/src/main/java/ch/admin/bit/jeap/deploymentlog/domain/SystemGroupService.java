@@ -3,7 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.domain;
 import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyExistsException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNotFoundException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundByIdException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundForGroupException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -59,21 +59,21 @@ public class SystemGroupService {
     }
 
     @Transactional
-    public void assignSystem(UUID groupId, UUID systemId) {
+    public void assignSystem(UUID groupId, String systemName) {
         SystemGroup group = getExistingGroupForUpdate(groupId);
-        System system = getExistingSystem(systemId);
+        System system = getExistingSystem(systemName);
         system.assignToSystemGroup(group);
-        log.info("Assigned system {} to system group {}", systemId, groupId);
+        log.info("Assigned system '{}' to system group {}", systemName, groupId);
     }
 
     @Transactional
-    public void removeSystem(UUID groupId, UUID systemId) {
+    public void removeSystem(UUID groupId, String systemName) {
         SystemGroup group = getExistingGroupForUpdate(groupId);
-        System system = getExistingSystem(systemId);
+        System system = getExistingSystem(systemName);
         if (system.getSystemGroup() != null
                 && Objects.equals(system.getSystemGroup().getId(), group.getId())) {
             system.assignToSystemGroup(null);
-            log.info("Removed system {} from system group {}", systemId, groupId);
+            log.info("Removed system '{}' from system group {}", systemName, groupId);
         }
     }
 
@@ -91,9 +91,9 @@ public class SystemGroupService {
                 .orElseThrow(() -> new SystemGroupNotFoundException(groupId));
     }
 
-    private System getExistingSystem(UUID systemId) {
-        return systemRepository.findById(systemId)
-                .orElseThrow(() -> new SystemNotFoundByIdException(systemId));
+    private System getExistingSystem(String systemName) {
+        return systemRepository.findByNameIgnoreCase(systemName)
+                .orElseThrow(() -> new SystemNotFoundForGroupException(systemName));
     }
 
     private void rejectDuplicateName(SystemGroupName name, UUID ownGroupId) {

@@ -2,7 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.domain;
 
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyExistsException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNotFoundException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundByIdException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundForGroupException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidSystemGroupNameException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,22 +33,22 @@ class SystemGroupServiceTest {
 
     @Test
     void createSanitizesName() {
-        when(systemGroupRepository.findByNormalizedName("border control")).thenReturn(Optional.empty());
+        when(systemGroupRepository.findByNormalizedName("example group")).thenReturn(Optional.empty());
         when(systemGroupRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        SystemGroup group = systemGroupService.create("  Border Control  ");
+        SystemGroup group = systemGroupService.create("  Example Group  ");
 
         assertThat(group.getId()).isNotNull();
-        assertThat(group.getName()).isEqualTo("Border Control");
-        assertThat(group.getNormalizedName()).isEqualTo("border control");
+        assertThat(group.getName()).isEqualTo("Example Group");
+        assertThat(group.getNormalizedName()).isEqualTo("example group");
     }
 
     @Test
     void createRejectsCaseInsensitiveDuplicate() {
-        SystemGroup existing = new SystemGroup("Border Control");
-        when(systemGroupRepository.findByNormalizedName("border control")).thenReturn(Optional.of(existing));
+        SystemGroup existing = new SystemGroup("Example Group");
+        when(systemGroupRepository.findByNormalizedName("example group")).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> systemGroupService.create(" border CONTROL "))
+        assertThatThrownBy(() -> systemGroupService.create(" example GROUP "))
                 .isInstanceOf(SystemGroupNameAlreadyExistsException.class);
 
         verify(systemGroupRepository, never()).save(any());
@@ -85,10 +85,10 @@ class SystemGroupServiceTest {
         System system = new System("my-system");
         system.assignToSystemGroup(oldGroup);
         when(systemGroupRepository.findByIdForUpdate(newGroup.getId())).thenReturn(Optional.of(newGroup));
-        when(systemRepository.findById(system.getId())).thenReturn(Optional.of(system));
+        when(systemRepository.findByNameIgnoreCase("MY-SYSTEM")).thenReturn(Optional.of(system));
 
-        systemGroupService.assignSystem(newGroup.getId(), system.getId());
-        systemGroupService.assignSystem(newGroup.getId(), system.getId());
+        systemGroupService.assignSystem(newGroup.getId(), "MY-SYSTEM");
+        systemGroupService.assignSystem(newGroup.getId(), "MY-SYSTEM");
 
         assertThat(system.getSystemGroup()).isSameAs(newGroup);
         assertThat(oldGroup.getSystems()).isEmpty();
@@ -115,15 +115,15 @@ class SystemGroupServiceTest {
         SystemGroup otherGroup = new SystemGroup("Other");
         System system = new System("my-system");
         system.assignToSystemGroup(assignedGroup);
-        when(systemRepository.findById(system.getId())).thenReturn(Optional.of(system));
+        when(systemRepository.findByNameIgnoreCase(system.getName())).thenReturn(Optional.of(system));
         when(systemGroupRepository.findByIdForUpdate(otherGroup.getId())).thenReturn(Optional.of(otherGroup));
         when(systemGroupRepository.findByIdForUpdate(assignedGroup.getId())).thenReturn(Optional.of(assignedGroup));
 
-        systemGroupService.removeSystem(otherGroup.getId(), system.getId());
+        systemGroupService.removeSystem(otherGroup.getId(), system.getName());
         assertThat(system.getSystemGroup()).isSameAs(assignedGroup);
 
-        systemGroupService.removeSystem(assignedGroup.getId(), system.getId());
-        systemGroupService.removeSystem(assignedGroup.getId(), system.getId());
+        systemGroupService.removeSystem(assignedGroup.getId(), system.getName());
+        systemGroupService.removeSystem(assignedGroup.getId(), system.getName());
         assertThat(system.getSystemGroup()).isNull();
         assertThat(assignedGroup.getSystems()).isEmpty();
     }
@@ -141,19 +141,19 @@ class SystemGroupServiceTest {
     @Test
     void associationRequiresExistingGroupAndSystem() {
         UUID unknownGroupId = UUID.randomUUID();
-        UUID arbitrarySystemId = UUID.randomUUID();
+        String arbitrarySystemName = "arbitrary-system";
         when(systemGroupRepository.findByIdForUpdate(unknownGroupId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> systemGroupService.assignSystem(unknownGroupId, arbitrarySystemId))
+        assertThatThrownBy(() -> systemGroupService.assignSystem(unknownGroupId, arbitrarySystemName))
                 .isInstanceOf(SystemGroupNotFoundException.class);
 
         SystemGroup group = new SystemGroup("Group");
         UUID groupId = group.getId();
-        UUID unknownSystemId = UUID.randomUUID();
+        String unknownSystemName = "unknown-system";
         when(systemGroupRepository.findByIdForUpdate(groupId)).thenReturn(Optional.of(group));
-        when(systemRepository.findById(unknownSystemId)).thenReturn(Optional.empty());
+        when(systemRepository.findByNameIgnoreCase(unknownSystemName)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> systemGroupService.assignSystem(groupId, unknownSystemId))
-                .isInstanceOf(SystemNotFoundByIdException.class);
+        assertThatThrownBy(() -> systemGroupService.assignSystem(groupId, unknownSystemName))
+                .isInstanceOf(SystemNotFoundForGroupException.class);
     }
 }

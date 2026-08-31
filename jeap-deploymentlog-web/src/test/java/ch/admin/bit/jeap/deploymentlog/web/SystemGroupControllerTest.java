@@ -6,7 +6,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.SystemGroupService;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidSystemGroupNameException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNameAlreadyExistsException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemGroupNotFoundException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundByIdException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.SystemNotFoundForGroupException;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.web.api.SystemGroupController;
 import ch.admin.bit.jeap.deploymentlog.web.config.WebSecurityConfig;
@@ -51,7 +51,7 @@ class SystemGroupControllerTest {
 
     @Test
     void readerCanListAndReadGroups() throws Exception {
-        SystemGroup group = new SystemGroup("Border Control");
+        SystemGroup group = new SystemGroup("Example Group");
         System system = new System("border-system");
         group.getSystems().add(system);
         when(systemGroupService.findAll()).thenReturn(List.of(group));
@@ -61,7 +61,7 @@ class SystemGroupControllerTest {
                         .with(httpBasic("read", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(group.getId().toString()))
-                .andExpect(jsonPath("$[0].name").value("Border Control"))
+                .andExpect(jsonPath("$[0].name").value("Example Group"))
                 .andExpect(jsonPath("$[0].systems[0].id").value(system.getId().toString()))
                 .andExpect(jsonPath("$[0].systems[0].name").value("border-system"));
 
@@ -73,10 +73,10 @@ class SystemGroupControllerTest {
 
     @Test
     void writerCanCreateRenameAssignRemoveAndDelete() throws Exception {
-        SystemGroup group = new SystemGroup("Border Control");
-        UUID systemId = UUID.randomUUID();
-        when(systemGroupService.create(" Border Control ")).thenReturn(group);
-        when(systemGroupService.rename(group.getId(), "Border Applications")).thenAnswer(invocation -> {
+        SystemGroup group = new SystemGroup("Example Group");
+        String systemName = "my-system";
+        when(systemGroupService.create(" Example Group ")).thenReturn(group);
+        when(systemGroupService.rename(group.getId(), "Renamed Group")).thenAnswer(invocation -> {
             group.rename(invocation.getArgument(1));
             return group;
         });
@@ -84,7 +84,7 @@ class SystemGroupControllerTest {
         mockMvc.perform(post("/deploymentlog/api/system-groups")
                         .contextPath("/deploymentlog")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\" Border Control \"}")
+                        .content("{\"name\":\" Example Group \"}")
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location",
@@ -93,23 +93,23 @@ class SystemGroupControllerTest {
 
         mockMvc.perform(put("/api/system-groups/{groupId}", group.getId())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Border Applications\"}")
+                        .content("{\"name\":\"Renamed Group\"}")
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Border Applications"));
+                .andExpect(jsonPath("$.name").value("Renamed Group"));
 
-        mockMvc.perform(put("/api/system-groups/{groupId}/systems/{systemId}", group.getId(), systemId)
+        mockMvc.perform(put("/api/system-groups/{groupId}/systems/{systemName}", group.getId(), systemName)
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(delete("/api/system-groups/{groupId}/systems/{systemId}", group.getId(), systemId)
+        mockMvc.perform(delete("/api/system-groups/{groupId}/systems/{systemName}", group.getId(), systemName)
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/system-groups/{groupId}", group.getId())
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNoContent());
 
-        verify(systemGroupService).assignSystem(group.getId(), systemId);
-        verify(systemGroupService).removeSystem(group.getId(), systemId);
+        verify(systemGroupService).assignSystem(group.getId(), systemName);
+        verify(systemGroupService).removeSystem(group.getId(), systemName);
         verify(systemGroupService).delete(group.getId());
         verify(docgenAsyncService, times(4)).triggerDocumentationStructureReconciliation();
     }
@@ -139,12 +139,12 @@ class SystemGroupControllerTest {
 
     @Test
     void duplicateNameReturnsConflict() throws Exception {
-        when(systemGroupService.create("Border Control"))
-                .thenThrow(new SystemGroupNameAlreadyExistsException("Border Control"));
+        when(systemGroupService.create("Example Group"))
+                .thenThrow(new SystemGroupNameAlreadyExistsException("Example Group"));
 
         mockMvc.perform(post("/api/system-groups")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Border Control\"}")
+                        .content("{\"name\":\"Example Group\"}")
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
@@ -155,12 +155,12 @@ class SystemGroupControllerTest {
     @Test
     void duplicateNameOnRenameReturnsConflict() throws Exception {
         UUID groupId = UUID.randomUUID();
-        when(systemGroupService.rename(groupId, "Border Control"))
-                .thenThrow(new SystemGroupNameAlreadyExistsException("Border Control"));
+        when(systemGroupService.rename(groupId, "Example Group"))
+                .thenThrow(new SystemGroupNameAlreadyExistsException("Example Group"));
 
         mockMvc.perform(put("/api/system-groups/{groupId}", groupId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Border Control\"}")
+                        .content("{\"name\":\"Example Group\"}")
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("SYSTEM_GROUP_NAME_CONFLICT"));
@@ -182,20 +182,20 @@ class SystemGroupControllerTest {
     @Test
     void missingResourcesReturnNotFound() throws Exception {
         UUID groupId = UUID.randomUUID();
-        UUID systemId = UUID.randomUUID();
+        String systemName = "unknown-system";
         when(systemGroupService.get(groupId)).thenThrow(new SystemGroupNotFoundException(groupId));
-        doThrow(new SystemNotFoundByIdException(systemId))
-                .when(systemGroupService).assignSystem(groupId, systemId);
+        doThrow(new SystemNotFoundForGroupException(systemName))
+                .when(systemGroupService).assignSystem(groupId, systemName);
         doThrow(new SystemGroupNotFoundException(groupId))
                 .when(systemGroupService).delete(groupId);
-        doThrow(new SystemNotFoundByIdException(systemId))
-                .when(systemGroupService).removeSystem(groupId, systemId);
+        doThrow(new SystemNotFoundForGroupException(systemName))
+                .when(systemGroupService).removeSystem(groupId, systemName);
 
         mockMvc.perform(get("/api/system-groups/{groupId}", groupId)
                 .with(httpBasic("read", "secret")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("SYSTEM_GROUP_NOT_FOUND"));
-        mockMvc.perform(put("/api/system-groups/{groupId}/systems/{systemId}", groupId, systemId)
+        mockMvc.perform(put("/api/system-groups/{groupId}/systems/{systemName}", groupId, systemName)
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("SYSTEM_NOT_FOUND"));
@@ -203,7 +203,7 @@ class SystemGroupControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("SYSTEM_GROUP_NOT_FOUND"));
-        mockMvc.perform(delete("/api/system-groups/{groupId}/systems/{systemId}", groupId, systemId)
+        mockMvc.perform(delete("/api/system-groups/{groupId}/systems/{systemName}", groupId, systemName)
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("SYSTEM_NOT_FOUND"));
@@ -213,7 +213,7 @@ class SystemGroupControllerTest {
     void readerCannotMutateGroups() throws Exception {
         mockMvc.perform(post("/api/system-groups")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Border Control\"}")
+                        .content("{\"name\":\"Example Group\"}")
                         .with(httpBasic("read", "secret")))
                 .andExpect(status().isForbidden());
     }
