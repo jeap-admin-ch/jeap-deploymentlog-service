@@ -21,6 +21,8 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 public class DocgenAsyncService {
 
     private static final String SYSTEM_NAME = "systemName";
+    private static final String COMPONENT_NAME = "componentName";
+    public static final String DEPLOYMENT_ID = "deploymentId";
 
     private final DocumentationGenerator documentationGenerator;
     private final DeploymentRepository deploymentRepository;
@@ -38,15 +40,32 @@ public class DocgenAsyncService {
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocgenForUndeployment(String systemName, UUID deploymentId) {
-        locks.runIfLockAquiredBeforeTimeout(systemName, () ->
-                generateDeploymentPages(deploymentId));
+        triggerDeploymentPageGeneration(deploymentId, systemName);
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocgenForDeployment(UUID deploymentId) {
-        String systemName = deploymentRepository.getSystemNameForDeployment(deploymentId);
-        locks.runIfLockAquiredBeforeTimeout(systemName, () ->
-                generateDeploymentPages(deploymentId));
+        triggerDeploymentPageGeneration(deploymentId, null);
+    }
+
+    private void triggerDeploymentPageGeneration(UUID deploymentId, String knownSystemName) {
+        String systemName = knownSystemName;
+        String componentName = null;
+        try {
+            if (systemName == null) {
+                systemName = deploymentRepository.getSystemNameForDeployment(deploymentId);
+            }
+            componentName = deploymentRepository.getComponentNameForDeployment(deploymentId);
+            String lockedSystemName = systemName;
+            String loggedComponentName = componentName;
+            locks.runIfLockAquiredBeforeTimeout(systemName, () ->
+                    generateDeploymentPages(deploymentId, lockedSystemName, loggedComponentName));
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Failed to trigger page generation for deployment {}, system {} and component {}",
+                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                    value(COMPONENT_NAME, componentName), ex);
+        }
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
@@ -65,12 +84,12 @@ public class DocgenAsyncService {
        documentationGenerator.generateJiraLinksForSystem(systemName, from, to);
     }
 
-    private void generateDeploymentPages(UUID deploymentId) {
+    private void generateDeploymentPages(UUID deploymentId, String systemName, String componentName) {
         try {
             final GeneratedDeploymentPageDto generatedDeploymentPageDto = documentationGenerator.generateDeploymentPages(deploymentId);
             if (generatedDeploymentPageDto == null || generatedDeploymentPageDto.getDeploymentLetterPageDto() == null) {
                 errorCounter.increment();
-                log.warn("Generated deployment page data is incomplete for deployment {}. Skipping Jira issue link update.", value("deploymentId", deploymentId));
+                log.warn("Generated deployment page data is incomplete for deployment {}. Skipping Jira issue link update.", value(DEPLOYMENT_ID, deploymentId));
                 return;
             }
             Set<String> jiraIssueKeys = generatedDeploymentPageDto.getDeploymentLetterPageDto().getChangeJiraIssueKeys();
@@ -79,7 +98,9 @@ public class DocgenAsyncService {
             }
         } catch (Exception ex) {
             errorCounter.increment();
-            log.warn("Failed to generate pages for deployment {}", value("deploymentId", deploymentId), ex);
+            log.warn("Failed to generate pages for deployment {}, system {} and component {}",
+                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                    value(COMPONENT_NAME, componentName), ex);
         }
     }
 

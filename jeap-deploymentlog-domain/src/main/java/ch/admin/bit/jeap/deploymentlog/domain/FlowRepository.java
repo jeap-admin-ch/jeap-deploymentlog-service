@@ -17,5 +17,7 @@ public interface FlowRepository {
 
     Optional<Flow> findByDeploymentId(UUID deploymentId);
 
+    List<Flow> findLatestForComponent(UUID componentId, int limit);
+
     Flow save(Flow flow);
 }

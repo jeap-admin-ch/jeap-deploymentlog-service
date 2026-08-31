@@ -32,6 +32,55 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderComponentPageWithoutFlows() {
+        String content = templateRenderer.renderComponentPage(ComponentPageDto.builder()
+                .componentName("component")
+                .flowMaxShow(50)
+                .flows(List.of())
+                .build());
+
+        assertThat(content)
+                .contains("Version Flows")
+                .contains("noch keine Version Flows bekannt")
+                .doesNotContain("<table class=\"wrapped\" style=\"table-layout");
+    }
+
+    @Test
+    void renderComponentPageEscapesDynamicContentAndKeepsAttemptsAndLinksReadable() {
+        ComponentFlowDto flow = ComponentFlowDto.builder()
+                .flowId("flow-id")
+                .version("a-very-long-version<&>")
+                .versionControlUrl("https://git.example/version?a=1&b=2")
+                .bornAt("2026-08-01 10:00:00")
+                .duration(null)
+                .type("Wiederholung")
+                .state("ABORTED")
+                .targetStage("PROD<&>")
+                .deployments(List.of(
+                        ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:00:00")
+                                .stage("DEV").state("FAILURE").build(),
+                        ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:05:00")
+                                .stage("DEV").state("SUCCESS").pageId("page-123").build()))
+                .jiraIssues(List.of(JiraIssueDto.builder().key("JEAP-1")
+                        .url("https://jira.example/browse/JEAP-1").build()))
+                .evaluation("Flow durch Version next<&> überholt.")
+                .build();
+
+        String content = templateRenderer.renderComponentPage(ComponentPageDto.builder()
+                .componentName("component")
+                .flowMaxShow(50)
+                .flows(List.of(flow))
+                .build());
+
+        assertThat(content)
+                .contains("a-very-long-version&lt;&amp;&gt;")
+                .contains("PROD&lt;&amp;&gt;")
+                .contains("next&lt;&amp;&gt;")
+                .contains("ABORTED", "FAILURE", "SUCCESS", "page-123", "JEAP-1")
+                .doesNotContain("a-very-long-version<&>", "next<&>");
+    }
+
+    @Test
     void renderDeploymentHistoryPage() {
 
         DeploymentDto deploymentDto = DeploymentDto.builder()

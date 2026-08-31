@@ -91,6 +91,27 @@ class FlowRepositoryImplTest {
     }
 
     @Test
+    void findsLatestFlowsWithLimitAndDeterministicIdTieBreaker() {
+        ZonedDateTime sameBornAt = ZonedDateTime.parse("2026-08-20T12:00:00+02:00");
+        List<Flow> tiedFlows = List.of(
+                persistFlowAt("1.0.0", sameBornAt, component, dev),
+                persistFlowAt("2.0.0", sameBornAt, component, dev),
+                persistFlowAt("3.0.0", sameBornAt, component, dev));
+        persistFlowAt("older", sameBornAt.minusSeconds(1), component, dev);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<Flow> result = flowRepository.findLatestForComponent(component.getId(), 3);
+
+        List<UUID> resultIds = result.stream().map(Flow::getId).toList();
+        assertThat(resultIds).containsExactlyInAnyOrderElementsOf(tiedFlows.stream().map(Flow::getId).toList());
+        entityManager.clear();
+        assertThat(flowRepository.findLatestForComponent(component.getId(), 3))
+                .extracting(Flow::getId)
+                .containsExactlyElementsOf(resultIds);
+    }
+
+    @Test
     void findsOnlyStrictlyOlderOpenFlowsOfSameComponent() {
         ZonedDateTime winningCommit = ZonedDateTime.parse("2026-08-20T12:00:00+02:00");
         Flow older = persistFlow("9.0.0", winningCommit.minusDays(1), component, dev);
@@ -141,6 +162,17 @@ class FlowRepositoryImplTest {
                              Environment environment) {
         Deployment deployment = deploymentRepository.save(
                 deployment(versionName, committedAt, flowComponent, environment));
+        return flowRepository.save(Flow.start(FlowType.NEW, deployment, prod));
+    }
+
+    private Flow persistFlowAt(String versionName,
+                               ZonedDateTime bornAt,
+                               Component flowComponent,
+                               Environment environment) {
+        Deployment deployment = deploymentRepository.save(TestDataFactory.createDeployment(
+                environment, flowComponent, bornAt, versionName, bornAt,
+                TestDataFactory.createDeploymentTarget()));
+        deployment.getDeploymentTypes().add(DeploymentType.CODE);
         return flowRepository.save(Flow.start(FlowType.NEW, deployment, prod));
     }
 

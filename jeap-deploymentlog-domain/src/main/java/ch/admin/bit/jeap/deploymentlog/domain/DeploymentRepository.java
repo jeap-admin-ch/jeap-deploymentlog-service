@@ -40,6 +40,8 @@ public interface DeploymentRepository {
 
     String getSystemNameForDeployment(UUID deploymentId);
 
+    String getComponentNameForDeployment(UUID deploymentId);
+
     Optional<Deployment> getLastDeploymentForBusinessVersion(Component component,
                                                               Environment environment,
                                                               String versionName,

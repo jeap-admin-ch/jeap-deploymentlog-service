@@ -17,6 +17,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   assignment and removal operations trigger this reconciliation asynchronously.
 - Add persistent tracking for top-level, group, per-system `Components (<System>)` and `Deployments (<System>)`, and
   global stage pages.
+- Generate one tracked page per component directly below `Components (<System>)`, with the newest version flows
+  rendered on the component page itself. The configurable `component-flow-max-show` limit defaults to `50`; flow
+  deployments, Jira issues, effective target stages, terminal states and deterministic evaluations are included.
 
 ### Changed
 
@@ -35,7 +38,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Migration
 
 Flyway creates `documentation_structure_page` and adds nullable `parent_page_id` columns to the existing system,
-environment-history and deployment-list page tracking tables. No data backfill or configuration change is required.
+environment-history and deployment-list page tracking tables. It also creates `component_page`, keyed by the technical
+component UUID with a unique Confluence page id and its current parent page id. No data backfill or configuration
+change is required.
 After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
 pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
 `root-page-id` must continue to reference the existing `Deployments` page.

@@ -124,6 +124,14 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
     String getSystemNameForDeployment(@Param("deploymentId") UUID deploymentId);
 
     @Query("""
+            select c.name from Deployment d, ComponentVersion cv, Component c
+            where d.id = :deploymentId
+            and cv = d.componentVersion
+            and c = cv.component
+            """)
+    String getComponentNameForDeployment(@Param("deploymentId") UUID deploymentId);
+
+    @Query("""
             select d from Deployment d
             where d.componentVersion.component = :component
             and d.environment = :environment

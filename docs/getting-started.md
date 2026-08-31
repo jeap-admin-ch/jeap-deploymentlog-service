@@ -142,6 +142,7 @@ jeap:
         url: "https://confluence.example.com"
         space-key: "MYSPACE"
         root-page-id: "123456789"
+        component-flow-max-show: 50
         username: ${CONFLUENCE_USERNAME}
         password: ${CONFLUENCE_PASSWORD}
       scheduled:

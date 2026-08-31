@@ -6,6 +6,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -48,6 +49,11 @@ public class FlowRepositoryImpl implements FlowRepository {
     @Override
     public Optional<Flow> findByDeploymentId(UUID deploymentId) {
         return jpaFlowRepository.findByDeploymentId(deploymentId);
+    }
+
+    @Override
+    public List<Flow> findLatestForComponent(UUID componentId, int limit) {
+        return jpaFlowRepository.findLatestForComponent(componentId, PageRequest.of(0, limit));
     }
 
     @Override

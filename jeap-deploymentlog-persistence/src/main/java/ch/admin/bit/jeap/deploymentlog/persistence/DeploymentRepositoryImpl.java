@@ -119,6 +119,11 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
+    public String getComponentNameForDeployment(UUID deploymentId) {
+        return jpaDeploymentRepository.getComponentNameForDeployment(deploymentId);
+    }
+
+    @Override
     public Optional<Deployment> getLastDeploymentForBusinessVersion(Component component,
                                                                     Environment environment,
                                                                     String versionName,

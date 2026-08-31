@@ -47,6 +47,7 @@ public class DocumentationGenerator {
     private final EnvironmentHistoryPageRepository environmentHistoryPageRepository;
     private final DeploymentListPageRepository deploymentListPageRepository;
     private final DocumentationStructurePageRepository documentationStructurePageRepository;
+    private final ComponentPageGenerator componentPageGenerator;
 
     @Timed("deploymentlog_generate_deployment_page")
     @Transactional
@@ -62,17 +63,20 @@ public class DocumentationGenerator {
         int year = deployment.getStartedAt().getYear();
         String deploymentLetterParentPageId = generateDeploymentListPage(deploymentListParentPageId, environment, system, year);
         generateDeploymentHistoryOverviewPageForEnvironment(structure.stagesPageId(), environment, null);
-        if (deployment.getSequence() != DeploymentSequence.UNDEPLOYED) {
-            return generateDeploymentLetter(deploymentLetterParentPageId, deployment);
-        } else {
-            return generateUndeploymentLetter(deploymentLetterParentPageId, deployment);
-        }
+        GeneratedDeploymentPageDto generatedPage = deployment.getSequence() != DeploymentSequence.UNDEPLOYED
+                ? generateDeploymentLetter(deploymentLetterParentPageId, deployment)
+                : generateUndeploymentLetter(deploymentLetterParentPageId, deployment);
+        componentPageGenerator.generatePage(systemStructure.componentsPageId(),
+                deployment.getComponentVersion().getComponent());
+        return generatedPage;
     }
 
     @Transactional
     public void migrateSystem(System system) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        recursivelyGenerateDeploymentHistory(structure.systems().get(system.getId()).deploymentsPageId(), system, null);
+        SystemStructure systemStructure = structure.systems().get(system.getId());
+        componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
+        recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
         environmentRepository.findAll().forEach(environment ->
                 generateDeploymentHistoryOverviewPageForEnvironment(structure.stagesPageId(), environment, null));
     }
@@ -84,6 +88,13 @@ public class DocumentationGenerator {
 
         DocumentationStructure structure = synchronizeDocumentationStructure();
         SystemStructure targetStructure = structure.systems().get(system.getId());
+
+        documentationStructurePageRepository.findByStructureKey(systemComponentsPageKey(oldSystem.getId()))
+                .map(DocumentationStructurePage::getPageId)
+                .ifPresent(oldComponentsPageId -> componentPageGenerator.moveTrackedPages(
+                        oldComponentsPageId, targetStructure.componentsPageId()));
+        componentPageGenerator.generatePages(targetStructure.componentsPageId(), system.getComponents());
+        componentPageGenerator.generatePages(targetStructure.componentsPageId(), oldSystem.getComponents());
 
         log.info("Moving {} deployment pages of system '{}' to system '{}'", deployments.size(), oldSystem.getName(), system.getName());
         moveDeploymentPages(system, targetStructure.deploymentsPageId(), deployments);
@@ -223,8 +234,11 @@ public class DocumentationGenerator {
     @Transactional
     public void generateAllPages() {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        structure.orderedSystems().forEach(system -> recursivelyGenerateDeploymentHistory(
-                structure.systems().get(system.getId()).deploymentsPageId(), system, null));
+        structure.orderedSystems().forEach(system -> {
+            SystemStructure systemStructure = structure.systems().get(system.getId());
+            componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
+            recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
+        });
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
@@ -234,7 +248,9 @@ public class DocumentationGenerator {
     public void generateAllPagesForSystem(String systemName, Integer year) {
         System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        recursivelyGenerateDeploymentHistory(structure.systems().get(system.getId()).deploymentsPageId(), system, year);
+        SystemStructure systemStructure = structure.systems().get(system.getId());
+        componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
+        recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, year);
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
@@ -376,7 +392,7 @@ public class DocumentationGenerator {
                     ? systemsPageId
                     : groupPageIds.get(system.getSystemGroup().getId());
             String systemPageId = generateSystemPage(systemParentPageId, system);
-            ensureStructurePage(systemComponentsPageKey(system.getId()), systemPageId,
+            String componentsPageId = ensureStructurePage(systemComponentsPageKey(system.getId()), systemPageId,
                     "Components (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
                     List.of(new LegacyPageLocation(systemPageId, "Components " + system.getName()),
                             new LegacyPageLocation(systemPageId, "Components")));
@@ -384,7 +400,7 @@ public class DocumentationGenerator {
                     "Deployments (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
                     List.of(new LegacyPageLocation(systemPageId, "Deployments " + system.getName()),
                             new LegacyPageLocation(systemPageId, "Deployments")));
-            systemStructures.put(system.getId(), new SystemStructure(deploymentsPageId));
+            systemStructures.put(system.getId(), new SystemStructure(componentsPageId, deploymentsPageId));
         }
 
         removeObsoleteGroupPages(groups.keySet());
@@ -490,7 +506,7 @@ public class DocumentationGenerator {
         return SYSTEM_DEPLOYMENTS_PAGE_KEY_PREFIX + systemId;
     }
 
-    private record SystemStructure(String deploymentsPageId) {
+    private record SystemStructure(String componentsPageId, String deploymentsPageId) {
     }
 
     private record LegacyPageLocation(String parentPageId, String title) {

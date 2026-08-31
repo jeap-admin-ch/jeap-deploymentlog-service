@@ -47,6 +47,7 @@ startup.
 | `username`                            | —       | Technical user with write permission on the page tree.                                                          |
 | `password`                            | —       | Password of the technical user. Excluded from the configuration log output.                                     |
 | `deployment-history-max-show`         | `50`    | Number of deployments listed on a deployment history page and on a deployment history overview page.            |
+| `component-flow-max-show`              | `50`    | Maximum number of latest version flows rendered on each component page. Must be greater than zero; no flow data is deleted. |
 | `deployment-history-overview-max-time`| `P7D`   | Only deployments started within this duration appear on the deployment history overview pages.                  |
 | `retry-on-conflict-wait-duration`     | `PT10S` | How long to wait before re-reading the page and retrying an update that Confluence rejected as a conflict (HTTP 409). |
 | `mock-confluence-client`              | `false` | Replaces the Confluence client with a mock that generates no pages. For local development and tests only.       |

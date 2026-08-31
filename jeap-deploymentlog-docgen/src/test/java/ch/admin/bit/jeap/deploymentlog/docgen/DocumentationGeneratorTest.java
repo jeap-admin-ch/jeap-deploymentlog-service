@@ -68,6 +68,9 @@ class DocumentationGeneratorTest {
     @Mock
     DocumentationStructurePageRepository documentationStructurePageRepositoryMock;
 
+    @Mock
+    ComponentPageGenerator componentPageGeneratorMock;
+
     private DocumentationGenerator documentationGenerator;
     private final Map<String, DocumentationStructurePage> structurePages = new HashMap<>();
 
@@ -111,6 +114,45 @@ class DocumentationGeneratorTest {
 
         // then
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
+    }
+
+    @Test
+    void generateDeploymentPagesUpdatesOnlyAffectedComponentPage() {
+        System system = new System("SYSTEM A");
+        ch.admin.bit.jeap.deploymentlog.domain.Component component =
+                new ch.admin.bit.jeap.deploymentlog.domain.Component("component-a", system);
+        system.getComponents().add(component);
+        ComponentVersion componentVersion = mock(ComponentVersion.class);
+        Environment environment = new Environment("DEV");
+        Deployment deployment = mock(Deployment.class);
+        UUID deploymentId = UUID.randomUUID();
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-08-31T10:00:00+02:00");
+        when(deploymentRepositoryMock.getById(deploymentId)).thenReturn(deployment);
+        when(deployment.getEnvironment()).thenReturn(environment);
+        when(deployment.getComponentVersion()).thenReturn(componentVersion);
+        when(componentVersion.getComponent()).thenReturn(component);
+        when(deployment.getStartedAt()).thenReturn(startedAt);
+        when(deployment.getSequence()).thenReturn(DeploymentSequence.NEW);
+        when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
+        when(generatorServiceMock.createSystemPageDto(system))
+                .thenReturn(SystemPageDto.builder().name(system.getName()).build());
+        when(generatorServiceMock.createDeploymentLetterPageDto(deployment)).thenReturn(
+                ch.admin.bit.jeap.deploymentlog.docgen.model.DeploymentLetterPageDto.builder()
+                        .deploymentId(deploymentId.toString())
+                        .startedAt("2026-08-31 10:00:00")
+                        .componentName(component.getName())
+                        .environmentName(environment.getName())
+                        .state("STARTED")
+                        .sequence(DeploymentSequence.NEW.getLabel())
+                        .deploymentStateTimestamp(startedAt)
+                        .changeJiraIssueKeys(Set.of())
+                        .build());
+
+        documentationGenerator.generateDeploymentPages(deploymentId);
+
+        verify(componentPageGeneratorMock).generatePage(
+                ROOT_PAGE_ID + "/Systems/SYSTEM A/Components (SYSTEM A)", component);
+        verify(componentPageGeneratorMock, never()).generatePages(anyString(), any());
     }
 
 
@@ -192,6 +234,9 @@ class DocumentationGeneratorTest {
                 eq(ROOT_PAGE_ID + "/Systems/" + systemName + "/Deployments (" + systemName + ")"),
                 eq("Deployment History null (SYSTEM A)"), any());
         verify(confluenceAdapterMock, times(2)).movePage(anyString(), anyString());
+        verify(componentPageGeneratorMock).moveTrackedPages(
+                ROOT_PAGE_ID + "/Systems/" + oldSystemName + "/Components (" + oldSystemName + ")",
+                ROOT_PAGE_ID + "/Systems/" + systemName + "/Components (" + systemName + ")");
     }
 
     @Test
@@ -254,7 +299,8 @@ class DocumentationGeneratorTest {
                 systemPageRepositoryMock,
                 environmentHistoryPageRepositoryMock,
                 deploymentListPageRepositoryMock,
-                documentationStructurePageRepositoryMock);
+                documentationStructurePageRepositoryMock,
+                componentPageGeneratorMock);
 
         String systemName = "SYSTEM A";
         System system = new System(systemName);
@@ -292,6 +338,22 @@ class DocumentationGeneratorTest {
                 eq(systemPageId), eq("Components (SYSTEM A)"), any());
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
                 eq(systemPageId), eq("Deployments (SYSTEM A)"), any());
+    }
+
+    @Test
+    void generateAllPagesGeneratesComponentPagesBelowCurrentSystemContainer() {
+        System system = new System("SYSTEM A");
+        ch.admin.bit.jeap.deploymentlog.domain.Component component =
+                new ch.admin.bit.jeap.deploymentlog.domain.Component("component-a", system);
+        system.getComponents().add(component);
+        when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
+        when(generatorServiceMock.createSystemPageDto(system))
+                .thenReturn(SystemPageDto.builder().name(system.getName()).build());
+
+        documentationGenerator.generateAllPages();
+
+        verify(componentPageGeneratorMock).generatePages(
+                ROOT_PAGE_ID + "/Systems/SYSTEM A/Components (SYSTEM A)", system.getComponents());
     }
 
     @Test
@@ -453,6 +515,7 @@ class DocumentationGeneratorTest {
                 systemPageRepositoryMock,
                 environmentHistoryPageRepositoryMock,
                 deploymentListPageRepositoryMock,
-                documentationStructurePageRepositoryMock);
+                documentationStructurePageRepositoryMock,
+                componentPageGeneratorMock);
     }
 }

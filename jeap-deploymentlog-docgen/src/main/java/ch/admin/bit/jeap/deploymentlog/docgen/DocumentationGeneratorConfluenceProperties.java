@@ -35,6 +35,11 @@ public class DocumentationGeneratorConfluenceProperties {
     private int deploymentHistoryMaxShow = 50;
 
     /**
+     * Number of latest version flows shown on a component page.
+     */
+    private int componentFlowMaxShow = 50;
+
+    /**
      * Show deployments started after this value [duration]. Default is 7 days
      */
     private Duration deploymentHistoryOverviewMaxTime = Duration.of(7, ChronoUnit.DAYS);
@@ -50,6 +55,9 @@ public class DocumentationGeneratorConfluenceProperties {
 
     @PostConstruct
     void init() {
+        if (componentFlowMaxShow <= 0) {
+            throw new IllegalArgumentException("component-flow-max-show must be greater than zero");
+        }
         log.info("Confluence configuration: {}", this);
     }
 }
