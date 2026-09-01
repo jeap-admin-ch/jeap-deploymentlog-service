@@ -18,5 +18,4 @@ public class ComponentFlowDto {
     String targetStage;
     List<ComponentFlowDeploymentDto> deployments;
     List<JiraIssueDto> jiraIssues;
-    String evaluation;
 }

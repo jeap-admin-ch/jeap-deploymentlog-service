@@ -62,7 +62,6 @@ class ComponentPageDtoFactory {
                 .targetStage(flow.getFinalDeploymentEnvironment().getName())
                 .deployments(deployments.stream().map(this::toDeploymentDto).toList())
                 .jiraIssues(jiraIssues(deployments))
-                .evaluation(evaluation(flow))
                 .build();
     }
 
@@ -135,24 +134,6 @@ class ComponentPageDtoFactory {
             return null;
         }
         return "%02d:%02d:%02d".formatted(duration.toHours(), duration.toMinutesPart(), duration.toSecondsPart());
-    }
-
-    private String evaluation(Flow flow) {
-        String target = flow.getFinalDeploymentEnvironment().getName();
-        String typeEvaluation = switch (flow.getType()) {
-            case NEW -> "Der Flow begann auf der konfigurierten Start-Stage.";
-            case RETRY -> "Erneuter Flow für dieselbe Version.";
-            case ROLLBACK -> "Die Version war auf der Start-Stage bereits zuvor erfolgreich.";
-            case AD_HOC -> "Der Flow begann ausserhalb der konfigurierten Start-Stage.";
-        };
-        String stateEvaluation = switch (flow.getState()) {
-            case CLOSED -> "Ziel-Stage " + target + " erfolgreich erreicht.";
-            case OPEN -> "Ziel-Stage " + target + " noch nicht erfolgreich erreicht.";
-            case ABORTED -> flow.getAbortedBy() == null
-                    ? "Flow abgebrochen."
-                    : "Flow durch Version " + flow.getAbortedBy().getComponentVersion().getVersionName() + " überholt.";
-        };
-        return typeEvaluation + " " + stateEvaluation;
     }
 
     private String format(ZonedDateTime timestamp) {

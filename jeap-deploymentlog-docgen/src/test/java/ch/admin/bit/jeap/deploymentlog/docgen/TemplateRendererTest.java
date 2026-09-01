@@ -64,7 +64,6 @@ class TemplateRendererTest {
                                 .pageUrl("https://confluence.example/pages/viewpage.action?pageId=page-123").build()))
                 .jiraIssues(List.of(JiraIssueDto.builder().key("JEAP-1")
                         .url("https://jira.example/browse/JEAP-1").build()))
-                .evaluation("Flow durch Version next<&> überholt.")
                 .build();
 
         String content = templateRenderer.renderComponentPage(ComponentPageDto.builder()
@@ -76,13 +75,12 @@ class TemplateRendererTest {
         assertThat(content)
                 .contains("a-very-long-version&lt;&amp;&gt;")
                 .contains("PROD&lt;&amp;&gt;")
-                .contains("next&lt;&amp;&gt;")
                 .contains("ABORTED", "AD_HOC", "page-123", "JEAP-1")
                 .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>")
-                .contains("background-color: #ffebe6", "width: 27%")
+                .contains("background-color: #ffebe6", "width: 31%")
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
-                .doesNotContain("ri:content-id", "<strong>ABORTED</strong>", "—")
-                .doesNotContain("a-very-long-version<&>", "next<&>");
+                .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—")
+                .doesNotContain("a-very-long-version<&>");
     }
 
     @Test

@@ -5,15 +5,14 @@
     <p th:if="${component.flows.isEmpty()}">Für diese Komponente sind noch keine Version Flows bekannt.</p>
     <table class="wrapped" th:unless="${component.flows.isEmpty()}" style="table-layout: fixed; width: 100%;">
         <colgroup>
-            <col style="width: 11%;"/>
-            <col style="width: 10%;"/>
-            <col style="width: 7%;"/>
-            <col style="width: 7%;"/>
-            <col style="width: 7%;"/>
+            <col style="width: 13%;"/>
+            <col style="width: 12%;"/>
             <col style="width: 8%;"/>
-            <col style="width: 27%;"/>
-            <col style="width: 9%;"/>
-            <col style="width: 14%;"/>
+            <col style="width: 8%;"/>
+            <col style="width: 8%;"/>
+            <col style="width: 10%;"/>
+            <col style="width: 31%;"/>
+            <col style="width: 10%;"/>
         </colgroup>
         <tbody>
         <tr>
@@ -25,7 +24,6 @@
             <th>Ziel-Stage</th>
             <th>Deployments</th>
             <th>Jira Issues</th>
-            <th>Bewertung</th>
         </tr>
         <tr th:each="flow: ${component.flows}"
             th:style="${flow.state == 'ABORTED' or flow.type == 'AD_HOC'} ? 'background-color: #ffebe6;' : ''">
@@ -68,7 +66,6 @@
                     <span th:unless="${issue.url != null}" th:text="${issue.key}"></span><span th:unless="${iter.last}">, </span>
                 </th:block>
             </td>
-            <td style="overflow-wrap: anywhere;" th:text="${flow.evaluation}"></td>
         </tr>
         </tbody>
     </table>

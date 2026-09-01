@@ -81,17 +81,16 @@ system between groups needs no component-page operation because the complete sys
 
 The component page shows the latest flows ordered by `bornAt` descending and flow id descending as a deterministic
 tie-breaker. `component-flow-max-show` limits only this Confluence view; flow rows are never deleted. Each row contains
-the version, start time, stable flow type (`NEW`, `RETRY`, `ROLLBACK` or `AD_HOC`) and state, effective target stage, a
-deterministic evaluation, Jira issues and all deployment attempts in chronological order with stage and state icons.
-The type explanation is part of the evaluation. `ABORTED` and `AD_HOC` rows are highlighted. Existing deployment
-pages are linked through a stable URL containing their persisted page id; a later regeneration adds links that were
-unavailable during an earlier partial run. Jira keys come exclusively from the persisted deployment changelogs, are
-deduplicated and sorted, and are turned into ordinary links using the configured Jira base URL. Rendering never
-performs a live Jira request.
+the version, start time, stable flow type (`NEW`, `RETRY`, `ROLLBACK` or `AD_HOC`) and state, effective target stage,
+Jira issues and all deployment attempts in chronological order with stage and state icons. `ABORTED` and `AD_HOC`
+rows are highlighted. Existing deployment pages are linked through a stable URL containing their persisted page id;
+a later regeneration adds links that were unavailable during an earlier partial run. Jira keys come exclusively from
+the persisted deployment changelogs, are deduplicated and sorted, and are turned into ordinary links using the
+configured Jira base URL. Rendering never performs a live Jira request.
 
 Only a `CLOSED` flow shows its successful duration, measured from `bornAt` to the completion timestamp of the
 successful target-stage deployment. `OPEN` and `ABORTED` show no successful duration. Negative durations are treated
-as inconsistent data, logged and omitted. An aborted flow names the overtaking version when `abortedBy` is available.
+as inconsistent data, logged and omitted.
 
 ### Deployment page content
 

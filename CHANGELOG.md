@@ -20,13 +20,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generate one tracked page per component directly below `Components (<System>)`, using the system-qualified title
   `<Component> (<System>)` to avoid collisions with ArchRepo pages in the same space. The newest version flows are
   rendered on the component page itself. The configurable `component-flow-max-show` limit defaults to `50`; flow
-  deployments, Jira issues, effective target stages, terminal states and deterministic evaluations are included.
+  deployments, Jira issues, effective target stages and terminal states are included.
 
 ### Changed
 
-- Render component flow types as their stable values (`NEW`, `RETRY`, `ROLLBACK`, `AD_HOC`) and move their
-  explanations into the evaluation. Deployment attempts use Confluence status icons and stable page-id URLs, the
-  deployment column is wider, and `ABORTED` or `AD_HOC` rows are highlighted.
+- Render component flow types as their stable values (`NEW`, `RETRY`, `ROLLBACK`, `AD_HOC`) without a separate
+  evaluation column. Deployment attempts use Confluence status icons and stable page-id URLs, the deployment column
+  is wider, and `ABORTED` or `AD_HOC` rows are highlighted.
 - Move global stage histories from the existing `_Deployment History Overview` or
   `Stages / Deployment History` intermediate page directly below `Stages` while retaining their page ids, content and
   children, then remove the obsolete intermediate page.

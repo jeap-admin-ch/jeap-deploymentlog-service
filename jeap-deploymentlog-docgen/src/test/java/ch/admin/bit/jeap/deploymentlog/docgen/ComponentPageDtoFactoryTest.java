@@ -85,8 +85,6 @@ class ComponentPageDtoFactoryTest {
         assertThat(result.getJiraIssues()).extracting("key").containsExactly("ABC-1", "ABC-2");
         assertThat(result.getJiraIssues()).extracting("url").containsExactly(
                 "https://jira.example/browse/ABC-1", "https://jira.example/browse/ABC-2");
-        assertThat(result.getEvaluation()).isEqualTo(
-                "Der Flow begann auf der konfigurierten Start-Stage. Ziel-Stage PROD erfolgreich erreicht.");
     }
 
     @Test
@@ -94,23 +92,13 @@ class ComponentPageDtoFactoryTest {
         ZonedDateTime bornAt = ZonedDateTime.parse("2026-08-01T10:00:00+02:00");
         Environment prod = new Environment("PROD");
         Flow open = flow(FlowState.OPEN, FlowType.RETRY, bornAt, prod, List.of());
-        Flow aborting = mock(Flow.class);
-        ComponentVersion abortingVersion = mock(ComponentVersion.class);
-        when(aborting.getComponentVersion()).thenReturn(abortingVersion);
-        when(abortingVersion.getVersionName()).thenReturn("2.0.0");
         Flow aborted = flow(FlowState.ABORTED, FlowType.AD_HOC, bornAt.minusHours(1), prod, List.of());
-        when(aborted.getAbortedBy()).thenReturn(aborting);
         when(flowRepository.findLatestForComponent(component.getId(), 2)).thenReturn(List.of(open, aborted));
 
         ComponentPageDto page = factory.create(component);
 
         assertThat(page.getFlows()).extracting(ComponentFlowDto::getDuration).containsOnlyNulls();
         assertThat(page.getFlows()).extracting(ComponentFlowDto::getType).containsExactly("RETRY", "AD_HOC");
-        assertThat(page.getFlows().get(0).getEvaluation())
-                .isEqualTo("Erneuter Flow für dieselbe Version. Ziel-Stage PROD noch nicht erfolgreich erreicht.");
-        assertThat(page.getFlows().get(1).getEvaluation())
-                .isEqualTo("Der Flow begann ausserhalb der konfigurierten Start-Stage. "
-                        + "Flow durch Version 2.0.0 überholt.");
     }
 
     @Test
@@ -131,8 +119,6 @@ class ComponentPageDtoFactoryTest {
         ComponentPageDto page = factory.create(component);
 
         assertThat(page.getFlows().getFirst().getDuration()).isNull();
-        assertThat(page.getFlows().get(1).getEvaluation()).isEqualTo(
-                "Der Flow begann ausserhalb der konfigurierten Start-Stage. Flow abgebrochen.");
     }
 
     private Flow flow(FlowState state, FlowType type, ZonedDateTime bornAt, Environment target,
