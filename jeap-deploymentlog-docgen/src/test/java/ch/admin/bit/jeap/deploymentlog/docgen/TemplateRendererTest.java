@@ -61,7 +61,11 @@ class TemplateRendererTest {
                                 .stage("DEV").state("FAILURE").build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:05:00")
                                 .stage("DEV").state("SUCCESS")
-                                .pageUrl("https://confluence.example/pages/viewpage.action?pageId=page-123").build()))
+                                .pageUrl("https://confluence.example/pages/viewpage.action?pageId=page-123").build(),
+                        ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:10:00")
+                                .stage("REF").state("STARTED").build(),
+                        ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:15:00")
+                                .stage("REF").state("CANCELLED").build()))
                 .jiraIssues(List.of(JiraIssueDto.builder().key("JEAP-1")
                         .url("https://jira.example/browse/JEAP-1").build()))
                 .build();
@@ -76,10 +80,12 @@ class TemplateRendererTest {
                 .contains("a-very-long-version&lt;&amp;&gt;")
                 .contains("PROD&lt;&amp;&gt;")
                 .contains("ABORTED", "AD_HOC", "page-123", "JEAP-1")
-                .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>")
+                .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>",
+                        "<ac:emoticon ac:name=\"minus\"/>", "<ac:emoticon ac:name=\"question\"/>")
                 .contains("background-color: #ffebe6", "width: 31%")
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
-                .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—")
+                .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—",
+                        ">STARTED<", ">CANCELLED<")
                 .doesNotContain("a-very-long-version<&>");
     }
 

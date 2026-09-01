@@ -48,6 +48,8 @@
                             <th:block th:switch="${deployment.state}">
                                 <ac:emoticon th:case="'SUCCESS'" ac:name="tick"/>
                                 <ac:emoticon th:case="'FAILURE'" ac:name="cross"/>
+                                <ac:emoticon th:case="'CANCELLED'" ac:name="minus"/>
+                                <ac:emoticon th:case="'STARTED'" ac:name="question"/>
                                 <span th:case="*" th:text="${deployment.state}"></span>
                             </th:block>
                         </td>
