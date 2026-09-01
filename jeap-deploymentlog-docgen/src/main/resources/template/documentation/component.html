@@ -4,6 +4,17 @@
     <h2>Version Flows</h2>
     <p th:if="${component.flows.isEmpty()}">Für diese Komponente sind noch keine Version Flows bekannt.</p>
     <table class="wrapped" th:unless="${component.flows.isEmpty()}" style="table-layout: fixed; width: 100%;">
+        <colgroup>
+            <col style="width: 11%;"/>
+            <col style="width: 10%;"/>
+            <col style="width: 7%;"/>
+            <col style="width: 7%;"/>
+            <col style="width: 7%;"/>
+            <col style="width: 8%;"/>
+            <col style="width: 27%;"/>
+            <col style="width: 9%;"/>
+            <col style="width: 14%;"/>
+        </colgroup>
         <tbody>
         <tr>
             <th>Version</th>
@@ -16,7 +27,8 @@
             <th>Jira Issues</th>
             <th>Bewertung</th>
         </tr>
-        <tr th:each="flow: ${component.flows}">
+        <tr th:each="flow: ${component.flows}"
+            th:style="${flow.state == 'ABORTED' or flow.type == 'AD_HOC'} ? 'background-color: #ffebe6;' : ''">
             <td style="overflow-wrap: anywhere;">
                 <a th:if="${flow.versionControlUrl != null and !flow.versionControlUrl.isBlank()}"
                    th:href="${flow.versionControlUrl}" th:text="${flow.version}" target="_blank"></a>
@@ -24,9 +36,9 @@
                       th:text="${flow.version}"></span>
             </td>
             <td th:text="${flow.bornAt}"></td>
-            <td th:text="${flow.duration == null ? '—' : flow.duration}"></td>
+            <td th:text="${flow.duration == null ? '-' : flow.duration}"></td>
             <td th:text="${flow.type}"></td>
-            <td><strong th:text="${flow.state}"></strong></td>
+            <td th:text="${flow.state}"></td>
             <td th:text="${flow.targetStage}"></td>
             <td>
                 <table class="wrapped" style="width: 100%;">
@@ -34,20 +46,23 @@
                     <tr th:each="deployment: ${flow.deployments}">
                         <td th:text="${deployment.startedAt}"></td>
                         <td th:text="${deployment.stage}"></td>
-                        <td th:text="${deployment.state}"></td>
+                        <td style="text-align: center;">
+                            <th:block th:switch="${deployment.state}">
+                                <ac:emoticon th:case="'SUCCESS'" ac:name="tick"/>
+                                <ac:emoticon th:case="'FAILURE'" ac:name="cross"/>
+                                <span th:case="*" th:text="${deployment.state}"></span>
+                            </th:block>
+                        </td>
                         <td>
-                            <ac:link th:if="${deployment.pageId != null}">
-                                <ri:page th:ri:content-id="${deployment.pageId}"/>
-                                <ac:plain-text-link-body><![CDATA[Detail]]></ac:plain-text-link-body>
-                            </ac:link>
-                            <span th:unless="${deployment.pageId != null}">—</span>
+                            <a th:if="${deployment.pageUrl != null}" th:href="${deployment.pageUrl}">Detail</a>
+                            <span th:unless="${deployment.pageUrl != null}">-</span>
                         </td>
                     </tr>
                     </tbody>
                 </table>
             </td>
             <td>
-                <span th:if="${flow.jiraIssues.isEmpty()}">—</span>
+                <span th:if="${flow.jiraIssues.isEmpty()}">-</span>
                 <th:block th:each="issue, iter: ${flow.jiraIssues}">
                     <a th:if="${issue.url != null}" th:href="${issue.url}" th:text="${issue.key}" target="_blank"></a>
                     <span th:unless="${issue.url != null}" th:text="${issue.key}"></span><span th:unless="${iter.last}">, </span>

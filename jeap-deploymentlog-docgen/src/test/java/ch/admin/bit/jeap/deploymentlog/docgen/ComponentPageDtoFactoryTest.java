@@ -47,6 +47,7 @@ class ComponentPageDtoFactoryTest {
     void setUp() {
         confluenceProperties = new DocumentationGeneratorConfluenceProperties();
         confluenceProperties.setComponentFlowMaxShow(2);
+        confluenceProperties.setUrl("https://confluence.example");
         JiraWebClientProperties jiraProperties = new JiraWebClientProperties();
         jiraProperties.setUrl("https://jira.example");
         factory = new ComponentPageDtoFactory(flowRepository, deploymentPageRepository,
@@ -76,13 +77,16 @@ class ComponentPageDtoFactoryTest {
 
         verify(flowRepository).findLatestForComponent(component.getId(), 2);
         ComponentFlowDto result = page.getFlows().getFirst();
+        assertThat(result.getType()).isEqualTo("NEW");
         assertThat(result.getDuration()).isEqualTo("01:02:03");
         assertThat(result.getDeployments()).extracting("stage").containsExactly("DEV", "PROD");
-        assertThat(result.getDeployments()).extracting("pageId").containsExactly(null, "deployment-page");
+        assertThat(result.getDeployments()).extracting("pageUrl").containsExactly(null,
+                "https://confluence.example/pages/viewpage.action?pageId=deployment-page");
         assertThat(result.getJiraIssues()).extracting("key").containsExactly("ABC-1", "ABC-2");
         assertThat(result.getJiraIssues()).extracting("url").containsExactly(
                 "https://jira.example/browse/ABC-1", "https://jira.example/browse/ABC-2");
-        assertThat(result.getEvaluation()).isEqualTo("Ziel-Stage PROD erfolgreich erreicht.");
+        assertThat(result.getEvaluation()).isEqualTo(
+                "Der Flow begann auf der konfigurierten Start-Stage. Ziel-Stage PROD erfolgreich erreicht.");
     }
 
     @Test
@@ -101,10 +105,12 @@ class ComponentPageDtoFactoryTest {
         ComponentPageDto page = factory.create(component);
 
         assertThat(page.getFlows()).extracting(ComponentFlowDto::getDuration).containsOnlyNulls();
+        assertThat(page.getFlows()).extracting(ComponentFlowDto::getType).containsExactly("RETRY", "AD_HOC");
         assertThat(page.getFlows().get(0).getEvaluation())
-                .isEqualTo("Ziel-Stage PROD noch nicht erfolgreich erreicht.");
+                .isEqualTo("Erneuter Flow für dieselbe Version. Ziel-Stage PROD noch nicht erfolgreich erreicht.");
         assertThat(page.getFlows().get(1).getEvaluation())
-                .isEqualTo("Flow durch Version 2.0.0 überholt.");
+                .isEqualTo("Der Flow begann ausserhalb der konfigurierten Start-Stage. "
+                        + "Flow durch Version 2.0.0 überholt.");
     }
 
     @Test
@@ -125,7 +131,8 @@ class ComponentPageDtoFactoryTest {
         ComponentPageDto page = factory.create(component);
 
         assertThat(page.getFlows().getFirst().getDuration()).isNull();
-        assertThat(page.getFlows().get(1).getEvaluation()).isEqualTo("Flow abgebrochen.");
+        assertThat(page.getFlows().get(1).getEvaluation()).isEqualTo(
+                "Der Flow begann ausserhalb der konfigurierten Start-Stage. Flow abgebrochen.");
     }
 
     private Flow flow(FlowState state, FlowType type, ZonedDateTime bornAt, Environment target,

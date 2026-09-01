@@ -12,7 +12,6 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.Flow;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +57,7 @@ class ComponentPageDtoFactory {
                 .versionControlUrl(flow.getComponentVersion().getVersionControlUrl())
                 .bornAt(format(flow.getBornAt()))
                 .duration(successfulDuration(flow, deployments))
-                .type(typeText(flow.getType()))
+                .type(flow.getType().name())
                 .state(flow.getState().name())
                 .targetStage(flow.getFinalDeploymentEnvironment().getName())
                 .deployments(deployments.stream().map(this::toDeploymentDto).toList())
@@ -68,15 +67,27 @@ class ComponentPageDtoFactory {
     }
 
     private ComponentFlowDeploymentDto toDeploymentDto(Deployment deployment) {
-        String pageId = deploymentPageRepository.findDeploymentPageByDeploymentId(deployment.getId())
-                .map(page -> page.getPageId())
+        String pageUrl = deploymentPageRepository.findDeploymentPageByDeploymentId(deployment.getId())
+                .map(page -> deploymentPageUrl(page.getPageId()))
                 .orElse(null);
         return ComponentFlowDeploymentDto.builder()
                 .startedAt(format(deployment.getStartedAt()))
                 .stage(deployment.getEnvironment().getName())
                 .state(deployment.getState().name())
-                .pageId(pageId)
+                .pageUrl(pageUrl)
                 .build();
+    }
+
+    private String deploymentPageUrl(String pageId) {
+        if (pageId == null || pageId.isBlank()) {
+            return null;
+        }
+        String confluenceUrl = confluenceProperties.getUrl();
+        if (confluenceUrl == null || confluenceUrl.isBlank()) {
+            return null;
+        }
+        return (confluenceUrl.endsWith("/") ? confluenceUrl : confluenceUrl + "/")
+                + "pages/viewpage.action?pageId=" + pageId;
     }
 
     private List<JiraIssueDto> jiraIssues(List<Deployment> deployments) {
@@ -128,22 +139,20 @@ class ComponentPageDtoFactory {
 
     private String evaluation(Flow flow) {
         String target = flow.getFinalDeploymentEnvironment().getName();
-        return switch (flow.getState()) {
+        String typeEvaluation = switch (flow.getType()) {
+            case NEW -> "Der Flow begann auf der konfigurierten Start-Stage.";
+            case RETRY -> "Erneuter Flow für dieselbe Version.";
+            case ROLLBACK -> "Die Version war auf der Start-Stage bereits zuvor erfolgreich.";
+            case AD_HOC -> "Der Flow begann ausserhalb der konfigurierten Start-Stage.";
+        };
+        String stateEvaluation = switch (flow.getState()) {
             case CLOSED -> "Ziel-Stage " + target + " erfolgreich erreicht.";
             case OPEN -> "Ziel-Stage " + target + " noch nicht erfolgreich erreicht.";
             case ABORTED -> flow.getAbortedBy() == null
                     ? "Flow abgebrochen."
                     : "Flow durch Version " + flow.getAbortedBy().getComponentVersion().getVersionName() + " überholt.";
         };
-    }
-
-    private String typeText(FlowType type) {
-        return switch (type) {
-            case NEW -> "Neu ab Start-Stage";
-            case RETRY -> "Wiederholung";
-            case ROLLBACK -> "Bereits zuvor erfolgreich eingesetzte Version";
-            case AD_HOC -> "Start ausserhalb der Start-Stage";
-        };
+        return typeEvaluation + " " + stateEvaluation;
     }
 
     private String format(ZonedDateTime timestamp) {

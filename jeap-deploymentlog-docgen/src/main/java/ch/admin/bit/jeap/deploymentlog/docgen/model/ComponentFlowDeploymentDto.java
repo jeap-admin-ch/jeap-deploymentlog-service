@@ -9,5 +9,5 @@ public class ComponentFlowDeploymentDto {
     String startedAt;
     String stage;
     String state;
-    String pageId;
+    String pageUrl;
 }
