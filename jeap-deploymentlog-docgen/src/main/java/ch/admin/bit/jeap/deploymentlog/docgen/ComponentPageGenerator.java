@@ -28,9 +28,10 @@ public class ComponentPageGenerator {
     @Transactional
     public String generatePage(String componentsParentPageId, Component component) {
         componentRepository.lockById(component.getId());
+        String pageTitle = pageTitle(component);
         Optional<ComponentPage> trackedPage = componentPageRepository.findByComponentId(component.getId());
         String pageId = trackedPage.map(ComponentPage::getPageId)
-                .or(() -> confluenceAdapter.findPageByTitle(componentsParentPageId, component.getName()))
+                .or(() -> confluenceAdapter.findPageByTitle(componentsParentPageId, pageTitle))
                 .orElse(null);
         boolean moveRequired = trackedPage.map(ComponentPage::getParentPageId)
                 .map(parent -> !Objects.equals(parent, componentsParentPageId))
@@ -39,9 +40,9 @@ public class ComponentPageGenerator {
 
         try {
             if (pageId == null || !confluenceAdapter.updatePageById(
-                    pageId, componentsParentPageId, component.getName(), content, moveRequired)) {
+                    pageId, componentsParentPageId, pageTitle, content, moveRequired)) {
                 pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(
-                        componentsParentPageId, component.getName(), content);
+                        componentsParentPageId, pageTitle, content);
             }
 
             ComponentPage componentPage = trackedPage.orElse(null);
@@ -56,6 +57,10 @@ public class ComponentPageGenerator {
                     component.getSystem().getName(), component.getName(), ex);
             throw ex;
         }
+    }
+
+    static String pageTitle(Component component) {
+        return component.getName() + " (" + component.getSystem().getName() + ")";
     }
 
     @Transactional

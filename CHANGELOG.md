@@ -17,7 +17,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   assignment and removal operations trigger this reconciliation asynchronously.
 - Add persistent tracking for top-level, group, per-system `Components (<System>)` and `Deployments (<System>)`, and
   global stage pages.
-- Generate one tracked page per component directly below `Components (<System>)`, with the newest version flows
+- Generate one tracked page per component directly below `Components (<System>)`, using the system-qualified title
+  `<Component> (<System>)` to avoid collisions with ArchRepo pages in the same space. The newest version flows are
   rendered on the component page itself. The configurable `component-flow-max-show` limit defaults to `50`; flow
   deployments, Jira issues, effective target stages, terminal states and deterministic evaluations are included.
 

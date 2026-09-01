@@ -51,9 +51,10 @@ class ComponentPageGeneratorTest {
 
     @Test
     void createsAndTracksPageAfterSuccessfulConfluenceOperation() {
+        String pageTitle = "my-component (my-system)";
         when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.empty());
-        when(confluenceAdapter.findPageByTitle("components-page", component.getName())).thenReturn(Optional.empty());
-        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("components-page"), eq(component.getName()), any()))
+        when(confluenceAdapter.findPageByTitle("components-page", pageTitle)).thenReturn(Optional.empty());
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("components-page"), eq(pageTitle), any()))
                 .thenReturn("component-page");
 
         generator.generatePage("components-page", component);
@@ -71,7 +72,7 @@ class ComponentPageGeneratorTest {
         ComponentPage trackedPage = ComponentPage.create(component.getId(), "component-page", "old-components-page");
         when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.of(trackedPage));
         when(confluenceAdapter.updatePageById(eq("component-page"), eq("new-components-page"),
-                eq(component.getName()), any(), eq(true))).thenReturn(true);
+                eq("my-component (my-system)"), any(), eq(true))).thenReturn(true);
 
         generator.generatePage("new-components-page", component);
 
@@ -86,7 +87,8 @@ class ComponentPageGeneratorTest {
         ComponentPage trackedPage = ComponentPage.create(component.getId(), "missing-page", "components-page");
         when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.of(trackedPage));
         when(confluenceAdapter.updatePageById(eq("missing-page"), any(), any(), any(), eq(false))).thenReturn(false);
-        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("components-page"), eq(component.getName()), any()))
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(
+                eq("components-page"), eq("my-component (my-system)"), any()))
                 .thenReturn("replacement-page");
 
         generator.generatePage("components-page", component);
@@ -117,12 +119,21 @@ class ComponentPageGeneratorTest {
         when(componentRepository.findById(component.getId())).thenReturn(Optional.of(component));
         when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.of(trackedPage));
         when(confluenceAdapter.updatePageById(eq("component-page"), eq("new-components-page"),
-                eq(component.getName()), any(), eq(true))).thenReturn(true);
+                eq("my-component (my-system)"), any(), eq(true))).thenReturn(true);
 
         generator.moveTrackedPages("old-components-page", "new-components-page");
 
         verify(confluenceAdapter).updatePageById(eq("component-page"), eq("new-components-page"),
-                eq(component.getName()), any(), eq(true));
+                eq("my-component (my-system)"), any(), eq(true));
         assertThat(trackedPage.getParentPageId()).isEqualTo("new-components-page");
+    }
+
+    @Test
+    void qualifiesPageTitleWithCurrentSystemName() {
+        assertThat(ComponentPageGenerator.pageTitle(component)).isEqualTo("my-component (my-system)");
+
+        component.updateSystem(new System("new-system"));
+
+        assertThat(ComponentPageGenerator.pageTitle(component)).isEqualTo("my-component (new-system)");
     }
 }
