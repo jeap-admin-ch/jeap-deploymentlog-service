@@ -118,8 +118,9 @@ class TemplateRendererTest {
                 .contains("JEAP-2 - JEAP - JMEAWS&lt;&amp;&gt; - Confluence")
                 .contains("href=\"https://confluence.example/pages/issue-2\"")
                 .containsSubsequence("<th>Jira Issue</th>", "<th>Deployment Status</th>",
-                        "<th>Letztes Deployment</th>", "<th>Confluence Issue Page</th>")
-                .doesNotContain("PT720H", "JEAP-1<&>", "REF<&>", "PROD<&>");
+                        "<th>Confluence Issue Page</th>")
+                .doesNotContain("Letztes Deployment", "2026-09-01 10:00:00", "2026-09-01 09:00:00",
+                        "PT720H", "JEAP-1<&>", "REF<&>", "PROD<&>");
     }
 
     @Test
