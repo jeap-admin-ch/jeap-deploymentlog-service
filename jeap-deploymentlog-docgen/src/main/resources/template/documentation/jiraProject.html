@@ -4,22 +4,22 @@
     <h2>Deploymentrelevante Jira Issues</h2>
     <p th:unless="${project.issues.isEmpty()}">
         Zeigt Issues mit mindestens einem gestarteten Deployment innerhalb der Aktivitätsperiode
-        <code th:text="${project.activityPeriod}"></code>.
+        <strong th:text="${project.activityPeriodDisplay}"></strong>.
     </p>
     <p th:if="${project.issues.isEmpty()}">Für dieses Projekt sind innerhalb der Aktivitätsperiode keine deploymentrelevanten Issues aktiv.</p>
     <table th:unless="${project.issues.isEmpty()}" class="wrapped" style="table-layout: fixed; width: 100%;">
         <colgroup>
-            <col style="width: 25%;"/>
-            <col style="width: 25%;"/>
-            <col style="width: 25%;"/>
-            <col style="width: 25%;"/>
+            <col style="width: 20%;"/>
+            <col style="width: 20%;"/>
+            <col style="width: 22%;"/>
+            <col style="width: 38%;"/>
         </colgroup>
         <tbody>
         <tr>
             <th>Jira Issue</th>
-            <th>DeploymentLog Issue</th>
-            <th>Letztes Deployment</th>
             <th>Deployment Status</th>
+            <th>Letztes Deployment</th>
+            <th>Confluence Issue Page</th>
         </tr>
         <tr th:each="issue: ${project.issues}">
             <td style="overflow-wrap: anywhere;">
@@ -28,17 +28,19 @@
                 <span th:unless="${issue.jiraIssueUrl != null}" th:text="${issue.issueKey}"></span>
             </td>
             <td>
-                <a th:if="${issue.deploymentLogIssuePageUrl != null}"
-                   th:href="${issue.deploymentLogIssuePageUrl}">Issue-Seite</a>
-                <span th:unless="${issue.deploymentLogIssuePageUrl != null}">-</span>
-            </td>
-            <td th:text="${issue.latestDeploymentAt}"></td>
-            <td>
                 <span th:text="${issue.highestSuccessfulStage}"></span>
                 <span th:if="${issue.failedHigherStage != null}">
                     <br/><ac:emoticon ac:name="cross"/> Fehler auf
                     <span th:text="${issue.failedHigherStage}"></span>
                 </span>
+            </td>
+            <td th:text="${issue.latestDeploymentAt}"></td>
+            <td style="overflow-wrap: anywhere;">
+                <a th:if="${issue.deploymentLogIssuePageUrl != null}"
+                   th:href="${issue.deploymentLogIssuePageUrl}"
+                   th:text="${issue.issueKey + ' - ' + project.projectKey + ' - ' + project.confluenceSpaceKey + ' - Confluence'}"
+                   target="_blank"></a>
+                <span th:unless="${issue.deploymentLogIssuePageUrl != null}">-</span>
             </td>
         </tr>
         </tbody>

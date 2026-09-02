@@ -53,6 +53,7 @@ class JiraProjectPageDtoFactory {
                 .entrySet().stream()
                 .map(entry -> JiraProjectPageDto.builder()
                         .projectKey(entry.getKey())
+                        .confluenceSpaceKey(confluenceProperties.getSpaceKey())
                         .activityPeriod(confluenceProperties.getChangeViewActivityPeriod())
                         .issues(entry.getValue().stream()
                                 .map(issue -> toIssueDto(issue.issueKey(), latestDeployments.get(issue.issueKey()),

@@ -41,6 +41,7 @@ class JiraProjectPageDtoFactoryTest {
         DocumentationGeneratorConfluenceProperties confluenceProperties =
                 new DocumentationGeneratorConfluenceProperties();
         confluenceProperties.setChangeViewActivityPeriod(Duration.ofDays(30));
+        confluenceProperties.setSpaceKey("JMEAWS");
         confluenceProperties.setUrl("https://confluence.example");
         JiraWebClientProperties jiraProperties = new JiraWebClientProperties();
         jiraProperties.setUrl("https://jira.example");
@@ -76,6 +77,8 @@ class JiraProjectPageDtoFactoryTest {
 
         assertThat(pages).extracting(JiraProjectPageDto::getProjectKey)
                 .containsExactly("JEAP", "OPS_2");
+        assertThat(pages).extracting(JiraProjectPageDto::getConfluenceSpaceKey)
+                .containsOnly("JMEAWS");
         List<JiraProjectIssueDto> jeapIssues = pages.getFirst().getIssues();
         assertThat(jeapIssues).extracting(JiraProjectIssueDto::getIssueKey)
                 .containsExactly("JEAP-1", "JEAP-2");
