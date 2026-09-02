@@ -27,6 +27,12 @@ class TemplateRenderer {
         return templateEngine.process("component", context).trim();
     }
 
+    String renderJiraProjectPage(JiraProjectPageDto jiraProjectPageDto) {
+        Context context = new Context(Locale.GERMAN);
+        context.setVariable("project", jiraProjectPageDto);
+        return templateEngine.process("jiraProject", context).trim();
+    }
+
     String renderDeploymentHistoryPage(DeploymentHistoryPageDto deploymentHistoryPageDto) {
         Context context = new Context(Locale.GERMAN);
         context.setVariable("deploymentHistory", deploymentHistoryPageDto);

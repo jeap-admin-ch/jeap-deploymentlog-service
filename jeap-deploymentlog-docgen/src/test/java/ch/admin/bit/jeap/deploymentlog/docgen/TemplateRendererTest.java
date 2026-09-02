@@ -90,6 +90,26 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderJiraProjectPageEscapesContentAndShowsStatusWithoutJiraApiData() {
+        String content = templateRenderer.renderJiraProjectPage(JiraProjectPageDto.builder()
+                .projectKey("JEAP")
+                .activityPeriod(java.time.Duration.ofDays(30))
+                .issues(List.of(JiraProjectIssueDto.builder()
+                        .issueKey("JEAP-1<&>")
+                        .jiraIssueUrl("https://jira.example/browse/JEAP-1")
+                        .latestDeploymentAt("2026-09-01 10:00:00")
+                        .highestSuccessfulStage("REF<&>")
+                        .failedHigherStage("PROD<&>")
+                        .build()))
+                .build());
+
+        assertThat(content)
+                .contains("Deploymentrelevante Jira Issues", "PT720H", "JEAP-1&lt;&amp;&gt;", "REF&lt;&amp;&gt;")
+                .contains("<ac:emoticon ac:name=\"cross\"/>", "Fehler auf", ">-</span>")
+                .doesNotContain("JEAP-1<&>", "REF<&>", "PROD<&>");
+    }
+
+    @Test
     void renderDeploymentHistoryPage() {
 
         DeploymentDto deploymentDto = DeploymentDto.builder()

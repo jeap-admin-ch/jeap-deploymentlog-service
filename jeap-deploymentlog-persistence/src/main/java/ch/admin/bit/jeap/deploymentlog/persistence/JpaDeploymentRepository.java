@@ -14,6 +14,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 @Repository
 interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
@@ -157,4 +158,22 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
                                                           @Param("environment") Environment environment,
                                                           @Param("versionName") String versionName,
                                                           @Param("excludedDeploymentId") UUID excludedDeploymentId);
+
+    @Query("""
+            select distinct d from Deployment d
+            join d.changelog c
+            join c.jiraIssueKeys issueKey
+            where d.startedAt >= :startedAt
+            """)
+    List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(@Param("startedAt") ZonedDateTime startedAt);
+
+    @Query("""
+            select distinct d from Deployment d
+            join d.changelog c
+            join c.jiraIssueKeys issueKey
+            join d.deploymentTypes deploymentType
+            where deploymentType = 'CODE'
+            and upper(trim(issueKey)) in :issueKeys
+            """)
+    List<Deployment> findCodeDeploymentsForJiraIssues(@Param("issueKeys") Set<String> normalizedIssueKeys);
 }

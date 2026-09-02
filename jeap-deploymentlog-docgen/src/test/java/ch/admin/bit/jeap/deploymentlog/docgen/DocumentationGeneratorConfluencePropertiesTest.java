@@ -2,6 +2,8 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -20,5 +22,21 @@ class DocumentationGeneratorConfluencePropertiesTest {
         assertThatThrownBy(properties::init)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("component-flow-max-show");
+    }
+
+    @Test
+    void changeViewActivityPeriodDefaultsToThirtyDays() {
+        assertThat(new DocumentationGeneratorConfluenceProperties().getChangeViewActivityPeriod())
+                .isEqualTo(Duration.ofDays(30));
+    }
+
+    @Test
+    void changeViewActivityPeriodMustBeGreaterThanZero() {
+        DocumentationGeneratorConfluenceProperties properties = new DocumentationGeneratorConfluenceProperties();
+        properties.setChangeViewActivityPeriod(Duration.ZERO);
+
+        assertThatThrownBy(properties::init)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("change-view-activity-period");
     }
 }

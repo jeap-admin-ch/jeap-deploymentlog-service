@@ -176,6 +176,59 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
+    void findsActiveJiraIssueDeploymentsAndFiltersStatusHistoryToCode() {
+        Environment environment = environmentRepository.save(new Environment("DEV"));
+        System system = systemRepository.save(new System("System A"));
+        Component component = componentRepository.save(new Component("component", system));
+        ZonedDateTime now = ZonedDateTime.now();
+
+        Deployment recentCode = deploymentWithIssue(environment, component, now.minusDays(1), "jeap-1",
+                Set.of(DeploymentType.CODE));
+        Deployment oldCode = deploymentWithIssue(environment, component, now.minusDays(60), "JEAP-1",
+                Set.of(DeploymentType.CODE));
+        Deployment recentConfig = deploymentWithIssue(environment, component, now.minusDays(2), "JEAP-1",
+                Set.of(DeploymentType.CONFIG));
+        deploymentRepository.save(recentCode);
+        deploymentRepository.save(oldCode);
+        deploymentRepository.save(recentConfig);
+
+        assertThat(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(now.minusDays(30)))
+                .extracting(Deployment::getId)
+                .containsExactlyInAnyOrder(recentCode.getId(), recentConfig.getId());
+        assertThat(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("JEAP-1")))
+                .extracting(Deployment::getId)
+                .containsExactlyInAnyOrder(recentCode.getId(), oldCode.getId());
+    }
+
+    private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,
+                                           String issueKey, Set<DeploymentType> deploymentTypes) {
+        ComponentVersion componentVersion = ComponentVersion.builder()
+                .commitRef("test")
+                .taggedAt(startedAt)
+                .committedAt(startedAt)
+                .versionControlUrl("test")
+                .publishedVersion(false)
+                .component(component)
+                .versionName(UUID.randomUUID().toString())
+                .deploymentUnit(DeploymentUnit.builder()
+                        .artifactRepositoryUrl("test")
+                        .type(DeploymentUnitType.DOCKER_IMAGE)
+                        .coordinates("test")
+                        .build())
+                .build();
+        return Deployment.builder()
+                .externalId(UUID.randomUUID().toString())
+                .startedAt(startedAt)
+                .startedBy("user")
+                .environment(environment)
+                .componentVersion(componentVersion)
+                .changelog(Changelog.builder().jiraIssueKeys(Set.of(issueKey)).build())
+                .sequence(DeploymentSequence.NEW)
+                .deploymentTypes(deploymentTypes)
+                .build();
+    }
+
+    @Test
     void findDeploymentForSystemAndEnvLimited() {
         DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
         Environment environmentDev = new Environment("DEV");

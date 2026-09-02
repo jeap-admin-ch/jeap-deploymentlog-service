@@ -56,7 +56,7 @@ class ComponentPageDtoFactoryTest {
     }
 
     @Test
-    void mapsClosedFlowWithSuccessfulDurationChronologicalDeploymentsAndDeterministicJiraIssues() {
+    void mapsClosedFlowWithSuccessfulDurationNewestDeploymentsFirstAndDeterministicJiraIssues() {
         ZonedDateTime bornAt = ZonedDateTime.parse("2026-08-01T10:00:00+02:00");
         Environment dev = new Environment("DEV");
         Environment prod = new Environment("PROD");
@@ -79,9 +79,9 @@ class ComponentPageDtoFactoryTest {
         ComponentFlowDto result = page.getFlows().getFirst();
         assertThat(result.getType()).isEqualTo("NEW");
         assertThat(result.getDuration()).isEqualTo("01:02:03");
-        assertThat(result.getDeployments()).extracting("stage").containsExactly("DEV", "PROD");
-        assertThat(result.getDeployments()).extracting("pageUrl").containsExactly(null,
-                "https://confluence.example/pages/viewpage.action?pageId=deployment-page");
+        assertThat(result.getDeployments()).extracting("stage").containsExactly("PROD", "DEV");
+        assertThat(result.getDeployments()).extracting("pageUrl").containsExactly(
+                "https://confluence.example/pages/viewpage.action?pageId=deployment-page", null);
         assertThat(result.getJiraIssues()).extracting("key").containsExactly("ABC-1", "ABC-2");
         assertThat(result.getJiraIssues()).extracting("url").containsExactly(
                 "https://jira.example/browse/ABC-1", "https://jira.example/browse/ABC-2");

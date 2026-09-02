@@ -4,6 +4,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 /**
  * Interface to be implemented by a persistence provider to access @{@link Deployment}s
@@ -51,4 +52,8 @@ public interface DeploymentRepository {
                                                        Environment environment,
                                                        String versionName,
                                                        UUID excludedDeploymentId);
+
+    List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt);
+
+    List<Deployment> findCodeDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);
 }

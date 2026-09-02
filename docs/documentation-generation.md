@@ -10,6 +10,7 @@ overwritten. Restrict the write permission on that tree to the technical user of
 flowchart TD
   Root["Deployments<br/><i>configured root page, created manually</i>"]
   Changes["Changes"]
+  JiraProject["JEAP<br/><i>active deployment-relevant issues</i>"]
   Systems["Systems"]
   Group["Example Group"]
   Components["Components (MySystem)"]
@@ -24,6 +25,7 @@ flowchart TD
   Letter["2026-03-18 08:13:50 my-component (DEV)"]
 
   Root --> Changes
+  Changes --> JiraProject
   Root --> Systems
   Systems --> Group
   Group --> Sys
@@ -42,6 +44,7 @@ flowchart TD
 |-------------------------------|-----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | System page                   | `<SystemName>`                                      | One row per component, one column per environment, showing the deployed version, when it was deployed and a link to the deployment page. Differences between the environments are highlighted, see below. |
 | Component page                | `<ComponentName> (<SystemName>)`, below `Components (<SystemName>)` | The latest version flows of one component. The system-qualified title avoids collisions with ArchRepo pages in the same Confluence space. The table is rendered directly on this page; no flow or `Version Flows` child pages are created. |
+| Jira project page             | `<JiraProjectKey>`, below `Changes`                | Issues with a deployment started during `change-view-activity-period`, their latest deployment and highest successfully reached CODE-deployment stage. |
 | Deployment history            | `Deployment History <ENV> (<SystemName>)`           | The most recent deployments of one system onto one environment, at most `deployment-history-max-show`.                              |
 | Deployment list               | `<year>-Deployments <ENV> (<SystemName>)`           | Container page grouping the deployment pages of one year; the deployment pages are its children.                                     |
 | Deployment page               | `<yyyy-MM-dd HH:mm:ss> <componentName> (<ENV>)`     | One deployment in detail, see below.                                                                                                |
@@ -92,6 +95,23 @@ Only a `CLOSED` flow shows its successful duration, measured from `bornAt` to th
 successful target-stage deployment. `OPEN` and `ABORTED` show no successful duration. Negative durations are treated
 as inconsistent data, logged and omitted.
 
+### Jira project pages
+
+For each Jira project with an active issue, one project page is generated directly below `Changes`. Issue keys come
+from persisted deployment changelogs, are trimmed, upper-cased, validated, deduplicated and grouped by their project
+prefix. Invalid keys remain unchanged in the deployment data but are logged and skipped. Activity means that at least
+one associated deployment has `startedAt` within `change-view-activity-period` (30 days by default); it is a view
+filter and never deletes deployment, changelog or page-tracking data.
+If a previously relevant project no longer has active issues, a full or system regeneration clears its active-issue
+table but retains the tracked project page so that existing issue pages and stable Confluence page ids are preserved.
+
+The deployment status uses CODE deployments only. It shows the environment with the greatest `staging_order` on
+which the issue has a successful deployment, or `N/A`; a failed attempt on a higher environment is shown separately.
+Issues without a successful deployment on a productive environment are ordered first, followed by the newest
+associated deployment and the normalized issue key as deterministic tie-breakers. Jira links are constructed from
+the configured Jira URL, without reading Jira. If a tracked DeploymentLog issue page exists, the project page also
+links it by its stable Confluence page id.
+
 ### Deployment page content
 
 A deployment page documents one deployment: the environment and the deployment target, who started it and
@@ -127,7 +147,8 @@ flowchart TD
 Generating the pages for one deployment first reconciles the structural pages, then walks the deployment path —
 the grouped or ungrouped system page, its `Deployments (<SystemName>)` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. The affected component page is then
-rendered from the committed flow and deployment state. All ancestor pages are therefore refreshed with the same run,
+rendered from the committed flow and deployment state. Jira project pages referenced by that deployment are updated
+under `Changes`. All ancestor pages are therefore refreshed with the same run,
 which is why recording a deployment also keeps the aggregated views current.
 
 Every step is idempotent. Stable Confluence page ids and their expected parents are persisted. Existing pages are
@@ -148,9 +169,15 @@ Two safeguards keep concurrent runs from corrupting the tree:
 - A **per-system lock** (ShedLock, `docgen-<systemname>`) serialises all generation runs for one system
   across all service instances. A run that cannot acquire the lock within three minutes gives up and leaves
   the work to the scheduled repair job.
+- Structure reconciliation uses the dedicated global ShedLock `docgen-documentation-structure` around a short,
+  independent transaction. This prevents jobs for different systems from concurrently creating the same structure
+  tracking record without serialising their subsequent system-specific page generation.
 - Component-page creation additionally locks the component database row. This serialises the title lookup, Confluence
   operation and tracking update across service instances even during a component move. Tracking is written only after
   Confluence has successfully created, updated or moved the page.
+- Jira project-page generation locks the persisted `Changes` structure row. This serialises project title lookup,
+  Confluence operations and tracking across different system locks and service instances; a project Page ID is stored
+  only after Confluence succeeds.
 - When Confluence rejects an update because the page was modified concurrently (HTTP 409), the adapter
   waits `retry-on-conflict-wait-duration` (a constant wait, 10 seconds by default), re-reads the page and
   **re-renders** the content from the current state before retrying. Writing an already rendered snapshot

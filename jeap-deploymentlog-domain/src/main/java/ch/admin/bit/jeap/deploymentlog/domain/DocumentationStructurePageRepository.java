@@ -9,6 +9,8 @@ public interface DocumentationStructurePageRepository {
 
     Optional<DocumentationStructurePage> findByStructureKey(String structureKey);
 
+    void lockByStructureKey(String structureKey);
+
     List<DocumentationStructurePage> findAll();
 
     void delete(DocumentationStructurePage page);

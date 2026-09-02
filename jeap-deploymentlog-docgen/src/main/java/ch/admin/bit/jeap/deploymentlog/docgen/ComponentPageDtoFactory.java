@@ -60,7 +60,11 @@ class ComponentPageDtoFactory {
                 .type(flow.getType().name())
                 .state(flow.getState().name())
                 .targetStage(flow.getFinalDeploymentEnvironment().getName())
-                .deployments(deployments.stream().map(this::toDeploymentDto).toList())
+                .deployments(deployments.stream()
+                        .sorted(Comparator.comparing(Deployment::getStartedAt, Comparator.reverseOrder())
+                                .thenComparing(Deployment::getId))
+                        .map(this::toDeploymentDto)
+                        .toList())
                 .jiraIssues(jiraIssues(deployments))
                 .build();
     }

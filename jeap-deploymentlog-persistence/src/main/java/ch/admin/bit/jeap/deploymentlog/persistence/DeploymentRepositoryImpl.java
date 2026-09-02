@@ -15,6 +15,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 @org.springframework.stereotype.Component
 @RequiredArgsConstructor
@@ -141,5 +142,18 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                                                               UUID excludedDeploymentId) {
         return jpaDeploymentRepository.existsSuccessfulDeploymentForBusinessVersion(component, environment,
                 versionName, excludedDeploymentId);
+    }
+
+    @Override
+    public List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt) {
+        return jpaDeploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(startedAt);
+    }
+
+    @Override
+    public List<Deployment> findCodeDeploymentsForJiraIssues(Set<String> normalizedIssueKeys) {
+        if (normalizedIssueKeys.isEmpty()) {
+            return List.of();
+        }
+        return jpaDeploymentRepository.findCodeDeploymentsForJiraIssues(normalizedIssueKeys);
     }
 }

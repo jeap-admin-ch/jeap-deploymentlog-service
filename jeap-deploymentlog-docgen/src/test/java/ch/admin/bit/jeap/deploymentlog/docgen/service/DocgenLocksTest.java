@@ -75,6 +75,25 @@ class DocgenLocksTest {
     }
 
     @Test
+    void runWithDocumentationStructureLock_usesDedicatedLockAndReturnsTaskResult() {
+        doReturn(Optional.of(lockMock)).when(plainLockProviderMock).lock(any());
+        DocgenLocks locks = new DocgenLocks(plainLockProviderMock);
+
+        String result;
+        try {
+            result = locks.runWithDocumentationStructureLock(() -> "result");
+        } finally {
+            locks.shutdown();
+        }
+
+        ArgumentCaptor<LockConfiguration> lockConfiguration = ArgumentCaptor.forClass(LockConfiguration.class);
+        verify(plainLockProviderMock).lock(lockConfiguration.capture());
+        assertThat(lockConfiguration.getValue().getName()).isEqualTo("docgen-documentation-structure");
+        assertThat(result).isEqualTo("result");
+        verify(lockMock).unlock();
+    }
+
+    @Test
     void keepAliveLockProvider_wrapsAProviderThatCanExtendLocks() {
         ScheduledExecutorService lockExtender = Executors.newSingleThreadScheduledExecutor();
         try {
@@ -157,7 +176,7 @@ class DocgenLocksTest {
     }
 
     @Test
-    void lockExtender_keepsExtendingAfterAFailedExtension() throws Exception {
+    void lockExtender_keepsExtendingAfterAFailedExtension() {
         ScheduledExecutorService lockExtender = DocgenLocks.newLockExtender();
         AtomicInteger executions = new AtomicInteger();
         try {

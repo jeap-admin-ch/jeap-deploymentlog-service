@@ -26,6 +26,11 @@ public class DocumentationStructurePageRepositoryImpl implements DocumentationSt
     }
 
     @Override
+    public void lockByStructureKey(String structureKey) {
+        repository.findForUpdateByStructureKey(structureKey).orElseThrow();
+    }
+
+    @Override
     public List<DocumentationStructurePage> findAll() {
         return StreamSupport.stream(repository.findAll().spliterator(), false).toList();
     }

@@ -40,6 +40,11 @@ public class DocumentationGeneratorConfluenceProperties {
     private int componentFlowMaxShow = 50;
 
     /**
+     * Activity period used for Jira project pages in the Change View.
+     */
+    private Duration changeViewActivityPeriod = Duration.ofDays(30);
+
+    /**
      * Show deployments started after this value [duration]. Default is 7 days
      */
     private Duration deploymentHistoryOverviewMaxTime = Duration.of(7, ChronoUnit.DAYS);
@@ -57,6 +62,10 @@ public class DocumentationGeneratorConfluenceProperties {
     void init() {
         if (componentFlowMaxShow <= 0) {
             throw new IllegalArgumentException("component-flow-max-show must be greater than zero");
+        }
+        if (changeViewActivityPeriod == null || changeViewActivityPeriod.isZero()
+                || changeViewActivityPeriod.isNegative()) {
+            throw new IllegalArgumentException("change-view-activity-period must be greater than zero");
         }
         log.info("Confluence configuration: {}", this);
     }

@@ -143,6 +143,7 @@ jeap:
         space-key: "MYSPACE"
         root-page-id: "123456789"
         component-flow-max-show: 50
+        change-view-activity-period: 30d
         username: ${CONFLUENCE_USERNAME}
         password: ${CONFLUENCE_PASSWORD}
       scheduled:

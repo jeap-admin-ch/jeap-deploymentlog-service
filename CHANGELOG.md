@@ -21,6 +21,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `<Component> (<System>)` to avoid collisions with ArchRepo pages in the same space. The newest version flows are
   rendered on the component page itself. The configurable `component-flow-max-show` limit defaults to `50`; flow
   deployments, Jira issues, effective target stages and terminal states are included.
+- Generate one tracked page below `Changes` for every Jira project with deployment activity in the configurable
+  `change-view-activity-period` (default 30 days). Project pages normalize and deduplicate stored issue keys, link Jira
+  without a live Jira request, and show the highest successfully reached CODE-deployment stage plus higher-stage
+  failures. Issues without a successful productive deployment are listed first.
 
 ### Changed
 
@@ -39,12 +43,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Address systems by their unique, case-insensitively matched name instead of their internal UUID in the system-group
   assignment and removal endpoints.
 
+### Fixed
+
+- Serialise documentation-structure reconciliation across different system jobs and service instances using the
+  dedicated global ShedLock `docgen-documentation-structure`, preventing concurrent first-time tracking inserts from
+  violating the primary key.
+- Avoid passing a nullable higher failed stage through `Optional.orElse` when rendering Jira project pages.
+
 ### Migration
 
 Flyway creates `documentation_structure_page` and adds nullable `parent_page_id` columns to the existing system,
 environment-history and deployment-list page tracking tables. It also creates `component_page`, keyed by the technical
 component UUID with a unique Confluence page id and its current parent page id. No data backfill or configuration
-change is required.
+change is required. The migration also creates tracking tables for Jira project and future Jira issue pages; tracking
+is updated only after a successful Confluence operation.
 After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
 pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
 `root-page-id` must continue to reference the existing `Deployments` page.

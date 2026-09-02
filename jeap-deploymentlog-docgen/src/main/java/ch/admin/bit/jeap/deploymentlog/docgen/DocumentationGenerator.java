@@ -47,7 +47,9 @@ public class DocumentationGenerator {
     private final EnvironmentHistoryPageRepository environmentHistoryPageRepository;
     private final DeploymentListPageRepository deploymentListPageRepository;
     private final DocumentationStructurePageRepository documentationStructurePageRepository;
+    private final DocumentationStructureLock documentationStructureLock;
     private final ComponentPageGenerator componentPageGenerator;
+    private final JiraProjectPageGenerator jiraProjectPageGenerator;
 
     @Timed("deploymentlog_generate_deployment_page")
     @Transactional
@@ -68,6 +70,7 @@ public class DocumentationGenerator {
                 : generateUndeploymentLetter(deploymentLetterParentPageId, deployment);
         componentPageGenerator.generatePage(systemStructure.componentsPageId(),
                 deployment.getComponentVersion().getComponent());
+        generateJiraProjectPagesForDeployment(structure, deployment);
         return generatedPage;
     }
 
@@ -79,6 +82,7 @@ public class DocumentationGenerator {
         recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
         environmentRepository.findAll().forEach(environment ->
                 generateDeploymentHistoryOverviewPageForEnvironment(structure.stagesPageId(), environment, null));
+        generateAllJiraProjectPages(structure);
     }
 
     @Transactional
@@ -114,6 +118,7 @@ public class DocumentationGenerator {
 
         environmentHistoryPageRepository.deleteEnvironmentHistoryPageBySystemId(oldSystem.getId());
         deploymentListPageRepository.deleteDeploymentListPageBySystemId(oldSystem.getId());
+        generateAllJiraProjectPages(structure);
     }
 
     private void moveDeploymentPages(System system, String deploymentsPageId, List<DeploymentPageQueryResult> deployments) {
@@ -234,7 +239,7 @@ public class DocumentationGenerator {
     @Transactional
     public void generateAllPages() {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        structure.orderedSystems().forEach(system -> {
+        findOrderedSystems().forEach(system -> {
             SystemStructure systemStructure = structure.systems().get(system.getId());
             componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
             recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
@@ -242,6 +247,7 @@ public class DocumentationGenerator {
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
+        generateAllJiraProjectPages(structure);
     }
 
     @Transactional
@@ -254,6 +260,7 @@ public class DocumentationGenerator {
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
+        generateAllJiraProjectPages(structure);
     }
 
     @Transactional(readOnly = true)
@@ -357,18 +364,20 @@ public class DocumentationGenerator {
     }
 
     private DocumentationStructure synchronizeDocumentationStructure() {
+        return documentationStructureLock.runLocked(this::synchronizeDocumentationStructureLocked);
+    }
+
+    private DocumentationStructure synchronizeDocumentationStructureLocked() {
         String rootPageId = props.getRootPageId();
-        ensureStructurePage(CHANGES_PAGE_KEY, rootPageId, "Changes", () -> EMPTY_STRUCTURE_PAGE, null, null);
+        String changesPageId = ensureStructurePage(
+                CHANGES_PAGE_KEY, rootPageId, "Changes", () -> EMPTY_STRUCTURE_PAGE, null, null);
         String systemsPageId = ensureStructurePage(
                 SYSTEMS_PAGE_KEY, rootPageId, "Systems", () -> EMPTY_STRUCTURE_PAGE, null, null);
         String stagesPageId = ensureStructurePage(
                 STAGES_PAGE_KEY, rootPageId, "Stages", () -> EMPTY_STRUCTURE_PAGE, null, null);
         removeDeploymentHistoryIntermediatePage(rootPageId, stagesPageId);
 
-        List<System> systems = systemRepository.findAllWithSystemGroup().stream()
-                .sorted(Comparator.comparing(System::getName, String.CASE_INSENSITIVE_ORDER)
-                        .thenComparing(System::getId))
-                .toList();
+        List<System> systems = findOrderedSystems();
         Map<UUID, SystemGroup> groups = new HashMap<>();
         for (System system : systems) {
             SystemGroup group = system.getSystemGroup();
@@ -404,7 +413,14 @@ public class DocumentationGenerator {
         }
 
         removeObsoleteGroupPages(groups.keySet());
-        return new DocumentationStructure(stagesPageId, systemStructures, systems);
+        return new DocumentationStructure(changesPageId, stagesPageId, systemStructures);
+    }
+
+    private List<System> findOrderedSystems() {
+        return systemRepository.findAllWithSystemGroup().stream()
+                .sorted(Comparator.comparing(System::getName, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(System::getId))
+                .toList();
     }
 
     private void removeDeploymentHistoryIntermediatePage(String rootPageId, String stagesPageId) {
@@ -512,9 +528,19 @@ public class DocumentationGenerator {
     private record LegacyPageLocation(String parentPageId, String title) {
     }
 
-    private record DocumentationStructure(String stagesPageId,
-                                          Map<UUID, SystemStructure> systems,
-                                          List<System> orderedSystems) {
+    private void generateJiraProjectPagesForDeployment(DocumentationStructure structure, Deployment deployment) {
+        documentationStructurePageRepository.lockByStructureKey(CHANGES_PAGE_KEY);
+        jiraProjectPageGenerator.generateForDeployment(structure.changesPageId(), deployment);
+    }
+
+    private void generateAllJiraProjectPages(DocumentationStructure structure) {
+        documentationStructurePageRepository.lockByStructureKey(CHANGES_PAGE_KEY);
+        jiraProjectPageGenerator.generateAll(structure.changesPageId());
+    }
+
+    private record DocumentationStructure(String changesPageId,
+                                          String stagesPageId,
+                                          Map<UUID, SystemStructure> systems) {
     }
 
     private GeneratedDeploymentPageDto generateUndeploymentLetter(String parentPageId, Deployment deployment) {

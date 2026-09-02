@@ -69,7 +69,13 @@ class DocumentationGeneratorTest {
     DocumentationStructurePageRepository documentationStructurePageRepositoryMock;
 
     @Mock
+    DocumentationStructureLock documentationStructureLockMock;
+
+    @Mock
     ComponentPageGenerator componentPageGeneratorMock;
+
+    @Mock
+    JiraProjectPageGenerator jiraProjectPageGeneratorMock;
 
     private DocumentationGenerator documentationGenerator;
     private final Map<String, DocumentationStructurePage> structurePages = new HashMap<>();
@@ -300,7 +306,9 @@ class DocumentationGeneratorTest {
                 environmentHistoryPageRepositoryMock,
                 deploymentListPageRepositoryMock,
                 documentationStructurePageRepositoryMock,
-                componentPageGeneratorMock);
+                documentationStructureLockMock,
+                componentPageGeneratorMock,
+                jiraProjectPageGeneratorMock);
 
         String systemName = "SYSTEM A";
         System system = new System(systemName);
@@ -497,6 +505,8 @@ class DocumentationGeneratorTest {
             structurePages.remove(page.getStructureKey());
             return null;
         }).when(documentationStructurePageRepositoryMock).delete(any(DocumentationStructurePage.class));
+        lenient().when(documentationStructureLockMock.runLocked(any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
 
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
         TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext));
@@ -516,6 +526,8 @@ class DocumentationGeneratorTest {
                 environmentHistoryPageRepositoryMock,
                 deploymentListPageRepositoryMock,
                 documentationStructurePageRepositoryMock,
-                componentPageGeneratorMock);
+                documentationStructureLockMock,
+                componentPageGeneratorMock,
+                jiraProjectPageGeneratorMock);
     }
 }
