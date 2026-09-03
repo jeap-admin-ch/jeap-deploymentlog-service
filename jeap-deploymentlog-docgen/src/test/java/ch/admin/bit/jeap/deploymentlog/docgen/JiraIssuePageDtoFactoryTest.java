@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Set;
@@ -38,9 +39,11 @@ class JiraIssuePageDtoFactoryTest {
 
     @Test
     void includesAllTypesSortsNewestFirstAndOmitsMissingDeploymentLink() {
-        Deployment older = deployment("older", ZonedDateTime.parse("2026-07-05T10:00:00+02:00"),
+        Deployment older = deployment("older", ZonedDateTime.of(
+                        2026, 7, 5, 10, 0, 0, 0, ZoneId.systemDefault()),
                 DeploymentState.FAILURE, Set.of(DeploymentType.INFRASTRUCTURE), " JEAP-1 ");
-        Deployment newer = deployment("newer", ZonedDateTime.parse("2026-07-06T14:45:16+02:00"),
+        Deployment newer = deployment("newer", ZonedDateTime.of(
+                        2026, 7, 6, 14, 45, 16, 0, ZoneId.systemDefault()),
                 DeploymentState.SUCCESS, Set.of(DeploymentType.CONFIG, DeploymentType.CODE), "jeap-1", "JEAP-1");
         when(deploymentRepository.findDeploymentsForJiraIssues(Set.of("JEAP-1")))
                 .thenReturn(List.of(older, newer));
