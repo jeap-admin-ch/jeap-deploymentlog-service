@@ -45,7 +45,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Serialise documentation-structure reconciliation across different system jobs and service instances using the
+- Serialize documentation-structure reconciliation across different system jobs and service instances using the
   dedicated global ShedLock `docgen-documentation-structure`, preventing concurrent first-time tracking inserts from
   violating the primary key.
 - Avoid passing a nullable higher failed stage through `Optional.orElse` when rendering Jira project pages.
