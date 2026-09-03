@@ -25,6 +25,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `change-view-activity-period` (default 30 days). Project pages normalize and deduplicate stored issue keys, link Jira
   without a live Jira request, and show the highest successfully reached CODE-deployment stage plus higher-stage
   failures. Issues without a successful productive deployment are listed first.
+- Generate one tracked page below the Jira project page for every active Jira issue. It lists all retained CODE,
+  CONFIG and INFRASTRUCTURE deployments referencing the issue, newest first, and links existing deployment pages.
+  A stable Jira remote link points to this issue page and is retried on subsequent generation runs.
 
 ### Changed
 
@@ -42,6 +45,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retained. Full and system-specific regeneration reconcile the same target structure idempotently.
 - Address systems by their unique, case-insensitively matched name instead of their internal UUID in the system-group
   assignment and removal endpoints.
+- Stop creating Jira remote links to individual deployment pages. Existing individual links are intentionally left
+  untouched; the repair job now repairs stable links to tracked DeploymentLog issue pages.
 
 ### Fixed
 
@@ -55,8 +60,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Flyway creates `documentation_structure_page` and adds nullable `parent_page_id` columns to the existing system,
 environment-history and deployment-list page tracking tables. It also creates `component_page`, keyed by the technical
 component UUID with a unique Confluence page id and its current parent page id. No data backfill or configuration
-change is required. The migration also creates tracking tables for Jira project and future Jira issue pages; tracking
-is updated only after a successful Confluence operation.
+change is required. The migration also creates tracking tables for Jira project and Jira issue pages. Issue tracking
+stores the normalized Issue Key, Project Key, Confluence Page ID and current parent Page ID and is updated only after
+a successful Confluence operation. Existing Jira links to individual deployment pages are not deleted. New links use
+one stable remote-link identity per Jira issue and point to its DeploymentLog issue page.
 After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
 pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
 `root-page-id` must continue to reference the existing `Deployments` page.

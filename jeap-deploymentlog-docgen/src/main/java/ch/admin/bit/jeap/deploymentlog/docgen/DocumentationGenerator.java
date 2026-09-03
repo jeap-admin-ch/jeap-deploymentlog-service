@@ -50,6 +50,7 @@ public class DocumentationGenerator {
     private final DocumentationStructureLock documentationStructureLock;
     private final ComponentPageGenerator componentPageGenerator;
     private final JiraProjectPageGenerator jiraProjectPageGenerator;
+    private final JiraIssuePageRepository jiraIssuePageRepository;
 
     @Timed("deploymentlog_generate_deployment_page")
     @Transactional
@@ -268,15 +269,12 @@ public class DocumentationGenerator {
         System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
         List<Deployment> deployments = deploymentRepository.findAllDeploymentsForSystemStartedBetween(system, from, to);
         log.info("Found {} deployments for system '{}' between {} and {}", deployments.size(), systemName, from, to);
-        for (Deployment deployment : deployments) {
-            if (deployment.getChangelog() != null) {
-                Set<String> jiraIssueKeys = deployment.getChangelog().getJiraIssueKeys();
-                if (jiraIssueKeys != null && !jiraIssueKeys.isEmpty()) {
-                    deploymentPageRepository.findDeploymentPageByDeploymentId(deployment.getId())
-                            .ifPresent(deploymentPage -> jiraAdapter.updateJiraIssuesWithConfluenceLink(jiraIssueKeys, deploymentPage.getPageId()));
-                }
-            }
-        }
+        deployments.stream()
+                .flatMap(deployment -> JiraProjectPageDtoFactory.normalizedIssueKeys(deployment).stream())
+                .distinct()
+                .sorted()
+                .forEach(issueKey -> jiraIssuePageRepository.findByIssueKey(issueKey)
+                        .ifPresent(page -> jiraAdapter.updateIssuePageRemoteLink(issueKey, page.getPageId())));
     }
 
     private void recursivelyGenerateDeploymentHistory(String deploymentsPageId, System system, Integer year) {

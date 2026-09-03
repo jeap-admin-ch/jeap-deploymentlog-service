@@ -77,6 +77,9 @@ class DocumentationGeneratorTest {
     @Mock
     JiraProjectPageGenerator jiraProjectPageGeneratorMock;
 
+    @Mock
+    JiraIssuePageRepository jiraIssuePageRepositoryMock;
+
     private DocumentationGenerator documentationGenerator;
     private final Map<String, DocumentationStructurePage> structurePages = new HashMap<>();
 
@@ -255,34 +258,27 @@ class DocumentationGeneratorTest {
 
         when(systemRepositoryMock.findByNameIgnoreCase(systemName)).thenReturn(Optional.of(system));
 
-        UUID deployment1Id = UUID.randomUUID();
-        UUID deployment2Id = UUID.randomUUID();
-        UUID deployment3Id = UUID.randomUUID();
-
         Deployment deployment1Mock = mock(Deployment.class);
         Deployment deployment2Mock = mock(Deployment.class);
         Deployment deployment3Mock = mock(Deployment.class);
 
-        DeploymentPage deploymentPage1Mock = mock(DeploymentPage.class);
-        String pageId = UUID.randomUUID().toString();
-        when(deploymentPage1Mock.getPageId()).thenReturn(pageId);
-
-        when(deployment1Mock.getId()).thenReturn(deployment1Id);
         when(deployment1Mock.getChangelog()).thenReturn(Changelog.builder().jiraIssueKeys(Set.of("JIRA-1234", "JIRA-2345")).build());
 
         when(deployment3Mock.getChangelog()).thenReturn(Changelog.builder().jiraIssueKeys(Set.of()).build());
 
         List<Deployment> deployments = List.of(deployment1Mock, deployment2Mock, deployment3Mock);
         when(deploymentRepositoryMock.findAllDeploymentsForSystemStartedBetween(system, from, to)).thenReturn(deployments);
-        when(deploymentPageRepositoryMock.findDeploymentPageByDeploymentId(deployment1Id)).thenReturn(Optional.of(deploymentPage1Mock));
+        when(jiraIssuePageRepositoryMock.findByIssueKey("JIRA-1234")).thenReturn(Optional.of(
+                JiraIssuePage.create("JIRA-1234", "JIRA", "issue-page-1", "project-page")));
+        when(jiraIssuePageRepositoryMock.findByIssueKey("JIRA-2345")).thenReturn(Optional.of(
+                JiraIssuePage.create("JIRA-2345", "JIRA", "issue-page-2", "project-page")));
 
         // when
         documentationGenerator.generateJiraLinksForSystem(systemName, from, to);
 
         // then
-        verify(jiraAdapterMock).updateJiraIssuesWithConfluenceLink(Set.of("JIRA-1234", "JIRA-2345"), pageId);
-        verify(deploymentPageRepositoryMock, never()).findDeploymentPageByDeploymentId(deployment2Id);
-        verify(deploymentPageRepositoryMock, never()).findDeploymentPageByDeploymentId(deployment3Id);
+        verify(jiraAdapterMock).updateIssuePageRemoteLink("JIRA-1234", "issue-page-1");
+        verify(jiraAdapterMock).updateIssuePageRemoteLink("JIRA-2345", "issue-page-2");
 
     }
 
@@ -308,7 +304,8 @@ class DocumentationGeneratorTest {
                 documentationStructurePageRepositoryMock,
                 documentationStructureLockMock,
                 componentPageGeneratorMock,
-                jiraProjectPageGeneratorMock);
+                jiraProjectPageGeneratorMock,
+                jiraIssuePageRepositoryMock);
 
         String systemName = "SYSTEM A";
         System system = new System(systemName);
@@ -528,6 +525,7 @@ class DocumentationGeneratorTest {
                 documentationStructurePageRepositoryMock,
                 documentationStructureLockMock,
                 componentPageGeneratorMock,
-                jiraProjectPageGeneratorMock);
+                jiraProjectPageGeneratorMock,
+                jiraIssuePageRepositoryMock);
     }
 }

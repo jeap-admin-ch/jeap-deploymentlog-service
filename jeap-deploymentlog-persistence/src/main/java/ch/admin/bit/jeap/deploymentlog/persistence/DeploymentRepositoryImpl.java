@@ -156,4 +156,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
         }
         return jpaDeploymentRepository.findCodeDeploymentsForJiraIssues(normalizedIssueKeys);
     }
+
+    @Override
+    public List<Deployment> findDeploymentsForJiraIssues(Set<String> normalizedIssueKeys) {
+        if (normalizedIssueKeys.isEmpty()) {
+            return List.of();
+        }
+        return jpaDeploymentRepository.findDeploymentsForJiraIssues(normalizedIssueKeys);
+    }
 }

@@ -62,6 +62,22 @@ class JiraWebClientImplTest {
     }
 
     @Test
+    void upsertsStableDeploymentLogIssuePageLink() {
+        final String expectedValue = """
+                { "application": { "type": "com.atlassian.confluence", "name": "Confluence" },
+                  "relationship": "mentioned in",
+                  "globalId": "appId=12345&deploymentLogIssue=JEAP-1234",
+                  "object": { "url": "https:/my-root-url.ch?pageId=new-page", "title": "DeploymentLog Issue JEAP-1234" }
+                }""";
+        server.expect(requestTo("https://jira-test.com/rest/api/2/issue/JEAP-1234/remotelink"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json(expectedValue))
+                .andRespond(withSuccess());
+
+        jiraWebClient.upsertDeploymentLogIssuePageRemoteLink(" jeap-1234 ", "new-page");
+    }
+
+    @Test
     void testSearchIssuesLabels() {
         // Issue keys are quoted in the JQL, the query is not validated and maxResults matches the key count
         final String expectedRequestBody = """
@@ -153,8 +169,9 @@ class JiraWebClientImplTest {
     void testSearchIssuesLabels_clientErrorThrowsJiraUnavailableException() {
         server.expect(requestTo("https://jira-test.com/rest/api/2/search")).
                 andRespond(withStatus(HttpStatus.UNAUTHORIZED).body("{\"errorMessages\":[\"auth failed\"]}").contentType(MediaType.APPLICATION_JSON));
+        Set<String> issueKeys = Set.of("JEAP-1234");
 
-        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(Set.of("JEAP-1234")))
+        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(issueKeys))
                 .isInstanceOf(JiraUnavailableException.class)
                 .hasMessageContaining("401")
                 .hasMessageContaining("configuration of the deployment log service")
@@ -166,8 +183,9 @@ class JiraWebClientImplTest {
         // A 2xx response without a body must not escape as an unclassified NullPointerException
         server.expect(requestTo("https://jira-test.com/rest/api/2/search")).
                 andRespond(withSuccess());
+        Set<String> issueKeys = Set.of("JEAP-1234");
 
-        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(Set.of("JEAP-1234")))
+        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(issueKeys))
                 .isInstanceOf(JiraUnavailableException.class)
                 .hasMessageContaining("empty or unparseable response");
     }
@@ -176,8 +194,9 @@ class JiraWebClientImplTest {
     void testSearchIssuesLabels_badRequestThrowsJiraUnavailableException() {
         server.expect(requestTo("https://jira-test.com/rest/api/2/search")).
                 andRespond(withBadRequest().body("{\"errorMessages\":[\"unexpected\"]}").contentType(MediaType.APPLICATION_JSON));
+        Set<String> issueKeys = Set.of("JEAP-1234");
 
-        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(Set.of("JEAP-1234")))
+        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(issueKeys))
                 .isInstanceOf(JiraUnavailableException.class)
                 .hasMessageContaining("400");
     }

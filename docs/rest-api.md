@@ -294,7 +294,7 @@ scheduled jobs do, see [Operations](operations.md#manual-triggers).
 | `POST /api/jobs/docgen/system/{systemName}?year=…`                   | `201`  | Regenerates the pages of one system asynchronously, optionally restricted to one year.           |
 | `POST /api/jobs/docgen/deployment/{deploymentId}`                    | `201`  | Regenerates the pages for a single deployment, addressed by its internal UUID.                    |
 | `POST /api/jobs/outdatedPageHousekeeping`                            | `200`  | Runs the housekeeping deleting outdated pages.                                                   |
-| `POST /api/jobs/docgen/system/{systemName}/repairJiraLinks?from=…&to=…` | `200` | Re-writes the Confluence remote links into the Jira issues of the deployments of one system started between `from` (inclusive) and `to` (exclusive), both `yyyy-MM-dd`. |
+| `POST /api/jobs/docgen/system/{systemName}/repairJiraLinks?from=…&to=…` | `200` | Repairs stable Jira remote links to already tracked DeploymentLog issue pages for issues referenced by deployments of one system started between `from` (inclusive) and `to` (exclusive), both `yyyy-MM-dd`. |
 
 ## Ready-for-deploy check
 

@@ -11,6 +11,7 @@ flowchart TD
   Root["Deployments<br/><i>configured root page, created manually</i>"]
   Changes["Changes"]
   JiraProject["JEAP<br/><i>active deployment-relevant issues</i>"]
+  JiraIssue["JEAP-123<br/><i>all retained deployments</i>"]
   Systems["Systems"]
   Group["Example Group"]
   Components["Components (MySystem)"]
@@ -26,6 +27,7 @@ flowchart TD
 
   Root --> Changes
   Changes --> JiraProject
+  JiraProject --> JiraIssue
   Root --> Systems
   Systems --> Group
   Group --> Sys
@@ -45,6 +47,7 @@ flowchart TD
 | System page                   | `<SystemName>`                                      | One row per component, one column per environment, showing the deployed version, when it was deployed and a link to the deployment page. Differences between the environments are highlighted, see below. |
 | Component page                | `<ComponentName> (<SystemName>)`, below `Components (<SystemName>)` | The latest version flows of one component. The system-qualified title avoids collisions with ArchRepo pages in the same Confluence space. The table is rendered directly on this page; no flow or `Version Flows` child pages are created. |
 | Jira project page             | `<JiraProjectKey>`, below `Changes`                | Issues with a deployment started during `change-view-activity-period`, their latest deployment and highest successfully reached CODE-deployment stage. |
+| Jira issue page               | `<JiraIssueKey>`, below its Jira project page      | All retained deployments referencing the issue, independent of the project-page activity period. |
 | Deployment history            | `Deployment History <ENV> (<SystemName>)`           | The most recent deployments of one system onto one environment, at most `deployment-history-max-show`.                              |
 | Deployment list               | `<year>-Deployments <ENV> (<SystemName>)`           | Container page grouping the deployment pages of one year; the deployment pages are its children.                                     |
 | Deployment page               | `<yyyy-MM-dd HH:mm:ss> <componentName> (<ENV>)`     | One deployment in detail, see below.                                                                                                |
@@ -85,7 +88,7 @@ system between groups needs no component-page operation because the complete sys
 The component page shows the latest flows ordered by `bornAt` descending and flow id descending as a deterministic
 tie-breaker. `component-flow-max-show` limits only this Confluence view; flow rows are never deleted. Each row contains
 the version, start time, stable flow type (`NEW`, `RETRY`, `ROLLBACK` or `AD_HOC`) and state, effective target stage,
-Jira issues and all deployment attempts in chronological order with stage and state icons. `ABORTED` and `AD_HOC`
+Jira issues and all deployment attempts in reverse chronological order with stage and state icons. `ABORTED` and `AD_HOC`
 rows are highlighted. Existing deployment pages are linked through a stable URL containing their persisted page id;
 a later regeneration adds links that were unavailable during an earlier partial run. Jira keys come exclusively from
 the persisted deployment changelogs, are deduplicated and sorted, and are turned into ordinary links using the
@@ -111,6 +114,19 @@ Issues without a successful deployment on a productive environment are ordered f
 associated deployment and the normalized issue key as deterministic tie-breakers. Jira links are constructed from
 the configured Jira URL, without reading Jira. If a tracked DeploymentLog issue page exists, the project page also
 links it by its stable Confluence page id.
+
+### Jira issue pages
+
+Each active issue has at most one generated page below its project page. Its normalized Issue Key is the persistent
+identity; the Project Key, Confluence Page ID and current parent Page ID are tracked only after Confluence succeeds.
+Tracked pages are updated and moved by Page ID, and missing pages are recreated idempotently.
+
+The page lists every retained deployment whose changelog references the issue, not only deployments inside the
+project-page activity period. CODE, CONFIG and INFRASTRUCTURE deployments are sorted by `startedAt` descending with
+external deployment id and database id as deterministic tie-breakers. Each row shows time, environment, system,
+component, version, all deployment types, status icon and text, the starter and, when available, a stable Page-ID
+link to the deployment page. Missing deployment pages produce no broken link and are linked on a later regeneration.
+The Jira issue link is constructed from the configured Jira URL; rendering performs no Jira read.
 
 ### Deployment page content
 
@@ -188,14 +204,18 @@ Two safeguards keep concurrent runs from corrupting the tree:
 
 ## Jira integration
 
-After a deployment page has been generated, the Jira issue keys of its changelog are used to write a remote
-link ("mentioned in") from each issue back to the generated page. The link is identified by a `globalId`
-built from the configured `app-id` and the page id, so regenerating the page updates the existing link
-instead of adding a duplicate.
+After a DeploymentLog issue page has been generated, the service writes one stable remote link ("mentioned in") from
+the Jira issue to that page. Its `globalId` is built from the configured `app-id` and normalized Issue Key, not the
+Confluence Page ID. Repeated content updates therefore reuse the link, while recreating a missing Confluence page
+updates its URL.
 
-Failures are tolerated deliberately: a Jira issue that cannot be updated is logged as a warning and the
-generation continues. `POST /api/jobs/docgen/system/{systemName}/repairJiraLinks` re-writes the links for a
-date range afterwards, see [REST API](rest-api.md#jobs).
+Failures are retried by the Jira client, then logged and counted without rolling back valid page tracking or failing
+the deployment request. A later page generation retries the link, and
+`POST /api/jobs/docgen/system/{systemName}/repairJiraLinks` repairs stable links for already tracked issue pages in a
+date range, see [REST API](rest-api.md#jobs).
+
+New deployments no longer create remote links to their individual deployment pages. Links created by older versions
+are deliberately not deleted and remain visible in Jira; this avoids destructive migration calls to Jira.
 
 The Jira links shown in the component flow table are independent of this write-back operation. They use stored issue
 keys and the configured Jira URL, so the component page can be rendered while Jira is unavailable.

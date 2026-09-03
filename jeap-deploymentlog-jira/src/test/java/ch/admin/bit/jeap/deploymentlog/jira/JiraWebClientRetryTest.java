@@ -66,8 +66,9 @@ class JiraWebClientRetryTest {
     void searchIssuesLabels_serverErrorIsRetried4Times() {
         server.expect(times(4), requestTo("https://jira-test.com/rest/api/2/search")).
                 andRespond(withServerError());
+        Set<String> issueKeys = Set.of("JEAP-1234");
 
-        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(Set.of("JEAP-1234")))
+        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(issueKeys))
                 .isInstanceOf(HttpServerErrorException.class);
         server.verify();
     }
@@ -76,9 +77,22 @@ class JiraWebClientRetryTest {
     void searchIssuesLabels_clientErrorIsNotRetried() {
         server.expect(once(), requestTo("https://jira-test.com/rest/api/2/search")).
                 andRespond(withUnauthorizedRequest());
+        Set<String> issueKeys = Set.of("JEAP-1234");
 
-        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(Set.of("JEAP-1234")))
+        assertThatThrownBy(() -> jiraWebClient.searchIssuesLabels(issueKeys))
                 .isInstanceOf(JiraUnavailableException.class);
+        server.verify();
+    }
+
+    @Test
+    void stableIssuePageRemoteLink_serverErrorIsRetried4Times() {
+        server.expect(times(4), requestTo(
+                        "https://jira-test.com/rest/api/2/issue/JEAP-1234/remotelink"))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> jiraWebClient
+                .upsertDeploymentLogIssuePageRemoteLink("JEAP-1234", "page-id"))
+                .isInstanceOf(HttpServerErrorException.class);
         server.verify();
     }
 }

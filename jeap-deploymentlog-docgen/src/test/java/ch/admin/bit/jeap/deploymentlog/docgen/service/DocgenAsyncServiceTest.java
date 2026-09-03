@@ -103,7 +103,7 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
-    void triggerDocgenForDeployment_whenGeneratorReturnsNull_thenNoJiraUpdateAndLockReleased() {
+    void triggerDocgenForDeployment_whenGeneratorReturnsNull_thenLockReleased() {
         Optional<SimpleLock> presentLock = Optional.of(simpleLockMock);
         when(lockProvider.lock(any())).thenReturn(presentLock);
         UUID deploymentId = UUID.randomUUID();
@@ -113,7 +113,6 @@ class DocgenAsyncServiceTest {
 
         await().until(this::asyncTaskExecutorIsDone);
         verify(documentationGenerator).generateDeploymentPages(deploymentId);
-        verify(jiraAdapter, never()).updateJiraIssuesWithConfluenceLink(any(GeneratedDeploymentPageDto.class));
         verify(simpleLockMock).unlock();
     }
 

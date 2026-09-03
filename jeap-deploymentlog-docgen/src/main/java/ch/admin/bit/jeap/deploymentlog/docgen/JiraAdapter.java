@@ -1,31 +1,32 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
-import ch.admin.bit.jeap.deploymentlog.docgen.model.GeneratedDeploymentPageDto;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClient;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Set;
+import static net.logstash.logback.argument.StructuredArguments.value;
 
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class JiraAdapter {
 
     private final JiraWebClient jiraWebClient;
+    private final Counter remoteLinkErrorCounter;
 
-    public void updateJiraIssuesWithConfluenceLink(GeneratedDeploymentPageDto generatedDeploymentPageDto){
-        updateJiraIssuesWithConfluenceLink(generatedDeploymentPageDto.getDeploymentLetterPageDto().getChangeJiraIssueKeys(), generatedDeploymentPageDto.getPageId());
+    public JiraAdapter(JiraWebClient jiraWebClient, MeterRegistry meterRegistry) {
+        this.jiraWebClient = jiraWebClient;
+        this.remoteLinkErrorCounter = meterRegistry.counter("deploymentlog.docgen.jiraissuelink.error");
     }
 
-    public void updateJiraIssuesWithConfluenceLink(Set<String> jiraIssueKeys, String pageId) {
-        jiraIssueKeys.forEach(jiraIssueKey -> {
-            try {
-                jiraWebClient.updateIssueWithConfluenceLink(jiraIssueKey, pageId);
-            } catch (Exception e) {
-                log.warn("Ignore exception when updating jira issue: '{}' ", e.getMessage());
-            }
-        });
+    public void updateIssuePageRemoteLink(String jiraIssueKey, String pageId) {
+        try {
+            jiraWebClient.upsertDeploymentLogIssuePageRemoteLink(jiraIssueKey, pageId);
+        } catch (Exception ex) {
+            remoteLinkErrorCounter.increment();
+            log.warn("Failed to update stable DeploymentLog issue page link for Jira issue {}",
+                    value("jiraIssueKey", jiraIssueKey), ex);
+        }
     }
 }

@@ -71,7 +71,7 @@ class JiraProjectPageDtoFactoryTest {
         when(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("JEAP-1", "JEAP-2", "OPS_2-9")))
                 .thenReturn(List.of(jeap2ProdSuccess, jeap1ProdFailure, jeap1DevSuccess));
         when(jiraIssuePageRepository.findByIssueKey("JEAP-1"))
-                .thenReturn(java.util.Optional.of(JiraIssuePage.create("JEAP-1", "issue-page", "project-page")));
+                .thenReturn(java.util.Optional.of(JiraIssuePage.create("JEAP-1", "JEAP", "issue-page", "project-page")));
 
         List<JiraProjectPageDto> pages = factory.createActiveProjects(NOW);
 

@@ -123,7 +123,7 @@ class JiraProjectPageDtoFactory {
         return result;
     }
 
-    private Set<String> normalizedIssueKeys(Deployment deployment) {
+    static Set<String> normalizedIssueKeys(Deployment deployment) {
         return issueKeys(deployment).stream()
                 .map(JiraIssueKey::parse)
                 .flatMap(Optional::stream)
@@ -131,7 +131,7 @@ class JiraProjectPageDtoFactory {
                 .collect(Collectors.toSet());
     }
 
-    private Set<String> issueKeys(Deployment deployment) {
+    private static Set<String> issueKeys(Deployment deployment) {
         Changelog changelog = deployment.getChangelog();
         return changelog == null || changelog.getJiraIssueKeys() == null
                 ? Set.of()

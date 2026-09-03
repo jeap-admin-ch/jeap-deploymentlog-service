@@ -1,8 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen.service;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
-import ch.admin.bit.jeap.deploymentlog.docgen.JiraAdapter;
-import ch.admin.bit.jeap.deploymentlog.docgen.model.GeneratedDeploymentPageDto;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import io.micrometer.core.instrument.Counter;
@@ -28,14 +26,12 @@ public class DocgenAsyncService {
     private final DeploymentRepository deploymentRepository;
     private final Counter errorCounter;
     private final DocgenLocks locks;
-    private final JiraAdapter jiraAdapter;
 
-    public DocgenAsyncService(DocumentationGenerator documentationGenerator, DeploymentRepository deploymentRepository, MeterRegistry meterRegistry, DocgenLocks locks, JiraAdapter jiraAdapter) {
+    public DocgenAsyncService(DocumentationGenerator documentationGenerator, DeploymentRepository deploymentRepository, MeterRegistry meterRegistry, DocgenLocks locks) {
         this.documentationGenerator = documentationGenerator;
         this.deploymentRepository = deploymentRepository;
         this.locks = locks;
         this.errorCounter = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error");
-        this.jiraAdapter = jiraAdapter;
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
@@ -86,16 +82,7 @@ public class DocgenAsyncService {
 
     private void generateDeploymentPages(UUID deploymentId, String systemName, String componentName) {
         try {
-            final GeneratedDeploymentPageDto generatedDeploymentPageDto = documentationGenerator.generateDeploymentPages(deploymentId);
-            if (generatedDeploymentPageDto == null || generatedDeploymentPageDto.getDeploymentLetterPageDto() == null) {
-                errorCounter.increment();
-                log.warn("Generated deployment page data is incomplete for deployment {}. Skipping Jira issue link update.", value(DEPLOYMENT_ID, deploymentId));
-                return;
-            }
-            Set<String> jiraIssueKeys = generatedDeploymentPageDto.getDeploymentLetterPageDto().getChangeJiraIssueKeys();
-            if (jiraIssueKeys != null && !jiraIssueKeys.isEmpty()) {
-                jiraAdapter.updateJiraIssuesWithConfluenceLink(generatedDeploymentPageDto);
-            }
+            documentationGenerator.generateDeploymentPages(deploymentId);
         } catch (Exception ex) {
             errorCounter.increment();
             log.warn("Failed to generate pages for deployment {}, system {} and component {}",

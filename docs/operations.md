@@ -71,6 +71,7 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 |----------------------------------------------|---------|----------------------------------------------------------------------------------------------------|
 | `deploymentlog.docgen.deploymentpages.lag`   | gauge   | Number of deployments of the last 7 days whose page is missing or outdated. Refreshed every 15 minutes. |
 | `deploymentlog.docgen.deploymentpages.error` | counter | Incremented for every failed generation attempt, including failed system migrations and merges.   |
+| `deploymentlog.docgen.jiraissuelink.error`   | counter | Incremented after all retries to create or update a stable Jira link to a DeploymentLog issue page failed. |
 | `deploymentlog_generate_deployment_page`     | timer   | Duration of generating the pages for one deployment.                                              |
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
 

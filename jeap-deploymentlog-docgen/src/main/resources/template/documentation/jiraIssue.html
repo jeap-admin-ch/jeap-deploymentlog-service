@@ -1,0 +1,47 @@
+<th:block xmlns:th="http://www.thymeleaf.org">
+    <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+
+    <h2>
+        Jira Issue
+        <a th:if="${issue.jiraIssueUrl != null}" th:href="${issue.jiraIssueUrl}"
+           th:text="${issue.issueKey}" target="_blank"></a>
+        <span th:unless="${issue.jiraIssueUrl != null}" th:text="${issue.issueKey}"></span>
+    </h2>
+    <p th:if="${issue.deployments.isEmpty()}">Für dieses Jira Issue sind keine Deployments mehr vorhanden.</p>
+    <table th:unless="${issue.deployments.isEmpty()}" class="wrapped" style="table-layout: fixed; width: 100%;">
+        <colgroup>
+            <col style="width: 13%;"/><col style="width: 7%;"/><col style="width: 9%;"/>
+            <col style="width: 15%;"/><col style="width: 15%;"/><col style="width: 9%;"/>
+            <col style="width: 10%;"/><col style="width: 8%;"/><col style="width: 14%;"/>
+        </colgroup>
+        <tbody>
+        <tr>
+            <th>Datum / Zeit</th><th>Umgebung</th><th>System</th><th>Komponente</th><th>Version</th>
+            <th>Typ</th><th>Status</th><th>Deployment</th><th>Gestartet durch</th>
+        </tr>
+        <tr th:each="deployment: ${issue.deployments}">
+            <td th:text="${deployment.startedAt}"></td>
+            <td th:text="${deployment.stage}"></td>
+            <td style="overflow-wrap: anywhere;" th:text="${deployment.system}"></td>
+            <td style="overflow-wrap: anywhere;" th:text="${deployment.component}"></td>
+            <td style="overflow-wrap: anywhere;" th:text="${deployment.version}"></td>
+            <td style="overflow-wrap: anywhere;" th:text="${deployment.deploymentTypes}"></td>
+            <td>
+                <th:block th:switch="${deployment.state}">
+                    <span th:case="'SUCCESS'"><ac:emoticon ac:name="tick"/> Erfolgreich</span>
+                    <span th:case="'FAILURE'"><ac:emoticon ac:name="cross"/> Fehlgeschlagen</span>
+                    <span th:case="'CANCELLED'"><ac:emoticon ac:name="minus"/> Vorzeitig beendet</span>
+                    <span th:case="'STARTED'"><ac:emoticon ac:name="question"/> Laufend</span>
+                    <span th:case="*" th:text="${deployment.state}"></span>
+                </th:block>
+            </td>
+            <td>
+                <a th:if="${deployment.deploymentPageUrl != null}"
+                   th:href="${deployment.deploymentPageUrl}">Detail</a>
+                <span th:unless="${deployment.deploymentPageUrl != null}">-</span>
+            </td>
+            <td style="overflow-wrap: anywhere;" th:text="${deployment.startedBy}"></td>
+        </tr>
+        </tbody>
+    </table>
+</th:block>

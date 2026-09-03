@@ -60,7 +60,7 @@ Prefix `jeap.deploymentlog.jira`. Unknown keys under this prefix fail the startu
 | Property          | Default | Description                                                                                                                |
 |-------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
 | `url`             | —       | Base URL of the Jira instance. The client calls its `rest/api/2` endpoints.                                                    |
-| `app-id`          | —       | Application id of the linked Confluence instance in Jira. Part of the `globalId` of the remote link, so that re-generating a page updates the existing link instead of adding a duplicate. |
+| `app-id`          | —       | Application id of the linked Confluence instance in Jira. Together with the normalized Issue Key it forms the stable `globalId` of the DeploymentLog issue-page remote link. |
 | `username`        | —       | Technical user. Needs browse permission on the referenced projects and permission to add remote links.                        |
 | `password`        | —       | Password of the technical user. Excluded from the configuration log output.                                                   |
 | `mock-jira-client`| `false` | Replaces the Jira client with a mock. For local development and tests only.                                                   |

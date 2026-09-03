@@ -176,4 +176,12 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             and upper(trim(issueKey)) in :issueKeys
             """)
     List<Deployment> findCodeDeploymentsForJiraIssues(@Param("issueKeys") Set<String> normalizedIssueKeys);
+
+    @Query("""
+            select distinct d from Deployment d
+            join d.changelog c
+            join c.jiraIssueKeys issueKey
+            where upper(trim(issueKey)) in :issueKeys
+            """)
+    List<Deployment> findDeploymentsForJiraIssues(@Param("issueKeys") Set<String> normalizedIssueKeys);
 }

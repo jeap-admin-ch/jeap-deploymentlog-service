@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +33,14 @@ public class DeploymentPageRepositoryImpl implements DeploymentPageRepository {
     @Override
     public Optional<DeploymentPage> findDeploymentPageByDeploymentId(UUID deploymentId) {
         return jpaDeploymentPageRepository.findDeploymentPageByDeploymentId(deploymentId);
+    }
+
+    @Override
+    public List<DeploymentPage> findDeploymentPagesByDeploymentIds(Collection<UUID> deploymentIds) {
+        if (deploymentIds.isEmpty()) {
+            return List.of();
+        }
+        return jpaDeploymentPageRepository.findByDeploymentIdIn(deploymentIds);
     }
 
     @Override

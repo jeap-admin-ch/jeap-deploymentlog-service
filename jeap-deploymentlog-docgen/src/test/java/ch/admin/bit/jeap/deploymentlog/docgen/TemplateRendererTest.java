@@ -124,6 +124,34 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderJiraIssuePageShowsDeploymentDataStatusTextAndSafeLinks() {
+        String content = templateRenderer.renderJiraIssuePage(JiraIssuePageDto.builder()
+                .issueKey("JEAP-1<&>")
+                .jiraIssueUrl("https://jira.example/browse/JEAP-1")
+                .deployments(List.of(
+                        JiraIssueDeploymentDto.builder()
+                                .startedAt("2026-07-06 14:45:16").stage("PROD").system("WVS")
+                                .component("service<&>").version("5.0.2-long<&>")
+                                .deploymentTypes("CODE, CONFIG").state("SUCCESS")
+                                .deploymentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42")
+                                .startedBy("John <Doe>").build(),
+                        JiraIssueDeploymentDto.builder()
+                                .startedAt("2026-07-06 14:32:22").stage("REF").system("WVS")
+                                .component("service").version("5.0.2").deploymentTypes("INFRASTRUCTURE")
+                                .state("FAILURE").startedBy("Jane Doe").build()))
+                .build());
+
+        assertThat(content)
+                .contains("Datum / Zeit", "Umgebung", "System", "Komponente", "Version", "Typ", "Status",
+                        "Deployment", "Gestartet durch", "CODE, CONFIG", "INFRASTRUCTURE")
+                .contains("<ac:emoticon ac:name=\"tick\"/>", "Erfolgreich",
+                        "<ac:emoticon ac:name=\"cross\"/>", "Fehlgeschlagen")
+                .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=42\"")
+                .contains("service&lt;&amp;&gt;", "5.0.2-long&lt;&amp;&gt;", "John &lt;Doe&gt;")
+                .doesNotContain("service<&>", "John <Doe>");
+    }
+
+    @Test
     void renderDeploymentHistoryPage() {
 
         DeploymentDto deploymentDto = DeploymentDto.builder()

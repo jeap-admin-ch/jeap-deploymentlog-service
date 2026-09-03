@@ -198,6 +198,9 @@ class DeploymentRepositoryImplTest {
         assertThat(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("JEAP-1")))
                 .extracting(Deployment::getId)
                 .containsExactlyInAnyOrder(recentCode.getId(), oldCode.getId());
+        assertThat(deploymentRepository.findDeploymentsForJiraIssues(Set.of("JEAP-1")))
+                .extracting(Deployment::getId)
+                .containsExactlyInAnyOrder(recentCode.getId(), oldCode.getId(), recentConfig.getId());
     }
 
     private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,

@@ -60,7 +60,7 @@ public class JobsController {
     }
 
     @PostMapping("/docgen/system/{systemName}/repairJiraLinks")
-    @Operation(summary = "Regenerate for a system all jira links of deployments started between the given dates",
+    @Operation(summary = "Repair stable Jira links to DeploymentLog issue pages for a system and date range",
     parameters = {
         @Parameter(name = "from", description = "Start date (incl) (format: yyyy-MM-dd)", required = true, example = "2025-01-01"),
         @Parameter(name = "to", description = "End date (excl) (format: yyyy-MM-dd)", required = true, example = "2025-01-20")

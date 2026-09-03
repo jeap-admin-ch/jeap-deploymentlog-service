@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class JiraProjectPageDto {
     String projectKey;
     String confluenceSpaceKey;

@@ -23,6 +23,11 @@ public class JiraWebClientMock implements JiraWebClient {
     }
 
     @Override
+    public void upsertDeploymentLogIssuePageRemoteLink(String jiraIssueKey, String pageId) {
+        log.info("MOCK upsert deployment log issue page link for jira issue '{}' with pageId '{}'", jiraIssueKey, pageId);
+    }
+
+    @Override
     public JiraIssuesSearchResult searchIssuesLabels(Set<String> jiraIssueKeys) {
         log.info("MOCK searchIssuesLabels with jiraIssueKeys '{}'", jiraIssueKeys);
         Map<String, List<String>> labelsByIssueKey = jiraIssueKeys.stream()

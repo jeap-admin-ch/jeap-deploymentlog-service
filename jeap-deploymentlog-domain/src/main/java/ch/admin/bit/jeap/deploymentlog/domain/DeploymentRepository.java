@@ -56,4 +56,6 @@ public interface DeploymentRepository {
     List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt);
 
     List<Deployment> findCodeDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);
+
+    List<Deployment> findDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);
 }

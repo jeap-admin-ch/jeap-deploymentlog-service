@@ -17,6 +17,12 @@ public interface JiraWebClient {
     void updateIssueWithConfluenceLink(String jiraIssueKey, String pageId);
 
     /**
+     * Creates or updates the one stable DeploymentLog issue-page link for the Jira issue.
+     * The remote-link identity is based on the issue key and therefore remains stable if the Confluence page ID changes.
+     */
+    void upsertDeploymentLogIssuePageRemoteLink(String jiraIssueKey, String pageId);
+
+    /**
      * Search the labels of the given jira issues. Issue keys that cannot be resolved in jira (issue does not
      * exist, is not readable, or the key is syntactically invalid) never fail the search - they are reported
      * in {@link JiraIssuesSearchResult#getNotFoundIssueKeys()}.

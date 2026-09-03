@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,8 @@ public interface DeploymentPageRepository {
     void delete(DeploymentPage deploymentPage);
 
     Optional<DeploymentPage> findDeploymentPageByDeploymentId(UUID deploymentId);
+
+    List<DeploymentPage> findDeploymentPagesByDeploymentIds(Collection<UUID> deploymentIds);
 
     /**
      * @return All deployment pages for a system for the given environments, results are sorted by deployment last modified date descending

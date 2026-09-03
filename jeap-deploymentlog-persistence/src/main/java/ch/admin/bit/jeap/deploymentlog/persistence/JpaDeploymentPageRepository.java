@@ -8,12 +8,15 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface JpaDeploymentPageRepository extends CrudRepository<DeploymentPage, UUID> {
 
     Optional<DeploymentPage> findDeploymentPageByDeploymentId(UUID deploymentId);
+
+    List<DeploymentPage> findByDeploymentIdIn(Collection<UUID> deploymentIds);
 
     @Query("""
             select p from DeploymentPage p \

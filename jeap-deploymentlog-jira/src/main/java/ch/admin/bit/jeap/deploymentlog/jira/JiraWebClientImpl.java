@@ -85,6 +85,28 @@ public class JiraWebClientImpl implements JiraWebClient {
     }
 
     @Override
+    public void upsertDeploymentLogIssuePageRemoteLink(String jiraIssueKey, String pageId) {
+        final String normalizedIssueKey = jiraIssueKey.trim().toUpperCase(Locale.ROOT);
+        final String url = "/issue/" + normalizedIssueKey + "/remotelink";
+        final String confluenceLink = documentationRootUrl + pageId;
+        final Map<String, Object> body = Map.of(
+                "application", Map.of("type", "com.atlassian.confluence", "name", "Confluence"),
+                "relationship", "mentioned in",
+                "globalId", "appId=%s&deploymentLogIssue=%s".formatted(appId, normalizedIssueKey),
+                "object", Map.of(
+                        "url", confluenceLink,
+                        "title", "DeploymentLog Issue " + normalizedIssueKey));
+
+        restClient.post()
+                .uri(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(objectMapper.writeValueAsString(body))
+                .retrieve()
+                .toBodilessEntity();
+        log.info("Jira issue '{}' updated with stable DeploymentLog issue page link", normalizedIssueKey);
+    }
+
+    @Override
     public JiraIssuesSearchResult searchIssuesLabels(Set<String> jiraIssueKeys) {
         SortedSet<String> notFoundIssueKeys = new TreeSet<>();
         List<String> validIssueKeys = new ArrayList<>();
