@@ -49,6 +49,7 @@ public class DocumentationGenerator {
     private final DocumentationStructurePageRepository documentationStructurePageRepository;
     private final DocumentationStructureLock documentationStructureLock;
     private final ComponentPageGenerator componentPageGenerator;
+    private final ComponentRepository componentRepository;
     private final JiraProjectPageGenerator jiraProjectPageGenerator;
     private final JiraIssuePageRepository jiraIssuePageRepository;
 
@@ -354,6 +355,40 @@ public class DocumentationGenerator {
                 generateDeploymentHistoryPageForEnvironment(systemStructure.deploymentsPageId(), env, system);
             }
         }
+    }
+
+    @Transactional
+    public void updatePagesAfterDataRetention(DataRetentionResult result) {
+        if (result.isEmpty()) {
+            return;
+        }
+        DocumentationStructure structure = synchronizeDocumentationStructure();
+        for (SystemEnv systemEnv : result.systemEnvironments()) {
+            SystemStructure systemStructure = structure.systems().get(systemEnv.getSystemId());
+            if (systemStructure == null) {
+                continue;
+            }
+            System system = systemRepository.getById(systemEnv.getSystemId());
+            Environment environment = environmentRepository.getById(systemEnv.getEnvId());
+            generateDeploymentHistoryPageForEnvironment(systemStructure.deploymentsPageId(), environment, system);
+        }
+        result.componentIds().stream()
+                .map(componentRepository::findById)
+                .flatMap(Optional::stream)
+                .sorted(Comparator.comparing(ch.admin.bit.jeap.deploymentlog.domain.Component::getId))
+                .forEach(component -> {
+                    SystemStructure systemStructure = structure.systems().get(component.getSystem().getId());
+                    if (systemStructure != null) {
+                        componentPageGenerator.generatePage(systemStructure.componentsPageId(), component);
+                    }
+                });
+        result.environmentIds().stream()
+                .map(environmentRepository::getById)
+                .sorted(Comparator.comparing(Environment::getStagingOrder).thenComparing(Environment::getName))
+                .forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
+                        structure.stagesPageId(), environment, null));
+        generateAllJiraProjectPages(structure);
+        jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
     }
 
     @Transactional

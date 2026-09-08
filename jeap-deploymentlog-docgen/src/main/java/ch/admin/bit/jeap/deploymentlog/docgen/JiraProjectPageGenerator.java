@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Supplier;
 
 @Component
@@ -56,6 +57,20 @@ class JiraProjectPageGenerator {
                 .filter(page -> affectedProjectKeys.contains(page.getProjectKey()))
                 .toList();
         generate(changesPageId, affectedProjects, affectedIssueKeys);
+    }
+
+    void regenerateTrackedIssuePages(Set<String> storedIssueKeys) {
+        Map<String, Set<String>> issueKeysByProject = storedIssueKeys.stream()
+                .map(JiraIssueKey::parse)
+                .flatMap(Optional::stream)
+                .collect(java.util.stream.Collectors.groupingBy(
+                        JiraIssueKey.Parsed::projectKey,
+                        TreeMap::new,
+                        java.util.stream.Collectors.mapping(JiraIssueKey.Parsed::issueKey,
+                                java.util.stream.Collectors.toCollection(java.util.TreeSet::new))));
+        issueKeysByProject.forEach((projectKey, issueKeys) -> pageRepository.findByProjectKey(projectKey)
+                .ifPresent(projectPage -> jiraIssuePageGenerator.generatePages(
+                        projectPage.getPageId(), projectKey, issueKeys)));
     }
 
     private void generate(String changesPageId, List<JiraProjectPageDto> projectPages, Set<String> affectedIssueKeys) {

@@ -40,6 +40,10 @@
             <groupId>ch.admin.bit.jeap</groupId>
             <artifactId>jeap-spring-boot-tx</artifactId>
         </dependency>
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
 
         <!-- test -->
         <dependency>

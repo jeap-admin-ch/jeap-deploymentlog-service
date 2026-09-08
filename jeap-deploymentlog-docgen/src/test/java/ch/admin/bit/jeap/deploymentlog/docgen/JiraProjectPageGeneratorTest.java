@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -136,5 +137,16 @@ class JiraProjectPageGeneratorTest {
         verify(templateRenderer).renderJiraProjectPage(argThat(rendered ->
                 "https://confluence/issue-page".equals(
                         rendered.getIssues().getFirst().getDeploymentLogIssuePageUrl())));
+    }
+
+    @Test
+    void regeneratesTrackedIssuePagesForNormalizedValidKeys() {
+        JiraProjectPage tracked = JiraProjectPage.create("JEAP", "project-page", "changes-page");
+        when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.of(tracked));
+
+        generator.regenerateTrackedIssuePages(Set.of("jeap-2", "JEAP-1", "invalid"));
+
+        verify(jiraIssuePageGenerator).generatePages(
+                "project-page", "JEAP", Set.of("JEAP-1", "JEAP-2"));
     }
 }

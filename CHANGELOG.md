@@ -10,6 +10,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Extend the existing ShedLock-protected housekeeping run with independently configurable Confluence page cleanup
+  and persistent data retention. Retention uses `Deployment.started_at`, deletes expired `SUCCESS`, `FAILURE` and
+  `CANCELLED` deployments, protects `STARTED` deployments and open
+  flows and current stage state, deletes terminal flows only as complete units, and refreshes affected overview,
+  component and Change View pages under the affected systems' docgen locks. Refresh work is persisted atomically with
+  the deletion and retried by subsequent housekeeping runs until it succeeds. Partially failed Confluence cleanup is
+  compensated by regenerating pages for retained deployments. The new `/api/jobs/housekeeping` endpoint shares the
+  existing run; the previous endpoint remains compatible. Data retention is disabled unless a positive duration is
+  explicitly configured.
 - Generate `Changes`, `Systems` and `Stages` directly below the configured `Deployments` root page. The configured
   `root-page-id` continues to identify the existing root itself; no duplicate `Deployments` child is created.
 - Place systems below their non-empty system group or directly below `Systems` when ungrouped. Empty or deleted group
@@ -64,6 +73,9 @@ change is required. The migration also creates tracking tables for Jira project 
 stores the normalized Issue Key, Project Key, Confluence Page ID and current parent Page ID and is updated only after
 a successful Confluence operation. Existing Jira links to individual deployment pages are not deleted. New links use
 one stable remote-link identity per Jira issue and point to its DeploymentLog issue page.
+Flyway also adds a `(state, started_at)` index to keep retention candidate selection efficient; no retention data is
+deleted during migration. It creates one data-retention refresh-task table with an opaque JSON payload used to durably
+retry aggregate Confluence-page updates after committed deletion batches.
 After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
 pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
 `root-page-id` must continue to reference the existing `Deployments` page.

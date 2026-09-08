@@ -52,10 +52,18 @@ public class JobsController {
     }
 
     @PostMapping("/outdatedPageHousekeeping")
-    @Operation(summary = "Clean up outdated pages")
+    @Operation(summary = "Run housekeeping (compatibility endpoint)")
     @PreAuthorize("hasRole('deploymentlog-write')")
     public ResponseEntity<Void> outdatedPageHousekeeping() {
         schedulingService.outdatedPageHousekeeping();
+        return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+    @PostMapping("/housekeeping")
+    @Operation(summary = "Run Confluence page housekeeping and data retention")
+    @PreAuthorize("hasRole('deploymentlog-write')")
+    public ResponseEntity<Void> housekeeping() {
+        schedulingService.housekeeping();
         return new ResponseEntity<>(HttpStatus.OK);
     }
 

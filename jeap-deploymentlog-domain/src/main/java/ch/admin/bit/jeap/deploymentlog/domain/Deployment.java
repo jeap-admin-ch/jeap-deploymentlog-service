@@ -50,11 +50,11 @@ public class Deployment {
     @NonNull
     private Environment environment;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
     @NonNull
     private ComponentVersion componentVersion;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
     private Changelog changelog;
 
     @ElementCollection(fetch = FetchType.LAZY)

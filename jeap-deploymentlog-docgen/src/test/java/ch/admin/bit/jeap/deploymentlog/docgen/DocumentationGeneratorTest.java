@@ -75,6 +75,9 @@ class DocumentationGeneratorTest {
     ComponentPageGenerator componentPageGeneratorMock;
 
     @Mock
+    ComponentRepository componentRepositoryMock;
+
+    @Mock
     JiraProjectPageGenerator jiraProjectPageGeneratorMock;
 
     @Mock
@@ -304,6 +307,7 @@ class DocumentationGeneratorTest {
                 documentationStructurePageRepositoryMock,
                 documentationStructureLockMock,
                 componentPageGeneratorMock,
+                componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
                 jiraIssuePageRepositoryMock);
 
@@ -525,6 +529,7 @@ class DocumentationGeneratorTest {
                 documentationStructurePageRepositoryMock,
                 documentationStructureLockMock,
                 componentPageGeneratorMock,
+                componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
                 jiraIssuePageRepositoryMock);
     }

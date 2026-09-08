@@ -110,8 +110,27 @@ Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekee
 | `jeap.deploymentlog.documentation-generator.scheduled.retried-pages-limit` | `50`          | Maximum number of deployment pages that one repair run picks up.                                                |
 | `jeap.deploymentlog.documentation-generator.scheduled.min-age-minutes`  | `5`              | Minimum age of a deployment before the repair job regenerates its page — younger ones are assumed to be still in progress. |
 | `jeap.deploymentlog.documentation-generator.scheduled.max-age-minutes`  | `1440`           | Maximum age of a deployment considered by the repair job. Must be greater than `min-age-minutes`, otherwise the startup fails. |
-| `jeap.deploymentlog.documentation-generator.scheduled.keep-deployment-page-per-env-count` | `200` | How many deployment pages per system and non-productive environment the housekeeping keeps regardless of age. |
+| `jeap.deploymentlog.documentation-generator.scheduled.keep-deployment-page-per-env-count` | `200` | Legacy fallback for the number of deployment pages kept when the new `housekeeping.confluence-pages.keep-per-environment` property is not set. |
 | `jeap.deploymentlog.documentation-generator.housekeeping.cron`          | `0 30 3 * * *`   | Cron expression of the housekeeping job deleting outdated pages. Set to `-` to disable the job.                   |
+
+The common housekeeping run supports the following properties. The legacy
+`jeap.deploymentlog.documentation-generator.housekeeping.cron` remains the fallback when the new cron property is
+not set.
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `jeap.deploymentlog.housekeeping.cron` | legacy cron property | Cron expression for the common page-cleanup and data-retention run. The new property takes precedence. |
+| `jeap.deploymentlog.housekeeping.confluence-pages.enabled` | `true` | Enables only cleanup of old Confluence deployment pages. |
+| `jeap.deploymentlog.housekeeping.confluence-pages.min-age` | `7d` | Minimum page age before it may be removed. Must be positive. |
+| `jeap.deploymentlog.housekeeping.confluence-pages.keep-per-environment` | `200` | Number of deployment pages retained per system and non-productive environment regardless of age. |
+| `jeap.deploymentlog.housekeeping.data-retention.enabled` | `false` | Enables permanent deletion of expired deployment and terminal-flow data. |
+| `jeap.deploymentlog.housekeeping.data-retention.duration` | none | Minimum retention duration. Required and positive when data retention is enabled. |
+| `jeap.deploymentlog.housekeeping.data-retention.batch-size` | `500` | Maximum number of standalone candidates (or terminal flows) selected in one run. |
+
+Data retention uses `Deployment.started_at`. It deletes `SUCCESS`, `FAILURE` and `CANCELLED` deployments, and protects
+`STARTED` deployments, deployments assigned to open flows, and deployments referenced as the current component version
+of a stage. Terminal flows are removed only as a whole. Data retention is deliberately disabled by default until an
+operator configures the applicable retention duration.
 
 ## Database
 

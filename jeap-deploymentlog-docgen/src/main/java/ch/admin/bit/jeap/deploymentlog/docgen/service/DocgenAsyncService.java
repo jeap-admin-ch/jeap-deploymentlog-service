@@ -24,12 +24,16 @@ public class DocgenAsyncService {
 
     private final DocumentationGenerator documentationGenerator;
     private final DeploymentRepository deploymentRepository;
+    private final DataRetentionRepository dataRetentionRepository;
     private final Counter errorCounter;
     private final DocgenLocks locks;
 
-    public DocgenAsyncService(DocumentationGenerator documentationGenerator, DeploymentRepository deploymentRepository, MeterRegistry meterRegistry, DocgenLocks locks) {
+    public DocgenAsyncService(DocumentationGenerator documentationGenerator, DeploymentRepository deploymentRepository,
+                              DataRetentionRepository dataRetentionRepository, MeterRegistry meterRegistry,
+                              DocgenLocks locks) {
         this.documentationGenerator = documentationGenerator;
         this.deploymentRepository = deploymentRepository;
+        this.dataRetentionRepository = dataRetentionRepository;
         this.locks = locks;
         this.errorCounter = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error");
     }
@@ -77,7 +81,8 @@ public class DocgenAsyncService {
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerGenerateJiraLinksForSystem(String systemName, ZonedDateTime from, ZonedDateTime to) {
-       documentationGenerator.generateJiraLinksForSystem(systemName, from, to);
+        runLockedForSystem(systemName, () ->
+                documentationGenerator.generateJiraLinksForSystem(systemName, from, to));
     }
 
     private void generateDeploymentPages(UUID deploymentId, String systemName, String componentName) {
@@ -140,5 +145,27 @@ public class DocgenAsyncService {
         // generating confluence pages). One task per system, so that a system waiting for its lock does not hold up
         // the other systems of the same batch.
         runLockedForSystem(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(systemEnvs));
+    }
+
+    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
+    public void triggerUpdatesAfterDataRetention(DataRetentionRefreshTask refreshTask) {
+        DataRetentionResult result = refreshTask.result();
+        List<String> affectedSystemNames = result.systemEnvironments().stream()
+                .map(SystemEnv::getSystemName)
+                .distinct()
+                .sorted()
+                .toList();
+        runLockedForSystems(affectedSystemNames, 0, () -> {
+            documentationGenerator.updatePagesAfterDataRetention(result);
+            dataRetentionRepository.deletePendingRefreshTask(refreshTask.id());
+        });
+    }
+
+    private void runLockedForSystems(List<String> systemNames, int index, Runnable task) {
+        if (index == systemNames.size()) {
+            task.run();
+            return;
+        }
+        runLockedForSystem(systemNames.get(index), () -> runLockedForSystems(systemNames, index + 1, task));
     }
 }
