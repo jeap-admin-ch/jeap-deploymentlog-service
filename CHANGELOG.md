@@ -10,75 +10,40 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Extend the existing ShedLock-protected housekeeping run with independently configurable Confluence page cleanup
-  and persistent data retention. Retention uses `Deployment.started_at`, deletes expired `SUCCESS`, `FAILURE` and
-  `CANCELLED` deployments, protects `STARTED` deployments and open
-  flows and current stage state, deletes terminal flows only as complete units, and refreshes affected overview,
-  component and Change View pages under the affected systems' docgen locks. Refresh work is persisted atomically with
-  the deletion and retried by subsequent housekeeping runs until it succeeds. Partially failed Confluence cleanup is
-  compensated by regenerating pages for retained deployments. The new `/api/jobs/housekeeping` endpoint shares the
-  existing run; the previous endpoint remains compatible. Data retention is disabled unless a positive duration is
-  explicitly configured.
-- Generate `Changes`, `Systems` and `Stages` directly below the configured `Deployments` root page. The configured
-  `root-page-id` continues to identify the existing root itself; no duplicate `Deployments` child is created.
-- Place systems below their non-empty system group or directly below `Systems` when ungrouped. Empty or deleted group
-  pages are removed only after all system pages have been reconciled to their current target. Group rename, delete,
-  assignment and removal operations trigger this reconciliation asynchronously.
-- Add persistent tracking for top-level, group, per-system `Components (<System>)` and `Deployments (<System>)`, and
-  global stage pages.
-- Generate one tracked page per component directly below `Components (<System>)`, using the system-qualified title
-  `<Component> (<System>)` to avoid collisions with ArchRepo pages in the same space. The newest version flows are
-  rendered on the component page itself. The configurable `component-flow-max-show` limit defaults to `50`; flow
-  deployments, Jira issues, effective target stages and terminal states are included.
-- Generate one tracked page below `Changes` for every Jira project with deployment activity in the configurable
-  `change-view-activity-period` (default 30 days). Project pages normalize and deduplicate stored issue keys, link Jira
-  without a live Jira request, and show the highest successfully reached CODE-deployment stage plus higher-stage
-  failures. Issues without a successful productive deployment are listed first.
-- Generate one tracked page below the Jira project page for every active Jira issue. It lists all retained CODE,
-  CONFIG and INFRASTRUCTURE deployments referencing the issue, newest first, and links existing deployment pages.
-  A stable Jira remote link points to this issue page and is retried on subsequent generation runs.
+- Add a tracked, idempotent Confluence hierarchy with `Changes`, `Systems`, `Stages`, optional system groups, and the
+  per-system containers `Components (<System>)` and `Deployments (<System>)`.
+- Generate one system-qualified page per component containing its newest version flows. The configurable display
+  limit defaults to `50` and affects only Confluence output.
+- Add Change View pages for active Jira projects and issues. Project activity defaults to 30 days; issue pages show
+  all retained deployments and are linked from Jira through one stable remote link per issue.
+- Extend the existing ShedLock-protected housekeeping with independently configurable Confluence-page cleanup and
+  opt-in data retention. Retention removes expired `SUCCESS`, `FAILURE` and `CANCELLED` deployments and complete
+  terminal flows while protecting `STARTED` deployments, open flows and current stage state; durable refresh tasks
+  keep generated pages consistent.
+- Add `POST /api/jobs/housekeeping`; the previous housekeeping endpoint remains compatible.
 
 ### Changed
 
-- Render component flow types as their stable values (`NEW`, `RETRY`, `ROLLBACK`, `AD_HOC`) without a separate
-  evaluation column. Deployment attempts use Confluence status icons and stable page-id URLs, the deployment column
-  is wider, and `ABORTED` or `AD_HOC` rows are highlighted.
-- Move global stage histories from the existing `_Deployment History Overview` or
-  `Stages / Deployment History` intermediate page directly below `Stages` while retaining their page ids, content and
-  children, then remove the obsolete intermediate page.
-- Rename or create the per-system containers as `Components (<System>)` and `Deployments (<System>)` to keep their
-  titles unique across the Confluence space. Move existing system stage pages below
-  `<System> / Deployments (<System>)`; new deployment pages are generated exclusively below
-  `<System> / Deployments (<System>) / <Stage> / <Year>`.
-- Rename and regroup system pages by their persisted Confluence page id so their children and Confluence history are
-  retained. Full and system-specific regeneration reconcile the same target structure idempotently.
-- Address systems by their unique, case-insensitively matched name instead of their internal UUID in the system-group
-  assignment and removal endpoints.
-- Stop creating Jira remote links to individual deployment pages. Existing individual links are intentionally left
-  untouched; the repair job now repairs stable links to tracked DeploymentLog issue pages.
+- Move existing system, stage and deployment pages into the new hierarchy by persisted Confluence page id, preserving
+  their children and history. Global stage histories now reside directly below `Stages`.
+- Show stable flow types (`NEW`, `RETRY`, `ROLLBACK`, `AD_HOC`), Confluence deployment-status icons and page-id links;
+  highlight `ABORTED` and `AD_HOC` rows and remove the separate evaluation column.
+- Address systems by their unique case-insensitive names in the system-group API.
+- Stop creating Jira remote links to individual deployment pages. Existing links remain untouched; repair now targets
+  the stable DeploymentLog issue-page links.
 
 ### Fixed
 
-- Serialize documentation-structure reconciliation across different system jobs and service instances using the
-  dedicated global ShedLock `docgen-documentation-structure`, preventing concurrent first-time tracking inserts from
-  violating the primary key.
-- Avoid passing a nullable higher failed stage through `Optional.orElse` when rendering Jira project pages.
+- Serialize global structure reconciliation and per-system generation, repair and retention work with the appropriate
+  ShedLocks to prevent duplicate tracking and conflicting page updates.
+- Handle absent higher failed stages safely when rendering Jira project pages.
 
 ### Migration
 
-Flyway creates `documentation_structure_page` and adds nullable `parent_page_id` columns to the existing system,
-environment-history and deployment-list page tracking tables. It also creates `component_page`, keyed by the technical
-component UUID with a unique Confluence page id and its current parent page id. No data backfill or configuration
-change is required. The migration also creates tracking tables for Jira project and Jira issue pages. Issue tracking
-stores the normalized Issue Key, Project Key, Confluence Page ID and current parent Page ID and is updated only after
-a successful Confluence operation. Existing Jira links to individual deployment pages are not deleted. New links use
-one stable remote-link identity per Jira issue and point to its DeploymentLog issue page.
-Flyway also adds a `(state, started_at)` index to keep retention candidate selection efficient; no retention data is
-deleted during migration. It creates one data-retention refresh-task table with an opaque JSON payload used to durably
-retry aggregate Confluence-page updates after committed deletion batches.
-After the upgrade, run `POST /api/jobs/docgen` once to reconcile the complete tree immediately; otherwise existing
-pages are adopted and moved incrementally by normal deployment generation and scheduled regeneration. The configured
-`root-page-id` must continue to reference the existing `Deployments` page.
+Flyway adds the structure, component, Jira project/issue and retention-refresh tracking tables, nullable parent page
+references and a retention candidate index. It does not delete or backfill data, and no configuration change is
+required. `root-page-id` must still reference the existing `Deployments` page. Run `POST /api/jobs/docgen` once for an
+immediate full reconciliation; otherwise pages are adopted incrementally during normal generation.
 
 
 ## [13.1.0] - 2026-09-09
