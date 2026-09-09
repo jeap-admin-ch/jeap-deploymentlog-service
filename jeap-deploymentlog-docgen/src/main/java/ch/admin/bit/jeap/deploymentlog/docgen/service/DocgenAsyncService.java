@@ -76,7 +76,14 @@ public class DocgenAsyncService {
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocumentationStructureReconciliation() {
-        runLockedForSystem("documentation-structure", documentationGenerator::reconcileDocumentationStructure);
+        try {
+            // DocumentationGenerator acquires the dedicated global structure lock. Acquiring it here as a
+            // system lock as well would resolve to the same non-reentrant ShedLock name and block until timeout.
+            documentationGenerator.reconcileDocumentationStructure();
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Documentation structure reconciliation failed", ex);
+        }
     }
 
     @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)

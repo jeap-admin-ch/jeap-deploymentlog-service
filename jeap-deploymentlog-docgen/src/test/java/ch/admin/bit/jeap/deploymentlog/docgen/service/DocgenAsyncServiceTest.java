@@ -148,15 +148,20 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
-    void triggerDocumentationStructureReconciliation() {
+    void triggerDocumentationStructureReconciliationAcquiresStructureLockExactlyOnce() {
         when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        doAnswer(invocation -> {
+            docgenLocks.runWithDocumentationStructureLock(() -> null);
+            return null;
+        }).when(documentationGenerator).reconcileDocumentationStructure();
 
         docgenAsyncService.triggerDocumentationStructureReconciliation();
 
         verify(documentationGenerator, timeout(Duration.ofSeconds(10).toMillis()))
                 .reconcileDocumentationStructure();
-        verify(simpleLockMock).unlock();
         await().until(this::asyncTaskExecutorIsDone);
+        verify(lockProvider).lock(any());
+        verify(simpleLockMock).unlock();
     }
 
     @Test
