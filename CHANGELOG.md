@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [13.0.0] - 2026-09-08
+## [14.0.0] - 2026-09-09
 
 ### Added
 
@@ -62,8 +62,12 @@ immediate full reconciliation; otherwise pages are adopted incrementally during 
 
 ### Migration
 
-- Reset existing flow assignments and flow records once with Flyway. Deployment records remain available but are not
-  replayed; new flows start with the next eligible CODE deployment.
+Flyway adds the structure, component, Jira project/issue and retention-refresh tracking tables, nullable parent page
+references and a retention candidate index. It also resets existing flow assignments and flow records once while
+preserving all deployment records. Existing deployments are not replayed; new flows start with the next eligible CODE
+deployment. No configuration change is required. `root-page-id` must still reference the existing `Deployments` page.
+Run `POST /api/jobs/docgen` once for an immediate full reconciliation; otherwise pages are adopted incrementally during
+normal generation.
 
 ## [12.8.0] - 2026-09-09
 
