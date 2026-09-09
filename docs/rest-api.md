@@ -182,8 +182,12 @@ none.
 
 ### `GET /api/system/{systemName}/component/{componentName}/previousDeployment/{environment}?version=…`
 
-Roles `deploymentlog-read` or `deploymentlog-write`. Same selection as above, but returns the full
-deployment (`DeploymentDto`) instead of only the version string. `404` when there is none.
+Roles `deploymentlog-read` or `deploymentlog-write`. Returns the last successful CODE deployment whose
+version differs from the `version` query parameter as a full `DeploymentDto`. CONFIG-only and
+INFRASTRUCTURE-only entries are skipped so the result contains a deployable image version for rollback.
+Legacy deployments without a deployment type remain eligible because they predate the deployment-type
+classification and are treated as CODE deployments. Undeployments are never eligible rollback candidates.
+`404` when there is none.
 
 ### `POST /api/system/{systemName}/alias/{aliasName}` — add an alias
 

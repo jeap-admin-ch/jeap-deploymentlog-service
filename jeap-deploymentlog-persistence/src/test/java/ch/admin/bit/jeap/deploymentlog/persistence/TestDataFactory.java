@@ -15,7 +15,18 @@ public class TestDataFactory {
     }
 
     public static Deployment createDeployment(Environment environment, Component component, ZonedDateTime startedAt, String versionName, DeploymentTarget deploymentTarget) {
-        return createDeployment(environment, component, startedAt, versionName, ZonedDateTime.now(), deploymentTarget);
+        return createDeployment(environment, component, startedAt, versionName, ZonedDateTime.now(), deploymentTarget,
+                DeploymentSequence.NEW);
+    }
+
+    public static Deployment createDeployment(Environment environment,
+                                              Component component,
+                                              ZonedDateTime startedAt,
+                                              String versionName,
+                                              DeploymentTarget deploymentTarget,
+                                              DeploymentSequence sequence) {
+        return createDeployment(environment, component, startedAt, versionName, ZonedDateTime.now(), deploymentTarget,
+                sequence);
     }
 
     public static Deployment createDeployment(Environment environment,
@@ -24,6 +35,17 @@ public class TestDataFactory {
                                               String versionName,
                                               ZonedDateTime committedAt,
                                               DeploymentTarget deploymentTarget) {
+        return createDeployment(environment, component, startedAt, versionName, committedAt, deploymentTarget,
+                DeploymentSequence.NEW);
+    }
+
+    private static Deployment createDeployment(Environment environment,
+                                               Component component,
+                                               ZonedDateTime startedAt,
+                                               String versionName,
+                                               ZonedDateTime committedAt,
+                                               DeploymentTarget deploymentTarget,
+                                               DeploymentSequence sequence) {
         ComponentVersion componentVersion = ComponentVersion.builder()
                 .commitRef("test")
                 .taggedAt(ZonedDateTime.now())
@@ -46,7 +68,7 @@ public class TestDataFactory {
                 .environment(environment)
                 .target(deploymentTarget)
                 .componentVersion(componentVersion)
-                .sequence(DeploymentSequence.NEW)
+                .sequence(sequence)
                 .build();
     }
 

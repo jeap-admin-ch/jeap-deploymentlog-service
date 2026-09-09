@@ -113,6 +113,13 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
+    public Optional<Deployment> getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(Component component, Environment env, String version) {
+        List<Deployment> results = jpaDeploymentRepository.getSuccessfulCodeDeploymentsForComponentDifferentToVersion(
+                component, env, version, PageRequest.of(0, 1));
+        return results.stream().findFirst();
+    }
+
+    @Override
     public String getSystemNameForDeployment(UUID deploymentId) {
         return jpaDeploymentRepository.getSystemNameForDeployment(deploymentId);
     }

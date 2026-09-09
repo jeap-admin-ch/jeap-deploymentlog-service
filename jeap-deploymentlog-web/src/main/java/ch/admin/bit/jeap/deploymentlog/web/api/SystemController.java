@@ -114,7 +114,7 @@ public class SystemController {
     }
 
     @GetMapping(value = "/{systemName}/component/{componentName}/previousDeployment/{environment}")
-    @Operation(summary = "Get previous deployment of component of system on environment that is different to the version param")
+    @Operation(summary = "Get previous successful CODE deployment of component on environment that differs from the version param")
     @ApiResponses(
             @ApiResponse(responseCode = "404", description = "System, component or environment not found, or no version deployed on env at the moment")
     )

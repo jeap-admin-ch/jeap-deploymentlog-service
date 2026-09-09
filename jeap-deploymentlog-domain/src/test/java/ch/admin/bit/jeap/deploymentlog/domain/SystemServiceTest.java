@@ -268,7 +268,7 @@ class SystemServiceTest {
 
         final Optional<Deployment> previousDeploymentOfComponent = systemService.getPreviousDeploymentOfComponent("system", "component", "test", "2.0.0");
 
-        verify(deploymentRepository, never()).getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString());
+        verify(deploymentRepository, never()).getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString());
         assertThat(previousDeploymentOfComponent).isPresent();
         assertThat(previousDeploymentOfComponent.get().getComponentVersion().getVersionName()).contains(version);
     }
@@ -285,7 +285,7 @@ class SystemServiceTest {
 
         final Optional<Deployment> previousDeploymentOfComponent = systemService.getPreviousDeploymentOfComponent("system", "component", "test", "2.0.0");
 
-        verify(deploymentRepository, never()).getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString());
+        verify(deploymentRepository, never()).getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString());
         assertThat(previousDeploymentOfComponent).isEmpty();
     }
 
@@ -305,7 +305,7 @@ class SystemServiceTest {
         mockCurrentVersion("1.2.3");
 
         final Deployment deployment = mockDeployment("1.0.0");
-        when(deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
+        when(deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
                 .thenReturn(Optional.of(deployment));
 
         final Optional<Deployment> previousVersionOfComponent = systemService.getPreviousDeploymentOfComponent("system", "component", "test", "1.2.3");
@@ -332,7 +332,7 @@ class SystemServiceTest {
         mockCurrentVersion("1.2.3");
 
         final Deployment deployment = mockDeployment("1.0.0");
-        when(deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
+        when(deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
                 .thenReturn(Optional.of(deployment));
 
         final Optional<Deployment> previousVersionOfComponent = systemService.getPreviousDeploymentOfComponent("aliasName", "component", "test", "1.2.3");

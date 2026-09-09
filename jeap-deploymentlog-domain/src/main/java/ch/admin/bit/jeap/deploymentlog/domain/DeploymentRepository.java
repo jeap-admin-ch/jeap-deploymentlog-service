@@ -38,6 +38,8 @@ public interface DeploymentRepository {
 
     Optional<Deployment> getLastSuccessfulDeploymentForComponentDifferentToVersion(Component component, Environment env, String version);
 
+    Optional<Deployment> getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(Component component, Environment env, String version);
+
     String getSystemNameForDeployment(UUID deploymentId);
 
     Optional<Deployment> getLastDeploymentForBusinessVersion(Component component,

@@ -505,6 +505,89 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
+    void getLastSuccessfulCodeDeploymentForComponentDifferentToVersion_skipsConfigOnlyDeployment() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        Environment env = environmentRepository.save(new Environment("DEV"));
+        System system = systemRepository.save(new System("System A"));
+        Component component = componentRepository.save(new Component("Microservice A", system));
+
+        Deployment previousCodeDeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(2), "1", deploymentTarget);
+        previousCodeDeployment.getDeploymentTypes().add(DeploymentType.CODE);
+        previousCodeDeployment.success(previousCodeDeployment.getStartedAt().plusMinutes(1), "success");
+
+        Deployment newerConfigDeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(1), "config-change", deploymentTarget);
+        newerConfigDeployment.getDeploymentTypes().add(DeploymentType.CONFIG);
+        newerConfigDeployment.success(newerConfigDeployment.getStartedAt().plusMinutes(1), "success");
+
+        deploymentRepository.save(previousCodeDeployment);
+        deploymentRepository.save(newerConfigDeployment);
+
+        Optional<Deployment> result = deploymentRepository
+                .getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, env, "2");
+
+        assertThat(result)
+                .map(Deployment::getId)
+                .contains(previousCodeDeployment.getId());
+    }
+
+    @Test
+    void getLastSuccessfulCodeDeploymentForComponentDifferentToVersion_includesLegacyUntypedDeployment() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        Environment env = environmentRepository.save(new Environment("DEV"));
+        System system = systemRepository.save(new System("System A"));
+        Component component = componentRepository.save(new Component("Microservice A", system));
+
+        Deployment legacyUntypedDeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(2), "1", deploymentTarget);
+        legacyUntypedDeployment.success(legacyUntypedDeployment.getStartedAt().plusMinutes(1), "success");
+
+        Deployment newerConfigDeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(1), "config-change", deploymentTarget);
+        newerConfigDeployment.getDeploymentTypes().add(DeploymentType.CONFIG);
+        newerConfigDeployment.success(newerConfigDeployment.getStartedAt().plusMinutes(1), "success");
+
+        deploymentRepository.save(legacyUntypedDeployment);
+        deploymentRepository.save(newerConfigDeployment);
+
+        Optional<Deployment> result = deploymentRepository
+                .getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, env, "2");
+
+        assertThat(result)
+                .map(Deployment::getId)
+                .contains(legacyUntypedDeployment.getId());
+    }
+
+    @Test
+    void getLastSuccessfulCodeDeploymentForComponentDifferentToVersion_skipsUntypedUndeployment() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        Environment env = environmentRepository.save(new Environment("DEV"));
+        System system = systemRepository.save(new System("System A"));
+        Component component = componentRepository.save(new Component("Microservice A", system));
+
+        Deployment previousCodeDeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(2), "1", deploymentTarget);
+        previousCodeDeployment.getDeploymentTypes().add(DeploymentType.CODE);
+        previousCodeDeployment.success(previousCodeDeployment.getStartedAt().plusMinutes(1), "success");
+
+        Deployment newerUntypedUndeployment = TestDataFactory.createDeployment(
+                env, component, ZonedDateTime.now().minusDays(1), "(undeployed)", deploymentTarget,
+                DeploymentSequence.UNDEPLOYED);
+        newerUntypedUndeployment.success(newerUntypedUndeployment.getStartedAt().plusMinutes(1), "success");
+
+        deploymentRepository.save(previousCodeDeployment);
+        deploymentRepository.save(newerUntypedUndeployment);
+
+        Optional<Deployment> result = deploymentRepository
+                .getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, env, "2");
+
+        assertThat(result)
+                .map(Deployment::getId)
+                .contains(previousCodeDeployment.getId());
+    }
+
+    @Test
     void getSystemNameForEnvironment() {
         DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
         Environment environmentDev = new Environment("DEV");

@@ -114,8 +114,8 @@ public class SystemService {
     }
 
     /**
-     * Retrieves the previous deployment of a component in a specific environment,
-     * excluding the current version.
+     * Retrieves the previous successful code deployment of a component in a specific environment,
+     * excluding the current version. Config-only and infrastructure-only deployments are ignored.
      *
      * @param systemName      The name of the system.
      * @param componentName   The name of the component.
@@ -142,9 +142,9 @@ public class SystemService {
         Component component = retrieveComponentByName(retrieveSystemByName(systemName), componentName);
         Environment environment = retrieveEnvironmentByName(environmentName);
 
-        // Get the last successful deployment for the component in the environment,
-        // excluding the provided version
-        final Optional<Deployment> previousDeployment = deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(component, environment, version);
+        // Get the last successful code deployment for the component in the environment,
+        // excluding the provided version. Rollbacks need an image version and must ignore config-only entries.
+        final Optional<Deployment> previousDeployment = deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, environment, version);
 
         previousDeployment.ifPresent(s -> log.info("Found previousDeployment '{}'", s));
         return previousDeployment;
