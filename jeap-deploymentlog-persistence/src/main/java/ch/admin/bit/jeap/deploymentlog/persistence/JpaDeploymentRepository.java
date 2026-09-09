@@ -100,19 +100,6 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
 
     @Query("""
             select d from Deployment d \
-            where d.componentVersion.component = :component \
-            and d.componentVersion.versionName <> :version \
-            and d.environment = :env \
-            and d.state = 'SUCCESS' \
-            order by d.startedAt desc
-            """)
-    List<Deployment> getSuccessfulDeploymentsForComponentDifferentToVersion(@Param("component") Component component,
-                                                               @Param("env") Environment env,
-                                                               @Param("version") String version,
-                                                               Pageable pageable);
-
-    @Query("""
-            select d from Deployment d \
             left join d.deploymentTypes deploymentType \
             where d.componentVersion.component = :component \
             and d.componentVersion.versionName <> :version \

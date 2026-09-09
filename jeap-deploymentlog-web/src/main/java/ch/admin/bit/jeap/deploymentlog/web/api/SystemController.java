@@ -99,7 +99,7 @@ public class SystemController {
     }
 
     @GetMapping(value = "/{systemName}/component/{componentName}/previousVersion/{environment}", produces = "text/plain")
-    @Operation(summary = "Get previous version of component of system on environment that is different to the version param")
+    @Operation(summary = "Get previous CODE version of component of system on environment that is different to the version param")
     @ApiResponses(
             @ApiResponse(responseCode = "404", description = "System, component or environment not found, or no version deployed on env at the moment")
     )

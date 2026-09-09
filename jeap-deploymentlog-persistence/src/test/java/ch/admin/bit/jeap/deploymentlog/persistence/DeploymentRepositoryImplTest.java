@@ -452,7 +452,7 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
-    void getLastSuccessfulDeploymentForComponentBeforeVersion_previousVersionFound_returnPreviousVersion() {
+    void getLastSuccessfulCodeDeploymentForComponentBeforeVersion_previousVersionFound_returnPreviousVersion() {
         DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
         Environment env = new Environment("DEV");
         environmentRepository.save(env);
@@ -465,20 +465,21 @@ class DeploymentRepositoryImplTest {
         Deployment currentVersion = TestDataFactory.createDeployment(env, component, ZonedDateTime.now().minusDays(1), "2", deploymentTarget);
         currentVersion.success(currentVersion.getStartedAt().plusMinutes(1), "success");
         Deployment previousVersion = TestDataFactory.createDeployment(env, component, ZonedDateTime.now(), "1", deploymentTarget);
+        previousVersion.getDeploymentTypes().add(DeploymentType.CODE);
         previousVersion.success(previousVersion.getStartedAt().plusMinutes(1), "success");
         deploymentRepository.save(currentVersion);
         deploymentRepository.save(previousVersion);
 
         String versionName = "2";
 
-        Optional<Deployment> lastSuccessfulDeployment = deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(component, env, versionName);
+        Optional<Deployment> lastSuccessfulDeployment = deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, env, versionName);
         assertTrue(lastSuccessfulDeployment.isPresent());
         assertEquals(previousVersion.getId(), lastSuccessfulDeployment.get().getId());
 
     }
 
     @Test
-    void getLastSuccessfulDeploymentForComponentBeforeVersion_previousVersionNotFound_returnEmpty() {
+    void getLastSuccessfulCodeDeploymentForComponentBeforeVersion_previousVersionNotFound_returnEmpty() {
         DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
         Environment env = new Environment("DEV");
         environmentRepository.save(env);
@@ -493,13 +494,14 @@ class DeploymentRepositoryImplTest {
         Deployment previousVersion = TestDataFactory.createDeployment(env, component, ZonedDateTime.now(), "2", deploymentTarget);
         previousVersion.success(previousVersion.getStartedAt().plusMinutes(1), "success");
         Deployment failedVersion = TestDataFactory.createDeployment(env, component, ZonedDateTime.now(), "1", deploymentTarget);
+        failedVersion.getDeploymentTypes().add(DeploymentType.CODE);
         failedVersion.failed(previousVersion.getStartedAt().plusMinutes(1), "failed");
         deploymentRepository.save(currentVersion);
         deploymentRepository.save(previousVersion);
 
         String versionName = "2";
 
-        Optional<Deployment> lastSuccessfulDeployment = deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(component, env, versionName);
+        Optional<Deployment> lastSuccessfulDeployment = deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, env, versionName);
         assertTrue(lastSuccessfulDeployment.isEmpty());
 
     }

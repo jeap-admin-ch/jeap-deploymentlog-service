@@ -110,7 +110,7 @@ class SystemServiceTest {
 
         final Optional<String> previousVersionOfComponent = systemService.getPreviousVersionOfComponent("system", "component", "test", "2.0.0");
 
-        verify(deploymentRepository, never()).getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString());
+        verify(deploymentRepository, never()).getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString());
         assertThat(previousVersionOfComponent).isPresent();
         assertThat(previousVersionOfComponent.get()).contains("1.0.0");
     }
@@ -127,7 +127,7 @@ class SystemServiceTest {
 
         final Optional<String> previousVersionOfComponent = systemService.getPreviousVersionOfComponent("system", "component", "test", "2.0.0");
 
-        verify(deploymentRepository, never()).getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString());
+        verify(deploymentRepository, never()).getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString());
         assertThat(previousVersionOfComponent).isEmpty();
     }
 
@@ -147,7 +147,7 @@ class SystemServiceTest {
         mockCurrentVersion("1.2.3");
 
         final Deployment deployment = mockDeployment("1.0.0");
-        when(deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
+        when(deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
                 .thenReturn(Optional.of(deployment));
 
         final Optional<String> previousVersionOfComponent = systemService.getPreviousVersionOfComponent("system", "component", "test", "1.2.3");
@@ -171,7 +171,7 @@ class SystemServiceTest {
 
         mockCurrentVersion("1.2.3");
 
-        when(deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
+        when(deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(any(), any(), anyString()))
                 .thenReturn(Optional.empty());
 
         final Optional<String> previousVersionOfComponent = systemService.getPreviousVersionOfComponent("system", "component", "test", "1.2.3");

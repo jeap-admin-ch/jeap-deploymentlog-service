@@ -10,9 +10,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Return the last successful CODE deployment from the previous-deployment endpoint, skipping CONFIG-only and
-  INFRASTRUCTURE-only entries and undeployments while retaining legacy untyped deployments so rollback clients
-  receive a valid image version.
+- Return the last successful CODE deployment from the previous-version and previous-deployment endpoints, skipping
+  CONFIG-only and INFRASTRUCTURE-only entries and undeployments while retaining legacy untyped deployments so
+  rollback clients receive a valid image version.
 
 ## [12.7.0] - 2026-09-06
 

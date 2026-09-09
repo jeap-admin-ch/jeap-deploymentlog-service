@@ -104,9 +104,9 @@ public class SystemService {
         Component component = retrieveComponentByName(retrieveSystemByName(systemName), componentName);
         Environment environment = retrieveEnvironmentByName(environmentName);
 
-        // Get the last successful deployment for the component in the environment,
-        // excluding the provided version, and map it to the previous version if found
-        final Optional<String> previousVersion = deploymentRepository.getLastSuccessfulDeploymentForComponentDifferentToVersion(component, environment, version)
+        // Get the last successful code deployment for the component in the environment,
+        // excluding the provided version, and map it to the previous image version if found
+        final Optional<String> previousVersion = deploymentRepository.getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(component, environment, version)
                 .map(d -> d.getComponentVersion().getVersionName());
 
         previousVersion.ifPresent(s -> log.info("Found previousVersion '{}'", s));

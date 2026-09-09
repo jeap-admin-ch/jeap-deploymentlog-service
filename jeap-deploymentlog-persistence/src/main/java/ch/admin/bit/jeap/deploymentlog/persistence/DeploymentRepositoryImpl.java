@@ -107,12 +107,6 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
-    public Optional<Deployment> getLastSuccessfulDeploymentForComponentDifferentToVersion(ch.admin.bit.jeap.deploymentlog.domain.Component component, Environment env, String version) {
-        List<Deployment> results =  jpaDeploymentRepository.getSuccessfulDeploymentsForComponentDifferentToVersion(component, env, version, PageRequest.of(0, 1));
-        return results.stream().findFirst();
-    }
-
-    @Override
     public Optional<Deployment> getLastSuccessfulCodeDeploymentForComponentDifferentToVersion(Component component, Environment env, String version) {
         List<Deployment> results = jpaDeploymentRepository.getSuccessfulCodeDeploymentsForComponentDifferentToVersion(
                 component, env, version, PageRequest.of(0, 1));

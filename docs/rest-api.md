@@ -175,10 +175,11 @@ Roles `deploymentlog-read` or `deploymentlog-write`. Returns the currently deplo
 
 ### `GET /api/system/{systemName}/component/{componentName}/previousVersion/{environment}?version=…`
 
-Roles `deploymentlog-read` or `deploymentlog-write`. Returns, as `text/plain`, the last successfully
-deployed version on that environment that differs from the `version` query parameter — the counterpart to
-`currentVersion` when a changelog between the previous and the new state is needed. `404` when there is
-none.
+Roles `deploymentlog-read` or `deploymentlog-write`. Returns, as `text/plain`, the version of the last
+successful CODE deployment on that environment that differs from the `version` query parameter — the
+counterpart to `currentVersion` when a changelog between the previous and the new image state is needed.
+Legacy deployments without a type are treated as CODE deployments. Config-only, infrastructure-only and
+undeployment entries are skipped. `404` when there is none.
 
 ### `GET /api/system/{systemName}/component/{componentName}/previousDeployment/{environment}?version=…`
 
