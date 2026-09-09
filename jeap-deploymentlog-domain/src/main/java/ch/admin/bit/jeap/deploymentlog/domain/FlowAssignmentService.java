@@ -15,6 +15,7 @@ public class FlowAssignmentService {
     private final FlowRepository flowRepository;
     private final FlowTypeClassifier flowTypeClassifier;
     private final FlowStageProperties flowStageProperties;
+    private final FlowStageResolver flowStageResolver;
 
     public Optional<Flow> assign(Deployment deployment, Environment finalDeploymentEnvironment) {
         if (!flowStageProperties.isEnabled() || !isFlowRelevant(deployment)) {
@@ -51,6 +52,8 @@ public class FlowAssignmentService {
     public boolean isFlowRelevant(Deployment deployment) {
         return deployment.getSequence() != DeploymentSequence.UNDEPLOYED
                 && deployment.getDeploymentTypes() != null
-                && deployment.getDeploymentTypes().contains(DeploymentType.CODE);
+                && deployment.getDeploymentTypes().contains(DeploymentType.CODE)
+                && deployment.getEnvironment().getStagingOrder()
+                >= flowStageResolver.resolveStartEnvironment().getStagingOrder();
     }
 }

@@ -89,6 +89,14 @@ flows. A blank or unknown explicit environment, no productive environment, no ma
 multiple matching fallback environments aborts startup. Set `enabled=false` to run without flow creation and lifecycle
 processing; deployment recording remains available.
 
+CODE deployments on environments whose `staging_order` is lower than that of the resolved start environment are
+stored normally but are not assigned to a flow. This allows deployments on preliminary environments such as DEV to be
+excluded when flow tracking starts on a later stage such as REF.
+
+The migration introducing this behavior resets flow assignments collected by earlier versions while preserving all
+deployment records. Existing deployments are not replayed: new flows start with the next eligible CODE deployment on
+or above the configured start environment.
+
 ## Scheduled jobs
 
 Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekeeping cron expression. See

@@ -15,6 +15,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,6 +27,8 @@ class FlowAssignmentServiceTest {
     private FlowRepository flowRepository;
     @Mock
     private FlowTypeClassifier classifier;
+    @Mock
+    private FlowStageResolver flowStageResolver;
 
     private FlowAssignmentService service;
     private Component component;
@@ -35,17 +38,18 @@ class FlowAssignmentServiceTest {
     @BeforeEach
     void setUp() {
         FlowStageProperties properties = new FlowStageProperties();
-        service = new FlowAssignmentService(flowRepository, classifier, properties);
         component = new Component("service", new System("SYSTEM"));
         dev = new Environment("DEV");
         prod = new Environment("PROD");
+        lenient().when(flowStageResolver.resolveStartEnvironment()).thenReturn(dev);
+        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver);
     }
 
     @Test
     void ignoresCodeDeploymentsWhenFlowProcessingIsDisabled() {
         FlowStageProperties properties = new FlowStageProperties();
         properties.setEnabled(false);
-        service = new FlowAssignmentService(flowRepository, classifier, properties);
+        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver);
         Deployment deployment = deployment("disabled", "1.0.0", DeploymentSequence.NEW, DeploymentType.CODE);
 
         assertThat(service.assign(deployment, prod)).isEmpty();
@@ -61,6 +65,19 @@ class FlowAssignmentServiceTest {
         assertThat(service.assign(config, prod)).isEmpty();
         assertThat(service.assign(undeployment, prod)).isEmpty();
         verify(flowRepository, never()).lockComponent(any());
+    }
+
+    @Test
+    void ignoresCodeDeploymentsBelowStartEnvironment() {
+        Environment ref = new Environment("REF");
+        ref.setStagingOrder(100);
+        when(flowStageResolver.resolveStartEnvironment()).thenReturn(ref);
+        Deployment deployment = deployment("below-start", "1.0.0", DeploymentSequence.NEW, DeploymentType.CODE);
+
+        assertThat(service.assign(deployment, prod)).isEmpty();
+
+        verify(flowRepository, never()).lockComponent(any());
+        verify(classifier, never()).classify(any());
     }
 
     @Test

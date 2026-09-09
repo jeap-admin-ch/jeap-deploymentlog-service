@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [13.0.0] - 2026-09-09
+
+### Fixed
+
+- Exclude deployments below the configured flow start stage from flow assignment instead of classifying them as
+  `AD_HOC`.
+
+### Migration
+
+- Reset existing flow assignments and flow records once with Flyway. Deployment records remain available but are not
+  replayed; new flows start with the next eligible CODE deployment.
 
 ## [12.8.0] - 2026-09-09
 
