@@ -248,7 +248,11 @@ class DocumentationGeneratorTest {
         verify(confluenceAdapterMock, times(2)).movePage(anyString(), anyString());
         verify(componentPageGeneratorMock).moveTrackedPages(
                 ROOT_PAGE_ID + "/Systems/" + oldSystemName + "/Components (" + oldSystemName + ")",
-                ROOT_PAGE_ID + "/Systems/" + systemName + "/Components (" + systemName + ")");
+                ROOT_PAGE_ID + "/Systems/" + systemName + "/Components (" + systemName + ")",
+                systemName);
+        verify(componentPageGeneratorMock).generatePages(
+                ROOT_PAGE_ID + "/Systems/" + systemName + "/Components (" + systemName + ")",
+                oldSystem.getComponents(), systemName);
     }
 
     @Test

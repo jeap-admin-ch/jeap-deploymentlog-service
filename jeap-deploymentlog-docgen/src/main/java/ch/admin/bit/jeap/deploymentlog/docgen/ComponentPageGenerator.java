@@ -27,8 +27,12 @@ public class ComponentPageGenerator {
 
     @Transactional
     public String generatePage(String componentsParentPageId, Component component) {
+        return generatePage(componentsParentPageId, component, component.getSystem().getName());
+    }
+
+    private String generatePage(String componentsParentPageId, Component component, String systemName) {
         componentRepository.lockById(component.getId());
-        String pageTitle = pageTitle(component);
+        String pageTitle = pageTitle(component, systemName);
         Optional<ComponentPage> trackedPage = componentPageRepository.findByComponentId(component.getId());
         String pageId = trackedPage.map(ComponentPage::getPageId)
                 .or(() -> confluenceAdapter.findPageByTitle(componentsParentPageId, pageTitle))
@@ -54,30 +58,47 @@ public class ComponentPageGenerator {
             return pageId;
         } catch (RuntimeException ex) {
             log.warn("Failed to generate component page for system '{}' and component '{}'",
-                    component.getSystem().getName(), component.getName(), ex);
+                    systemName, component.getName(), ex);
             throw ex;
         }
     }
 
     static String pageTitle(Component component) {
-        return component.getName() + " (" + component.getSystem().getName() + ")";
+        return pageTitle(component, component.getSystem().getName());
+    }
+
+    private static String pageTitle(Component component, String systemName) {
+        return component.getName() + " (" + systemName + ")";
     }
 
     @Transactional
     public void generatePages(String componentsParentPageId, Collection<Component> components) {
+        generatePages(componentsParentPageId, components, null);
+    }
+
+    @Transactional
+    void generatePages(String componentsParentPageId, Collection<Component> components, String targetSystemName) {
         components.stream()
                 .sorted(Comparator.comparing(Component::getName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(Component::getId))
-                .forEach(component -> generatePage(componentsParentPageId, component));
+                .forEach(component -> generatePage(componentsParentPageId, component,
+                        targetSystemName == null ? component.getSystem().getName() : targetSystemName));
     }
 
     @Transactional
     public void moveTrackedPages(String oldComponentsParentPageId, String newComponentsParentPageId) {
+        moveTrackedPages(oldComponentsParentPageId, newComponentsParentPageId, null);
+    }
+
+    @Transactional
+    void moveTrackedPages(String oldComponentsParentPageId, String newComponentsParentPageId,
+                          String targetSystemName) {
         componentPageRepository.findByParentPageId(oldComponentsParentPageId).stream()
                 .map(ComponentPage::getComponentId)
                 .map(componentRepository::findById)
                 .flatMap(Optional::stream)
                 .sorted(Comparator.comparing(Component::getId))
-                .forEach(component -> generatePage(newComponentsParentPageId, component));
+                .forEach(component -> generatePage(newComponentsParentPageId, component,
+                        targetSystemName == null ? component.getSystem().getName() : targetSystemName));
     }
 }

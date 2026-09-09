@@ -129,6 +129,21 @@ class ComponentPageGeneratorTest {
     }
 
     @Test
+    void movesTrackedPagesUsingExplicitTargetSystemNameBeforeDatabaseMergeCommits() {
+        ComponentPage trackedPage = ComponentPage.create(component.getId(), "component-page", "old-components-page");
+        when(componentPageRepository.findByParentPageId("old-components-page")).thenReturn(List.of(trackedPage));
+        when(componentRepository.findById(component.getId())).thenReturn(Optional.of(component));
+        when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.of(trackedPage));
+        when(confluenceAdapter.updatePageById(eq("component-page"), eq("new-components-page"),
+                eq("my-component (target-system)"), any(), eq(true))).thenReturn(true);
+
+        generator.moveTrackedPages("old-components-page", "new-components-page", "target-system");
+
+        verify(confluenceAdapter).updatePageById(eq("component-page"), eq("new-components-page"),
+                eq("my-component (target-system)"), any(), eq(true));
+    }
+
+    @Test
     void qualifiesPageTitleWithCurrentSystemName() {
         assertThat(ComponentPageGenerator.pageTitle(component)).isEqualTo("my-component (my-system)");
 

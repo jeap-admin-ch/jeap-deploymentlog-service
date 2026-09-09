@@ -98,9 +98,10 @@ public class DocumentationGenerator {
         documentationStructurePageRepository.findByStructureKey(systemComponentsPageKey(oldSystem.getId()))
                 .map(DocumentationStructurePage::getPageId)
                 .ifPresent(oldComponentsPageId -> componentPageGenerator.moveTrackedPages(
-                        oldComponentsPageId, targetStructure.componentsPageId()));
+                        oldComponentsPageId, targetStructure.componentsPageId(), system.getName()));
         componentPageGenerator.generatePages(targetStructure.componentsPageId(), system.getComponents());
-        componentPageGenerator.generatePages(targetStructure.componentsPageId(), oldSystem.getComponents());
+        componentPageGenerator.generatePages(
+                targetStructure.componentsPageId(), oldSystem.getComponents(), system.getName());
 
         log.info("Moving {} deployment pages of system '{}' to system '{}'", deployments.size(), oldSystem.getName(), system.getName());
         moveDeploymentPages(system, targetStructure.deploymentsPageId(), deployments);
