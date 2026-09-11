@@ -55,8 +55,9 @@ class JiraProjectPageGeneratorTest {
     @Test
     void createsAndTracksPageOnlyAfterSuccessfulConfluenceOperation() {
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.empty());
+        when(confluenceAdapter.findPageByTitle("changes-page", "JEAP (Jira)")).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("changes-page", "JEAP")).thenReturn(Optional.empty());
-        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("changes-page"), eq("JEAP"), any()))
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("changes-page"), eq("JEAP (Jira)"), any()))
                 .thenReturn("project-page");
 
         generator.generateAll("changes-page");
@@ -71,13 +72,27 @@ class JiraProjectPageGeneratorTest {
     void reusesTrackedPageId() {
         JiraProjectPage tracked = JiraProjectPage.create("JEAP", "project-page", "changes-page");
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.of(tracked));
-        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP"),
+        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
                 any(), eq(false))).thenReturn(true);
 
         generator.generateAll("changes-page");
 
         verify(confluenceAdapter, never()).addOrUpdatePageUnderAncestor(any(), any(), any());
         verify(pageRepository).save(tracked);
+    }
+
+    @Test
+    void adoptsLegacyProjectPageAndAddsJiraSuffix() {
+        when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.empty());
+        when(confluenceAdapter.findPageByTitle("changes-page", "JEAP (Jira)")).thenReturn(Optional.empty());
+        when(confluenceAdapter.findPageByTitle("changes-page", "JEAP")).thenReturn(Optional.of("legacy-page"));
+        when(confluenceAdapter.updatePageById(eq("legacy-page"), eq("changes-page"), eq("JEAP (Jira)"),
+                any(), eq(false))).thenReturn(true);
+
+        generator.generateAll("changes-page");
+
+        verify(confluenceAdapter, never()).addOrUpdatePageUnderAncestor(any(), any(), any());
+        verify(pageRepository).save(argThat(page -> page.getPageId().equals("legacy-page")));
     }
 
     @Test
@@ -100,7 +115,7 @@ class JiraProjectPageGeneratorTest {
         when(dtoFactory.createActiveProjects(any())).thenReturn(List.of());
         when(pageRepository.findAll()).thenReturn(List.of(tracked));
         when(pageRepository.findByProjectKey("OLD")).thenReturn(Optional.of(tracked));
-        when(confluenceAdapter.updatePageById(eq("old-page"), eq("changes-page"), eq("OLD"),
+        when(confluenceAdapter.updatePageById(eq("old-page"), eq("changes-page"), eq("OLD (Jira)"),
                 any(), eq(false))).thenAnswer(invocation -> {
                     invocation.getArgument(3, Supplier.class).get();
                     return true;
@@ -121,12 +136,13 @@ class JiraProjectPageGeneratorTest {
                 .build();
         when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(project));
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.empty());
+        when(confluenceAdapter.findPageByTitle("changes-page", "JEAP (Jira)")).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("changes-page", "JEAP")).thenReturn(Optional.empty());
-        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("changes-page"), eq("JEAP"), any()))
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("changes-page"), eq("JEAP (Jira)"), any()))
                 .thenReturn("project-page");
         when(jiraIssuePageGenerator.generatePages("project-page", "JEAP", java.util.Set.of("JEAP-1")))
                 .thenReturn(java.util.Map.of("JEAP-1", "https://confluence/issue-page"));
-        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP"),
+        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
                 any(), eq(false))).thenAnswer(invocation -> {
                     invocation.getArgument(3, Supplier.class).get();
                     return true;

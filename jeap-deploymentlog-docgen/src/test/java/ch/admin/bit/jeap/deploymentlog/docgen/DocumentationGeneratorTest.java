@@ -407,12 +407,38 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPages();
 
         String systemsPageId = ROOT_PAGE_ID + "/Systems";
-        String groupPageId = systemsPageId + "/" + group.getName();
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(systemsPageId), eq(group.getName()), any());
+        String groupPageId = systemsPageId + "/" + group.getName() + " (Group)";
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
+                eq(systemsPageId), eq(group.getName() + " (Group)"), any());
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
                 eq(groupPageId), eq(groupedSystem.getName()), any());
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
                 eq(systemsPageId), eq(ungroupedSystem.getName()), any());
+    }
+
+    @Test
+    void generateAllPages_adoptsLegacyGroupPageAndAddsGroupSuffix() {
+        System system = new System("SYSTEM A");
+        SystemGroup group = new SystemGroup("Example Group");
+        SystemGroupRepository groupRepository = mock(SystemGroupRepository.class);
+        when(groupRepository.findByIdForUpdate(group.getId())).thenReturn(Optional.of(group));
+        when(systemRepositoryMock.findByNameIgnoreCase(system.getName())).thenReturn(Optional.of(system));
+        new SystemGroupService(groupRepository, systemRepositoryMock).assignSystem(group.getId(), system.getName());
+        when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
+        when(generatorServiceMock.createSystemPageDto(system))
+                .thenReturn(SystemPageDto.builder().name(system.getName()).build());
+        String systemsPageId = ROOT_PAGE_ID + "/Systems";
+        lenient().doReturn(Optional.empty()).when(confluenceAdapterMock)
+                .findPageByTitle(systemsPageId, "Example Group (Group)");
+        lenient().doReturn(Optional.of("legacy-group-page")).when(confluenceAdapterMock)
+                .findPageByTitle(systemsPageId, "Example Group");
+
+        documentationGenerator.generateAllPages();
+
+        verify(confluenceAdapterMock).updatePageById(eq("legacy-group-page"), eq(systemsPageId),
+                eq("Example Group (Group)"), any(), eq(false));
+        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
+                eq("legacy-group-page"), eq("SYSTEM A"), any());
     }
 
     @Test
@@ -438,7 +464,7 @@ class DocumentationGeneratorTest {
 
         documentationGenerator.generateAllPages();
 
-        String groupPageId = ROOT_PAGE_ID + "/Systems/" + group.getName();
+        String groupPageId = ROOT_PAGE_ID + "/Systems/" + group.getName() + " (Group)";
         verify(confluenceAdapterMock).updatePageById(eq("existing-system-page"), eq(groupPageId),
                 eq(system.getName()), any(), eq(true));
         verify(generatorServiceMock).persistSystemPage(system, "existing-system-page", groupPageId);

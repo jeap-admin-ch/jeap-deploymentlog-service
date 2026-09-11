@@ -79,8 +79,10 @@ class JiraProjectPageGenerator {
 
     private String generatePage(String changesPageId, JiraProjectPageDto project, Set<String> affectedIssueKeys) {
         String projectKey = project.getProjectKey();
+        String pageTitle = projectKey + " (Jira)";
         Optional<JiraProjectPage> trackedPage = pageRepository.findByProjectKey(projectKey);
         String pageId = trackedPage.map(JiraProjectPage::getPageId)
+                .or(() -> confluenceAdapter.findPageByTitle(changesPageId, pageTitle))
                 .or(() -> confluenceAdapter.findPageByTitle(changesPageId, projectKey))
                 .orElse(null);
         boolean moveRequired = trackedPage.map(JiraProjectPage::getParentPageId)
@@ -90,8 +92,8 @@ class JiraProjectPageGenerator {
 
         try {
             if (pageId == null || !confluenceAdapter.updatePageById(
-                    pageId, changesPageId, projectKey, content, moveRequired)) {
-                pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(changesPageId, projectKey, content);
+                    pageId, changesPageId, pageTitle, content, moveRequired)) {
+                pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(changesPageId, pageTitle, content);
             }
 
             JiraProjectPage page = trackedPage.orElse(null);
@@ -117,7 +119,7 @@ class JiraProjectPageGenerator {
                                 .toList())
                         .build();
                 String finalPageId = pageId;
-                confluenceAdapter.updatePageById(pageId, changesPageId, projectKey,
+                confluenceAdapter.updatePageById(pageId, changesPageId, pageTitle,
                         () -> templateRenderer.renderJiraProjectPage(projectWithLinks), false);
                 page.updateLocation(finalPageId, changesPageId);
                 pageRepository.save(page);

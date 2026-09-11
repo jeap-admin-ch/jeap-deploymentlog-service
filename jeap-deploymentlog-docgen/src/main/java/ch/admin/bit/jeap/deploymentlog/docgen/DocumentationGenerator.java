@@ -424,8 +424,9 @@ public class DocumentationGenerator {
                 .toList();
         Map<UUID, String> groupPageIds = new HashMap<>();
         for (SystemGroup group : orderedGroups) {
-            String pageId = ensureStructurePage(groupPageKey(group.getId()), systemsPageId, group.getName(),
-                    () -> EMPTY_STRUCTURE_PAGE, null, null);
+            String pageId = ensureStructurePage(groupPageKey(group.getId()), systemsPageId,
+                    group.getName() + " (Group)", () -> EMPTY_STRUCTURE_PAGE,
+                    systemsPageId, group.getName());
             groupPageIds.put(group.getId(), pageId);
         }
 
