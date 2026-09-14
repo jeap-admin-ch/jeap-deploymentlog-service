@@ -13,6 +13,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   actuator endpoint. Reconstruct the current open-flow gauges from persistent flow data at startup and reconcile them
   periodically across service instances.
 
+### Fixed
+
+- Prevent `flow_open` reconciliation from double-applying concurrent local flow transitions, and restrict periodic
+  database reconciliation to indexed `OPEN` flows instead of scanning the complete flow history.
+
 
 ## [15.0.0] - 2026-09-15
 
