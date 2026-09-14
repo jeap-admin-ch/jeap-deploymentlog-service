@@ -78,6 +78,20 @@ class JiraWebClientImplTest {
     }
 
     @Test
+    void mapsMissingIssueWhenUpsertingStableDeploymentLogIssuePageLink() {
+        server.expect(requestTo("https://jira-test.com/rest/api/2/issue/CVE-2026/remotelink"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND)
+                        .body("{\"errorMessages\":[\"Issue Does Not Exist\"],\"errors\":{}}")
+                        .contentType(MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> jiraWebClient
+                .upsertDeploymentLogIssuePageRemoteLink("CVE-2026", "new-page"))
+                .isInstanceOf(JiraIssueNotFoundException.class)
+                .hasMessageContaining("CVE-2026");
+        server.verify();
+    }
+
+    @Test
     void testSearchIssuesLabels() {
         // Issue keys are quoted in the JQL, the query is not validated and maxResults matches the key count
         final String expectedRequestBody = """

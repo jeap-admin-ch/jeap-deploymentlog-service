@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
+import ch.admin.bit.jeap.deploymentlog.jira.JiraIssueNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClient;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -42,6 +43,16 @@ class JiraAdapterTest {
         assertDoesNotThrow(() -> jiraAdapter.updateIssuePageRemoteLink("JEAP-1234", "pageId"));
 
         verify(counter).increment();
+    }
+
+    @Test
+    void missingJiraIssueIsIgnoredWithoutCountingAnIntegrationFailure() {
+        doThrow(new JiraIssueNotFoundException("CVE-2026", mock(RestClientException.class)))
+                .when(jiraWebClient).upsertDeploymentLogIssuePageRemoteLink(anyString(), anyString());
+
+        assertDoesNotThrow(() -> jiraAdapter.updateIssuePageRemoteLink("CVE-2026", "pageId"));
+
+        verify(counter, never()).increment();
     }
 
 }

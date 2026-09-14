@@ -44,6 +44,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Serialize global structure reconciliation and per-system generation, repair and retention work with the appropriate
   ShedLocks to prevent duplicate tracking and conflicting page updates.
 - Handle absent higher failed stages safely when rendering Jira project pages.
+- Treat missing or invisible Jira issues as an expected remote-link outcome without recording an integration error or
+  logging a stack trace.
 
 ### Migration
 

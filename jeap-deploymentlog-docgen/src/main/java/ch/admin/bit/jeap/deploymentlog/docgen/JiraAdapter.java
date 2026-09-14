@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
+import ch.admin.bit.jeap.deploymentlog.jira.JiraIssueNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClient;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -23,6 +24,9 @@ public class JiraAdapter {
     public void updateIssuePageRemoteLink(String jiraIssueKey, String pageId) {
         try {
             jiraWebClient.upsertDeploymentLogIssuePageRemoteLink(jiraIssueKey, pageId);
+        } catch (JiraIssueNotFoundException ex) {
+            log.warn("Skipping stable DeploymentLog issue page link because Jira issue {} does not exist or is not visible",
+                    value("jiraIssueKey", ex.getIssueKey()));
         } catch (Exception ex) {
             remoteLinkErrorCounter.increment();
             log.warn("Failed to update stable DeploymentLog issue page link for Jira issue {}",

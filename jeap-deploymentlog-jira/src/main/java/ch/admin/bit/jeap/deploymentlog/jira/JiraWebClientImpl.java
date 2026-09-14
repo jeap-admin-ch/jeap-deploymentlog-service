@@ -97,12 +97,16 @@ public class JiraWebClientImpl implements JiraWebClient {
                         "url", confluenceLink,
                         "title", "DeploymentLog Issue " + normalizedIssueKey));
 
-        restClient.post()
-                .uri(url)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(objectMapper.writeValueAsString(body))
-                .retrieve()
-                .toBodilessEntity();
+        try {
+            restClient.post()
+                    .uri(url)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(objectMapper.writeValueAsString(body))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.NotFound ex) {
+            throw new JiraIssueNotFoundException(normalizedIssueKey, ex);
+        }
         log.info("Jira issue '{}' updated with stable DeploymentLog issue page link", normalizedIssueKey);
     }
 

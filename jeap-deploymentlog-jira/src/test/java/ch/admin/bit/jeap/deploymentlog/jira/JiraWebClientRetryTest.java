@@ -19,6 +19,7 @@ import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.ExpectedCount.times;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withUnauthorizedRequest;
 
 /**
@@ -93,6 +94,18 @@ class JiraWebClientRetryTest {
         assertThatThrownBy(() -> jiraWebClient
                 .upsertDeploymentLogIssuePageRemoteLink("JEAP-1234", "page-id"))
                 .isInstanceOf(HttpServerErrorException.class);
+        server.verify();
+    }
+
+    @Test
+    void stableIssuePageRemoteLink_missingIssueIsNotRetried() {
+        server.expect(once(), requestTo(
+                        "https://jira-test.com/rest/api/2/issue/CVE-2026/remotelink"))
+                .andRespond(withResourceNotFound());
+
+        assertThatThrownBy(() -> jiraWebClient
+                .upsertDeploymentLogIssuePageRemoteLink("CVE-2026", "page-id"))
+                .isInstanceOf(JiraIssueNotFoundException.class);
         server.verify();
     }
 }
