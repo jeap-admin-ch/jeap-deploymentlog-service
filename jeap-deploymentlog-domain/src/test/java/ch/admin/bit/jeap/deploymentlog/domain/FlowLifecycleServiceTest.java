@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,6 +24,8 @@ class FlowLifecycleServiceTest {
 
     @Mock
     private FlowRepository flowRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private FlowLifecycleService service;
     private Component component;
@@ -31,7 +35,7 @@ class FlowLifecycleServiceTest {
     @BeforeEach
     void setUp() {
         FlowStageProperties properties = new FlowStageProperties();
-        service = new FlowLifecycleService(flowRepository, properties);
+        service = new FlowLifecycleService(flowRepository, properties, eventPublisher);
         component = new Component("service", new System("SYSTEM"));
         dev = new Environment("DEV");
         prod = new Environment("PROD");
@@ -41,7 +45,7 @@ class FlowLifecycleServiceTest {
     void ignoresSuccessfulCodeDeploymentWhenFlowProcessingIsDisabled() {
         FlowStageProperties properties = new FlowStageProperties();
         properties.setEnabled(false);
-        service = new FlowLifecycleService(flowRepository, properties);
+        service = new FlowLifecycleService(flowRepository, properties, eventPublisher);
         Deployment deployment = deployment("disabled", "1.0.0", ZonedDateTime.now(), prod, DeploymentType.CODE);
         deployment.success(ZonedDateTime.now(), "done");
 
@@ -70,6 +74,10 @@ class FlowLifecycleServiceTest {
         assertThat(older.getState()).isEqualTo(FlowState.ABORTED);
         assertThat(older.getAbortedBy()).isSameAs(winningFlow);
         verify(flowRepository).findByDeploymentIdAndLockComponent(winningDeployment.getId());
+        verify(eventPublisher).publishEvent(
+                new FlowOpenMetricsChangedEvent(winningFlow.getId(), "SYSTEM", "service", FlowType.NEW, false));
+        verify(eventPublisher).publishEvent(
+                new FlowOpenMetricsChangedEvent(older.getId(), "SYSTEM", "service", FlowType.AD_HOC, false));
     }
 
     @Test
@@ -132,6 +140,8 @@ class FlowLifecycleServiceTest {
         assertThat(winner.getState()).isEqualTo(FlowState.CLOSED);
         assertThat(older.getState()).isEqualTo(FlowState.ABORTED);
         assertThat(older.getAbortedBy()).isSameAs(winner);
+        verify(eventPublisher, times(2)).publishEvent(any(FlowTerminalMetricEvent.class));
+        verify(eventPublisher, times(2)).publishEvent(any(FlowOpenMetricsChangedEvent.class));
     }
 
     private Deployment deployment(String externalId,

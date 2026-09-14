@@ -15,6 +15,8 @@ public interface DeploymentRepository {
 
     Optional<Deployment> findByExternalId(String externalId);
 
+    Optional<Deployment> findByExternalIdForUpdate(String externalId);
+
     List<Deployment> findAllDeploymentForSystemAndEnv(System system, Environment environment);
 
     List<Deployment> findAllDeploymentsForSystemStartedBetween(System system, ZonedDateTime from, ZonedDateTime to);

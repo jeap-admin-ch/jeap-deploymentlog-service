@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.domain;
 
 import ch.admin.bit.jeap.deploymentlog.domain.exception.AmbiguousOpenFlowException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public class FlowAssignmentService {
     private final FlowTypeClassifier flowTypeClassifier;
     private final FlowStageProperties flowStageProperties;
     private final FlowStageResolver flowStageResolver;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Optional<Flow> assign(Deployment deployment, Environment finalDeploymentEnvironment) {
         if (!flowStageProperties.isEnabled() || !isFlowRelevant(deployment)) {
@@ -45,6 +47,7 @@ public class FlowAssignmentService {
         } else {
             FlowType type = flowTypeClassifier.classify(deployment);
             flow = flowRepository.save(Flow.start(type, deployment, finalDeploymentEnvironment));
+            eventPublisher.publishEvent(FlowOpenMetricsChangedEvent.opened(flow));
         }
         return Optional.of(flow);
     }

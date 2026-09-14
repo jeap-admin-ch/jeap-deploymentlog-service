@@ -10,6 +10,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -50,6 +51,8 @@ class DeploymentServiceTest {
     private FlowAssignmentService flowAssignmentService;
     @Mock
     private FlowLifecycleService flowLifecycleService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @Mock
     private SystemService systemService;
     @InjectMocks
@@ -124,7 +127,7 @@ class DeploymentServiceTest {
         Deployment deployment = getDeploymentWithTypes(DeploymentType.CODE);
         deployment.success(ZonedDateTime.now(), "great success");
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(deployment));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(deployment));
         when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(any(Environment.class), any(Component.class))).thenReturn(
                 Optional.of(EnvironmentComponentVersionState.fromDeployment(deployment)));
 
@@ -157,7 +160,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_snapshotNotExists_created_noDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeployment()));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeployment()));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 
@@ -169,7 +172,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_snapshotNotExists_created_emptyDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes()));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeploymentWithTypes()));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 
@@ -181,7 +184,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_snapshotNotExists_created_codeDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE)));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE)));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 
@@ -193,7 +196,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_snapshotNotExists_created_codeAndInfraDeploymentType() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE)));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeploymentWithTypes(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE)));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 
@@ -205,7 +208,7 @@ class DeploymentServiceTest {
     @Test
     void updateState_failure_notCreated() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(getDeployment()));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeployment()));
 
         deploymentService.updateState("externalId", DeploymentState.FAILURE, "badly failed", ZonedDateTime.now(), Map.of());
 
@@ -216,9 +219,24 @@ class DeploymentServiceTest {
     }
 
     @Test
+    void repeatedTerminalStateProcessingPublishesMetricEventOnlyOnce()
+            throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
+        Deployment deployment = getDeployment();
+        when(deploymentRepository.findByExternalIdForUpdate("externalId"))
+                .thenReturn(Optional.of(deployment));
+
+        deploymentService.updateState("externalId", DeploymentState.FAILURE, "failed",
+                ZonedDateTime.now(), Map.of());
+        deploymentService.updateState("externalId", DeploymentState.FAILURE, "failed again",
+                ZonedDateTime.now(), Map.of());
+
+        verify(eventPublisher).publishEvent(any(DeploymentTerminalMetricEvent.class));
+    }
+
+    @Test
     void updateState_cancelled_doesNotUpdateEnvironmentComponentVersionState() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
         Deployment deployment = getDeployment();
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(deployment));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(deployment));
 
         deploymentService.updateState("externalId", DeploymentState.CANCELLED, "cancelled by user", ZonedDateTime.now(), Map.of());
 
@@ -234,7 +252,7 @@ class DeploymentServiceTest {
         final Deployment deployment = getUndeployment();
         deployment.success(ZonedDateTime.now(), "great success");
 
-        when(deploymentRepository.findByExternalId(anyString())).thenReturn(Optional.of(deployment));
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(deployment));
 
         deploymentService.updateState("externalId", DeploymentState.SUCCESS, "great success", ZonedDateTime.now(), Map.of());
 

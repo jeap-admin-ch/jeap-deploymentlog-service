@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateFo
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -31,6 +32,7 @@ public class DeploymentService {
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     private final FlowAssignmentService flowAssignmentService;
     private final FlowLifecycleService flowLifecycleService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @SuppressWarnings("java:S107")
     public UUID createDeployment(String externalId,
@@ -162,7 +164,9 @@ public class DeploymentService {
     }
 
     public UUID updateState(String externalId, DeploymentState state, String stateMessage, ZonedDateTime endedAt, Map<String, String> properties) throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
-        final Deployment deployment = retrieveDeploymentByExternalId(externalId);
+        final Deployment deployment = deploymentRepository.findByExternalIdForUpdate(externalId)
+                .orElseThrow(() -> new DeploymentNotFoundException(externalId));
+        boolean firstTerminalProcessing = deployment.getState() == DeploymentState.STARTED;
 
         deployment.getProperties().putAll(properties);
 
@@ -177,6 +181,10 @@ public class DeploymentService {
             case FAILURE -> deployment.failed(endedAt, stateMessage);
             case CANCELLED -> deployment.cancelled(endedAt, stateMessage);
             default -> throw new InvalidDeploymentStateForUpdateException(state);
+        }
+
+        if (firstTerminalProcessing && (state == DeploymentState.SUCCESS || state == DeploymentState.FAILURE)) {
+            eventPublisher.publishEvent(DeploymentTerminalMetricEvent.from(deployment));
         }
 
         return deployment.getId();

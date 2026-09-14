@@ -19,5 +19,9 @@ public interface FlowRepository {
 
     List<Flow> findLatestForComponent(UUID componentId, int limit);
 
+    List<OpenFlowMetricValue> countOpenFlowsBySystemComponentAndType();
+
+    List<OpenFlowMetricIdentity> findOpenFlowsForMetrics();
+
     Flow save(Flow flow);
 }

@@ -44,6 +44,11 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
+    public Optional<Deployment> findByExternalIdForUpdate(String externalId) {
+        return jpaDeploymentRepository.findByExternalIdForUpdate(externalId);
+    }
+
+    @Override
     public List<Deployment> findAllDeploymentForSystemAndEnv(System system, Environment environment) {
         return jpaDeploymentRepository.findAllDeploymentForSystemAndEnv(environment.getId(), system.getId());
     }

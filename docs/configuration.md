@@ -99,6 +99,16 @@ The migration introducing this behavior resets flow assignments collected by ear
 deployment records. Existing deployments are not replayed: new flows start with the next eligible CODE deployment on
 or above the configured start environment.
 
+## Deployment and flow metrics
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `jeap.deploymentlog.metrics.flow-open-refresh-interval` | `PT30S` | Interval at which the persistent number of open flows is reconciled with the `flow_open` gauges. Spring Boot duration syntax is supported. |
+
+Deployment and flow counters and timers are published on persisted terminal state transitions. The `flow_open` gauge
+is additionally rebuilt from persistent flow data at startup and on this interval. See
+[Operations](operations.md#metrics) for the metric names, labels and state rules.
+
 ## Scheduled jobs
 
 Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekeeping cron expression. See

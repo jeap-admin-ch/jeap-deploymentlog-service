@@ -13,6 +13,8 @@ import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
+import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricValue;
+import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import jakarta.persistence.EntityManager;
@@ -132,6 +134,30 @@ class FlowRepositoryImplTest {
                 component.getId(), winningCommit, abortingFlow.getId());
 
         assertThat(candidates).extracting(Flow::getId).containsExactly(older.getId());
+    }
+
+    @Test
+    void countsOpenFlowsGroupedByMetricLabels() {
+        Flow firstOpen = persistFlow("1.0.0", ZonedDateTime.now().minusDays(2), component, dev);
+        Flow secondOpen = persistFlow("2.0.0", ZonedDateTime.now().minusDays(1), component, dev);
+        Flow terminal = persistFlow("3.0.0", ZonedDateTime.now(), component, dev);
+        Flow aborting = persistFlow("4.0.0", ZonedDateTime.now().plusDays(1), component, prod);
+        terminal.abortBy(aborting);
+        Deployment terminalOnlyDeployment = deploymentRepository.save(deployment("5.0.0"));
+        Flow terminalOnly = flowRepository.save(Flow.start(FlowType.ROLLBACK, terminalOnlyDeployment, prod));
+        terminalOnly.abortBy(aborting);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<OpenFlowMetricValue> values = flowRepository.countOpenFlowsBySystemComponentAndType();
+
+        assertThat(values).containsExactlyInAnyOrder(
+                new OpenFlowMetricValue("SYSTEM", "service", FlowType.NEW, 3),
+                new OpenFlowMetricValue("SYSTEM", "service", FlowType.ROLLBACK, 0));
+        assertThat(flowRepository.findOpenFlowsForMetrics()).containsExactlyInAnyOrder(
+                new OpenFlowMetricIdentity(firstOpen.getId(), "SYSTEM", "service", FlowType.NEW),
+                new OpenFlowMetricIdentity(secondOpen.getId(), "SYSTEM", "service", FlowType.NEW),
+                new OpenFlowMetricIdentity(aborting.getId(), "SYSTEM", "service", FlowType.NEW));
     }
 
     @Test

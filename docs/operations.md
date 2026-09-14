@@ -127,6 +127,30 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | `deploymentlog.docgen.jiraissuelink.error`   | counter | Incremented after all retries to create or update a stable Jira link to a DeploymentLog issue page failed. |
 | `deploymentlog_generate_deployment_page`     | timer   | Duration of generating the pages for one deployment.                                              |
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
+| `deployment_counter`                         | counter | Terminal deployments, tagged with `system`, `component`, `environment` and `result` (`success` or `failed`). |
+| `deployment_duration_seconds`                | timer   | Duration of a terminal deployment from `started_at` to `ended_at`, tagged with `system`, `component` and `environment`. |
+| `flow_counter`                               | counter | Terminal flow transitions, tagged with `system`, `component`, `type` and `state` (`closed` or `aborted`). |
+| `flow_open`                                  | gauge   | Current persistent number of open flows, tagged with `system`, `component` and `type`. |
+| `flow_duration_seconds`                      | timer   | Duration in seconds from `Flow.born_at` to the successful deployment on the effective final environment, tagged with `system`, `component` and `type`. |
+| `flow_recovery_duration_seconds`             | timer   | Recovery duration of successfully closed rollback flows, tagged with `system`, `component` and their effective final `environment`. |
+
+Counters and duration values are emitted only for actual persisted state transitions, so retrying the same request
+does not count a terminal deployment or flow twice. A deployment duration is omitted and a warning is logged if
+`started_at` or `ended_at` is missing, or if `ended_at` precedes `started_at`. Flow durations are emitted only for
+successfully closed flows; open and aborted flows do not contribute a duration.
+
+`flow_open` is reconstructed from the database at startup, updated incrementally after local flow changes and reconciled
+periodically (every 30 seconds by default). Local updates do not query the complete flow history. The gauge therefore
+remains correct across application restarts and converges
+after changes made by another service instance or by housekeeping. Known label combinations that only have terminal
+flows remain present with value zero after a restart. Historical label combinations are discovered once during startup;
+periodic reconciliation queries only flows in state `OPEN` so that the state index can be used. The refresh interval is configurable through
+`jeap.deploymentlog.metrics.flow-open-refresh-interval`.
+
+Micrometer's Prometheus naming convention may expose counters with a `_total` suffix, for example
+`deployment_counter_total`. Enum label values are normalized to lower case; deployment, component and environment
+UUIDs, deployment external ids and version names are deliberately not used as labels in order to avoid unbounded
+cardinality.
 
 A lag that stays above zero over several intervals means the repair job cannot keep up or keeps failing —
 check the log for docgen warnings and the availability of Confluence. A lag that spikes and recovers is

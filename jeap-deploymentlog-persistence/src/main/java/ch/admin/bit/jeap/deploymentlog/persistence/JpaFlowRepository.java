@@ -45,4 +45,26 @@ interface JpaFlowRepository extends CrudRepository<Flow, UUID> {
             order by flow.bornAt desc, flow.id desc
             """)
     List<Flow> findLatestForComponent(@Param("componentId") UUID componentId, Pageable pageable);
+
+    @Query("""
+            select system.name, component.name, flow.type,
+                   sum(case when flow.state = :state then 1 else 0 end)
+            from Flow flow
+            join flow.componentVersion componentVersion
+            join componentVersion.component component
+            join component.system system
+            group by system.name, component.name, flow.type
+            order by system.name, component.name, flow.type
+            """)
+    List<Object[]> countByStateGroupedBySystemComponentAndType(@Param("state") FlowState state);
+
+    @Query("""
+            select flow.id, system.name, component.name, flow.type
+            from Flow flow
+            join flow.componentVersion componentVersion
+            join componentVersion.component component
+            join component.system system
+            where flow.state = :state
+            """)
+    List<Object[]> findByStateForMetrics(@Param("state") FlowState state);
 }

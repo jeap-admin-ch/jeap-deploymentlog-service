@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
@@ -12,6 +13,7 @@ public class FlowLifecycleService {
 
     private final FlowRepository flowRepository;
     private final FlowStageProperties flowStageProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     public void process(Deployment deployment) {
         if (!flowStageProperties.isEnabled() || !isSuccessfulCodeDeployment(deployment)) {
@@ -20,7 +22,10 @@ public class FlowLifecycleService {
 
         flowRepository.findByDeploymentIdAndLockComponent(deployment.getId()).ifPresent(flow -> {
             Component component = flow.getComponentVersion().getComponent();
-            flow.closeIfTargetReached(deployment);
+            if (flow.closeIfTargetReached(deployment)) {
+                eventPublisher.publishEvent(FlowTerminalMetricEvent.closed(flow, deployment));
+                eventPublisher.publishEvent(FlowOpenMetricsChangedEvent.noLongerOpen(flow));
+            }
             if (deployment.getEnvironment().isProductive()) {
                 abortOlderOpenFlows(flow, component);
             }
@@ -29,8 +34,12 @@ public class FlowLifecycleService {
 
     private void abortOlderOpenFlows(Flow abortingFlow, Component component) {
         ZonedDateTime committedAt = abortingFlow.getComponentVersion().getCommittedAt();
-        flowRepository.findOlderOpenFlows(component.getId(), committedAt, abortingFlow.getId())
-                .forEach(flow -> flow.abortBy(abortingFlow));
+        for (Flow flow : flowRepository.findOlderOpenFlows(component.getId(), committedAt, abortingFlow.getId())) {
+            if (flow.abortBy(abortingFlow)) {
+                eventPublisher.publishEvent(FlowTerminalMetricEvent.aborted(flow));
+                eventPublisher.publishEvent(FlowOpenMetricsChangedEvent.noLongerOpen(flow));
+            }
+        }
     }
 
     private boolean isSuccessfulCodeDeployment(Deployment deployment) {

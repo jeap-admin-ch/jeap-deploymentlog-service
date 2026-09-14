@@ -3,10 +3,13 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.Flow;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
+import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricValue;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Component;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -54,6 +57,28 @@ public class FlowRepositoryImpl implements FlowRepository {
     @Override
     public List<Flow> findLatestForComponent(UUID componentId, int limit) {
         return jpaFlowRepository.findLatestForComponent(componentId, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public List<OpenFlowMetricValue> countOpenFlowsBySystemComponentAndType() {
+        return jpaFlowRepository.countByStateGroupedBySystemComponentAndType(FlowState.OPEN).stream()
+                .map(row -> new OpenFlowMetricValue(
+                        (String) row[0],
+                        (String) row[1],
+                        (FlowType) row[2],
+                        (Long) row[3]))
+                .toList();
+    }
+
+    @Override
+    public List<OpenFlowMetricIdentity> findOpenFlowsForMetrics() {
+        return jpaFlowRepository.findByStateForMetrics(FlowState.OPEN).stream()
+                .map(row -> new OpenFlowMetricIdentity(
+                        (UUID) row[0],
+                        (String) row[1],
+                        (String) row[2],
+                        (FlowType) row[3]))
+                .toList();
     }
 
     @Override

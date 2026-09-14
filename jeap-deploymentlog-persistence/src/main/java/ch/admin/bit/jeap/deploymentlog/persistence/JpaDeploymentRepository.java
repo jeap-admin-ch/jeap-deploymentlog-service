@@ -21,6 +21,10 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
 
     Optional<Deployment> findByExternalId(String externalId);
 
+    @Query(value = "select deployment.* from deployment where deployment.external_id = :externalId for update",
+            nativeQuery = true)
+    Optional<Deployment> findByExternalIdForUpdate(@Param("externalId") String externalId);
+
     @Query("""
             select d from Deployment d, ComponentVersion cv, Component c, System s, Environment e \
             where e.id = :envId \

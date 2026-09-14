@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -29,6 +30,8 @@ class FlowAssignmentServiceTest {
     private FlowTypeClassifier classifier;
     @Mock
     private FlowStageResolver flowStageResolver;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private FlowAssignmentService service;
     private Component component;
@@ -42,14 +45,14 @@ class FlowAssignmentServiceTest {
         dev = new Environment("DEV");
         prod = new Environment("PROD");
         lenient().when(flowStageResolver.resolveStartEnvironment()).thenReturn(dev);
-        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver);
+        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver, eventPublisher);
     }
 
     @Test
     void ignoresCodeDeploymentsWhenFlowProcessingIsDisabled() {
         FlowStageProperties properties = new FlowStageProperties();
         properties.setEnabled(false);
-        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver);
+        service = new FlowAssignmentService(flowRepository, classifier, properties, flowStageResolver, eventPublisher);
         Deployment deployment = deployment("disabled", "1.0.0", DeploymentSequence.NEW, DeploymentType.CODE);
 
         assertThat(service.assign(deployment, prod)).isEmpty();
@@ -95,6 +98,8 @@ class FlowAssignmentServiceTest {
         assertThat(flow.getFinalDeploymentEnvironment()).isSameAs(prod);
         assertThat(flow.getDeployments()).containsExactly(deployment);
         assertThat(deployment.getFlow()).isSameAs(flow);
+        verify(eventPublisher).publishEvent(
+                new FlowOpenMetricsChangedEvent(flow.getId(), "SYSTEM", "service", FlowType.NEW, true));
     }
 
     @Test
@@ -112,6 +117,7 @@ class FlowAssignmentServiceTest {
         assertThat(flow.getFinalDeploymentEnvironment()).isSameAs(prod);
         assertThat(flow.getDeployments()).containsExactly(initial, retry);
         verify(classifier, never()).classify(any());
+        verify(eventPublisher, never()).publishEvent(any(FlowOpenMetricsChangedEvent.class));
     }
 
     @Test

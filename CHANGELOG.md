@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [14.1.0] - 2026-09-14
+
+### Added
+
+- Publish idempotent deployment and flow counters and duration timers through Micrometer and the existing Prometheus
+  actuator endpoint. Reconstruct the current open-flow gauges from persistent flow data at startup and reconcile them
+  periodically across service instances.
+
 
 ## [15.0.0] - 2026-09-15
 
