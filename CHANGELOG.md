@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [15.0.0] - 2026-09-15
+
+### Dependencies
+- **net.javacrumbs.shedlock:shedlock-spring**: 7.10.0 → 7.10.1 (patch)
+- **net.javacrumbs.shedlock:shedlock-provider-jdbc-template**: 7.10.0 → 7.10.1 (patch)
+- **ch.admin.bit.jeap:jeap-spring-boot-parent**: 40.9.2 → 41.3.0 (major)
+
 ## [14.0.0] - 2026-09-09
 
 ### Added
