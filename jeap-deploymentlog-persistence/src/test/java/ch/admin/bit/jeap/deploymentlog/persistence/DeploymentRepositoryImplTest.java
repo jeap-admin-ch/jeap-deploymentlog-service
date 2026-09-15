@@ -89,6 +89,29 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
+    void findByExternalIdForUpdate_deploymentFound() {
+        Environment environment = environmentRepository.save(new Environment("DEV"));
+        System system = systemRepository.save(new System("SYSTEM"));
+        Component component = componentRepository.save(new Component("service", system));
+        Deployment deployment = deploymentRepository.save(TestDataFactory.createDeployment(
+                environment, component, ZonedDateTime.now(), TestDataFactory.createDeploymentTarget()));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(deploymentRepository.findByExternalIdForUpdate(deployment.getExternalId()))
+                .hasValueSatisfying(found -> {
+                    assertThat(found.getId()).isEqualTo(deployment.getId());
+                    assertThat(found.getExternalId()).isEqualTo(deployment.getExternalId());
+                    assertThat(found.getState()).isEqualTo(DeploymentState.STARTED);
+                });
+    }
+
+    @Test
+    void findByExternalIdForUpdate_unknownExternalId() {
+        assertThat(deploymentRepository.findByExternalIdForUpdate("unknown-external-id")).isEmpty();
+    }
+
+    @Test
     void findDeploymentAndEnvironments() {
         DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
         Environment environmentDev = new Environment("DEV");

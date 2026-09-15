@@ -26,6 +26,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.context.annotation.Import;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -158,6 +159,56 @@ class FlowRepositoryImplTest {
                 new OpenFlowMetricIdentity(firstOpen.getId(), "SYSTEM", "service", FlowType.NEW),
                 new OpenFlowMetricIdentity(secondOpen.getId(), "SYSTEM", "service", FlowType.NEW),
                 new OpenFlowMetricIdentity(aborting.getId(), "SYSTEM", "service", FlowType.NEW));
+    }
+
+    @Test
+    void metricQueriesReturnEmptyWhenNoFlowsExist() {
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(flowRepository.countOpenFlowsBySystemComponentAndType()).isEmpty();
+        assertThat(flowRepository.findOpenFlowsForMetrics()).isEmpty();
+    }
+
+    @Test
+    void metricQueriesKeepSystemsComponentsAndAllFlowTypesSeparate() {
+        Component otherComponent = componentRepository.save(new Component("other-service", component.getSystem()));
+        System otherSystem = systemRepository.save(new System("OTHER-SYSTEM"));
+        Component sameNamedComponent = componentRepository.save(new Component("service", otherSystem));
+        List<OpenFlowMetricValue> expectedCounts = new ArrayList<>();
+        List<OpenFlowMetricIdentity> expectedFlows = new ArrayList<>();
+        for (Component flowComponent : List.of(component, otherComponent, sameNamedComponent)) {
+            for (FlowType type : FlowType.values()) {
+                Deployment deployment = deploymentRepository.save(
+                        deployment(type.name(), ZonedDateTime.now(), flowComponent, dev));
+                Flow flow = flowRepository.save(Flow.start(type, deployment, prod));
+                expectedCounts.add(new OpenFlowMetricValue(flowComponent.getSystem().getName(),
+                        flowComponent.getName(), type, 1));
+                expectedFlows.add(new OpenFlowMetricIdentity(flow.getId(), flowComponent.getSystem().getName(),
+                        flowComponent.getName(), type));
+            }
+        }
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(flowRepository.countOpenFlowsBySystemComponentAndType())
+                .containsExactlyInAnyOrderElementsOf(expectedCounts);
+        assertThat(flowRepository.findOpenFlowsForMetrics()).containsExactlyInAnyOrderElementsOf(expectedFlows);
+    }
+
+    @Test
+    void closedFlowsRetainZeroCountButAreExcludedFromOpenFlowIdentities() {
+        Deployment deployment = deploymentRepository.save(
+                deployment("closed", ZonedDateTime.now(), component, prod));
+        Flow flow = flowRepository.save(Flow.start(FlowType.NEW, deployment, prod));
+        deployment.success(ZonedDateTime.now(), "done");
+        assertThat(flow.closeIfTargetReached(deployment)).isTrue();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(flowRepository.countOpenFlowsBySystemComponentAndType())
+                .containsExactly(new OpenFlowMetricValue("SYSTEM", "service", FlowType.NEW, 0));
+        assertThat(flowRepository.findOpenFlowsForMetrics()).isEmpty();
     }
 
     @Test
