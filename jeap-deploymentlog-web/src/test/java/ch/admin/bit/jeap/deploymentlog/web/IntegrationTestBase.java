@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.web;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapterMock;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DeploymentAsyncExecutorConfiguration;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenTaskDispatcher;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.ChangelogDto;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.ComponentVersionCreateDto;
@@ -14,7 +15,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -37,7 +37,7 @@ class IntegrationTestBase {
     protected MockMvc mockMvc;
     @Autowired
     @Qualifier(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
-    protected ThreadPoolTaskExecutor asyncDocgenExecutor;
+    protected DocgenTaskDispatcher docgenTaskDispatcher;
     @Autowired
     protected DeploymentRepository deploymentRepository;
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
@@ -49,8 +49,7 @@ class IntegrationTestBase {
     void awaitUntilAsyncTasksCompleted() {
         Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
-                .until(() -> asyncDocgenExecutor.getThreadPoolExecutor().getCompletedTaskCount() > 0 &&
-                        asyncDocgenExecutor.getThreadPoolExecutor().getActiveCount() == 0);
+                .until(docgenTaskDispatcher::isIdle);
     }
 
     protected static DeploymentCreateDto createDeploymentDto() {

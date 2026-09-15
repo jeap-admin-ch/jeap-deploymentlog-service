@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.core.LockAssert;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -25,8 +26,10 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
@@ -50,6 +53,7 @@ public class SchedulingService {
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
+    private boolean legacyPageGenerationClassified;
 
     @Scheduled(cron = "${jeap.deploymentlog.documentation-generator.scheduled.cron:'-'}")
     @SchedulerLock(name = "generate-missing-pages", lockAtLeastFor = "60s", lockAtMostFor = "5m")
@@ -57,14 +61,30 @@ public class SchedulingService {
         LockAssert.assertLocked();
         log.debug("Checking for missing pages that need to be generated...");
 
+        if (!legacyPageGenerationClassified) {
+            deploymentService.classifyLegacyPageGeneration(housekeepingConfig.getConfluencePages().isEnabled(),
+                    housekeepingConfig.getConfluencePages().getMinAge(),
+                    housekeepingConfig.getConfluencePages().effectiveKeepPerEnvironment(
+                            configProperties.getKeepDeploymentPagePerEnvCount()));
+            legacyPageGenerationClassified = true;
+        }
+
         List<UUID> deploymentIds = deploymentService.getMissingDeploymentPages(
                 configProperties.getRetriedPagesLimit(),
                 configProperties.getMinAgeMinutes(),
                 configProperties.getMaxAgeMinutes());
         if (!deploymentIds.isEmpty()) {
-            log.warn("Re-generating {} pages: {}", deploymentIds.size(), deploymentIds);
+            log.info("Re-generating {} missing or outdated pages: {}", deploymentIds.size(), deploymentIds);
         }
-        deploymentIds.forEach(docgenAsyncService::triggerDocgenForDeployment);
+        for (UUID deploymentId : deploymentIds) {
+            try {
+                docgenAsyncService.triggerRepairDocgenForDeployment(deploymentId);
+            } catch (TaskRejectedException ex) {
+                log.info("Docgen queue is full; leaving deployment {} and the remaining pages for the next repair run",
+                        deploymentId);
+                break;
+            }
+        }
 
         log.debug("Missing page check finished");
     }
@@ -119,7 +139,7 @@ public class SchedulingService {
                                 configProperties.getKeepDeploymentPagePerEnvCount()));
 
         Set<UUID> deletedPageDeploymentIds = outdatedPages.stream()
-                .filter(this::deletePage)
+                .filter(this::deletePageWithSystemLock)
                 .map(DeploymentPage::getDeploymentId)
                 .collect(toSet());
         updateDeploymentListPages(deletedPageDeploymentIds);
@@ -235,13 +255,26 @@ public class SchedulingService {
                 .forEach(docgenAsyncService::triggerUpdateDeploymentListPages);
     }
 
+    private boolean deletePageWithSystemLock(DeploymentPage deploymentPage) {
+        Optional<String> systemName = deploymentService.getSystemAndEnvsForDeploymentIds(
+                        Set.of(deploymentPage.getDeploymentId())).stream()
+                .map(SystemEnv::getSystemName).findFirst();
+        if (systemName.isEmpty()) {
+            // Orphaned tracking has no deployment that could be repaired concurrently.
+            return deletePage(deploymentPage);
+        }
+        AtomicBoolean deleted = new AtomicBoolean();
+        docgenLocks.runIfLockAquiredBeforeTimeout(systemName.get(), () -> deleted.set(deletePage(deploymentPage)));
+        return deleted.get();
+    }
+
     private boolean deletePage(DeploymentPage deploymentPage) {
         try {
             log.info("Deleting outdated deployment page {}", deploymentPage);
             if (deploymentPage.getPageId() != null && !deploymentPage.getPageId().isBlank()) {
                 confluenceAdapter.deletePage(deploymentPage.getPageId());
             }
-            pageRepository.delete(deploymentPage);
+            deploymentService.suppressPageGeneration(deploymentPage);
             return true;
         } catch (Exception ex) {
             log.error("Failed to delete page {}", deploymentPage, ex);

@@ -6,6 +6,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -18,6 +19,56 @@ import java.util.Set;
 
 @Repository
 interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
+
+    @Query("""
+            select count(d) > 0 from Deployment d left join DeploymentPage p on d.id = p.deploymentId
+            where d.id = :id and d.pageGenerationSuppressed = false and d.pageGenerationLegacyUnclassified = false
+            and (p.id is null or d.lastModified > p.deploymentStateTimestamp or d.pageGenerationRequestId is not null)
+            """)
+    boolean isPageGenerationRepairRequired(@Param("id") UUID deploymentId);
+
+    @Query("select d.pageGenerationRequestId from Deployment d where d.id = :id")
+    Optional<UUID> getPageGenerationRequestId(@Param("id") UUID deploymentId);
+
+    @Modifying
+    @Query("update Deployment d set d.pageGenerationRequestId = null where d.id = :id and d.pageGenerationRequestId = :requestId")
+    void completePageGenerationRequest(@Param("id") UUID deploymentId, @Param("requestId") UUID requestId);
+
+    @Modifying
+    @Query("update Deployment d set d.pageGenerationSuppressed = false, d.pageGenerationLegacyUnclassified = false, " +
+            "d.pageGenerationRequestId = :requestId where d.id = :id")
+    void resumePageGeneration(@Param("id") UUID deploymentId, @Param("requestId") UUID requestId);
+
+    @Modifying
+    @Query("update Deployment d set d.pageGenerationSuppressed = true where d.id = :id " +
+            "and d.lastModified <= :pageStateTimestamp and d.pageGenerationRequestId is null")
+    void suppressPageGeneration(@Param("id") UUID deploymentId,
+                                @Param("pageStateTimestamp") ZonedDateTime pageStateTimestamp);
+
+    @Modifying
+    @Query("""
+            update Deployment d set d.pageGenerationSuppressed = case when
+                :enabled = true and d.lastModified < :cutoff and d.environment.productive = false
+                and exists (select newer.id from Deployment newer
+                    where newer.componentVersion.component = d.componentVersion.component
+                    and newer.environment = d.environment and newer.startedAt > d.startedAt)
+                and (not exists (select success.id from Deployment success
+                    where success.componentVersion.component = d.componentVersion.component
+                    and success.environment = d.environment and success.state = 'SUCCESS')
+                    or exists (select success.id from Deployment success
+                    where success.componentVersion.component = d.componentVersion.component
+                    and success.environment = d.environment and success.state = 'SUCCESS'
+                    and success.startedAt > d.startedAt))
+                and :keep <= (select count(p.id) from DeploymentPage p, Deployment retained
+                    where retained.id = p.deploymentId and retained.environment = d.environment
+                    and retained.componentVersion.component.system = d.componentVersion.component.system
+                    and p.deploymentStateTimestamp > d.lastModified)
+                then true else false end, d.pageGenerationLegacyUnclassified = false
+            where d.pageGenerationLegacyUnclassified = true and d.pageGenerationRequestId is null
+            """)
+    void classifyLegacyPageGeneration(@Param("enabled") boolean housekeepingEnabled,
+                                      @Param("cutoff") ZonedDateTime cutoff,
+                                      @Param("keep") int keepPerEnvironment);
 
     Optional<Deployment> findByExternalId(String externalId);
 
@@ -67,18 +118,40 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             select deployment.id from Deployment deployment \
             left join DeploymentPage page on deployment.id = page.deploymentId \
             where \
-            deployment.startedAt >= :from and deployment.startedAt <= :to and \
-            (page.id is null or deployment.lastModified > page.deploymentStateTimestamp)
+            deployment.pageGenerationSuppressed = false and deployment.pageGenerationLegacyUnclassified = false and \
+            (deployment.startedAt >= :from or deployment.pageGenerationRequestId is not null) and deployment.startedAt <= :to and \
+            (page.id is null or deployment.lastModified > page.deploymentStateTimestamp or deployment.pageGenerationRequestId is not null) \
+            order by deployment.pageGenerationAttemptedAt asc nulls first, deployment.startedAt asc, deployment.id asc
             """)
     List<UUID> getDeploymentIdsMissingOrOutdatedGeneratedPages(@Param("from") ZonedDateTime from,
                                                                @Param("to") ZonedDateTime to, Pageable pageable);
 
     @Query("""
+            select deployment.id from Deployment deployment \
+            left join DeploymentPage page on deployment.id = page.deploymentId \
+            where deployment.pageGenerationSuppressed = false and deployment.pageGenerationLegacyUnclassified = false \
+            and deployment.startedAt <= :to and \
+            (page.id is null or deployment.lastModified > page.deploymentStateTimestamp or deployment.pageGenerationRequestId is not null) \
+            order by deployment.pageGenerationAttemptedAt asc nulls first, deployment.startedAt asc, deployment.id asc
+            """)
+    List<UUID> getAllDeploymentIdsMissingOrOutdatedGeneratedPages(@Param("to") ZonedDateTime to, Pageable pageable);
+
+    @Modifying
+    @Query("""
+            update Deployment deployment \
+            set deployment.pageGenerationAttemptedAt = :attemptedAt \
+            where deployment.id in :deploymentIds
+            """)
+    void markPageGenerationAttempted(@Param("deploymentIds") List<UUID> deploymentIds,
+                                     @Param("attemptedAt") ZonedDateTime attemptedAt);
+
+    @Query("""
             select count(deployment.id) from Deployment deployment \
             left join DeploymentPage page on deployment.id = page.deploymentId \
             where \
+            deployment.pageGenerationSuppressed = false and deployment.pageGenerationLegacyUnclassified = false and \
             deployment.startedAt >= :from and \
-            (page.id is null or deployment.lastModified > page.deploymentStateTimestamp)
+            (page.id is null or deployment.lastModified > page.deploymentStateTimestamp or deployment.pageGenerationRequestId is not null)
             """)
     long countDeploymentsWithMissingOrOutdatedGeneratedPages(@Param("from") ZonedDateTime from);
 

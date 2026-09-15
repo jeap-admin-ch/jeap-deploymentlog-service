@@ -32,6 +32,14 @@ public class Deployment {
     @NonNull
     private ZonedDateTime lastModified;
 
+    private ZonedDateTime pageGenerationAttemptedAt;
+
+    private UUID pageGenerationRequestId;
+
+    private boolean pageGenerationSuppressed;
+
+    private boolean pageGenerationLegacyUnclassified;
+
     @Enumerated(EnumType.STRING)
     @NonNull
     private DeploymentState state;
@@ -149,6 +157,16 @@ public class Deployment {
             throw new IllegalStateException("Deployment is already assigned to another flow");
         }
         this.flow = flow;
+    }
+
+    public void suppressPageGeneration() {
+        this.pageGenerationSuppressed = true;
+    }
+
+    public void resumePageGeneration() {
+        this.pageGenerationSuppressed = false;
+        this.pageGenerationLegacyUnclassified = false;
+        this.pageGenerationRequestId = UUID.randomUUID();
     }
 
 }

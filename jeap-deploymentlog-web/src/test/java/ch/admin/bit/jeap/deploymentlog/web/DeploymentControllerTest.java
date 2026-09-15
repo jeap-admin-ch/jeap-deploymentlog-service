@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.*;
@@ -284,6 +286,26 @@ class DeploymentControllerTest {
                 eq(null),
                 any(ZonedDateTime.class),
                 eq(Map.of()));
+    }
+
+    @Test
+    void updateDeployment_whenDocgenQueueIsFull_thenDeploymentRequestStillSucceeds() throws Exception {
+        String externalId = "123";
+        UUID deploymentId = UUID.randomUUID();
+        DeploymentUpdateStateDto deploymentUpdateStateDto = new DeploymentUpdateStateDto();
+        deploymentUpdateStateDto.setState(DeploymentState.SUCCESS);
+        deploymentUpdateStateDto.setTimestamp(ZonedDateTime.now());
+        when(deploymentService.updateState(anyString(), any(), any(), any(), any())).thenReturn(deploymentId);
+        doThrow(new TaskRejectedException("queue full"))
+                .when(docgenAsyncService).triggerDocgenForDeployment(deploymentId);
+
+        mockMvc.perform(put("/api/deployment/{externalId}/state", externalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(deploymentUpdateStateDto))
+                        .with(httpBasic("write", "secret")))
+                .andExpect(status().isOk());
+
+        verify(docgenAsyncService).triggerDocgenForDeployment(deploymentId);
     }
 
     @Test

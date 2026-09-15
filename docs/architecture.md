@@ -130,21 +130,41 @@ page up later.
 
 ## Asynchrony and locking
 
-The service uses no messaging. All asynchronous work is plain Spring `@Async` on a dedicated
-`ThreadPoolTaskExecutor` (`asyncThreadpoolDocgenExecutor`, core pool 1, max 10 threads, queue 512),
-with the tracing context propagated to the worker thread.
+The service uses no messaging. Documentation work is submitted to a bounded in-process dispatcher with one worker
+and tracing-context propagation. Live deployment and undeployment tasks have priority over repair, housekeeping and
+batch tasks. To prevent permanent starvation, the dispatcher runs one background task after a configurable burst of
+live tasks. Task keys deduplicate queued work; a live deployment also promotes and replaces a queued repair for the
+same deployment.
+
+If another refresh with the same key arrives while its predecessor is already running, one queued follow-up is retained;
+further matching requests update that follow-up instead of being discarded or growing the queue. This coalesced
+follow-up has one reserved slot so it is retained even when the regular queue is full.
+
+The single worker prevents slow Confluence calls from exhausting the datasource pool needed by deployment API
+requests. Docgen also acquires the documentation-structure lock before opening the transaction for the remaining
+page generation, so a worker waiting for that global lock does not retain a JDBC connection.
 
 Two levels of locking keep concurrent generation runs apart:
 
 - **Per-system docgen lock** (`DocgenLocks`) — a ShedLock lock named `docgen-<systemname>` serialises all
-  generation runs for one system, across instances. A run waits up to three minutes for the lock; if it
-  cannot acquire it, the task is skipped and left to the scheduled repair job. The lock is kept alive
+  generation runs for one system, across instances. A run waits up to 30 seconds by default for the lock; if it
+  cannot acquire it, deployment-page work is deferred to the scheduled repair job. Operations without a repair path
+  report the timeout as a failure. The lock is kept alive
   while the run is in progress (`KeepAliveLockProvider`), so a long run retrying Confluence updates does
-  not lose it.
+  not lose it. The wait can be changed with
+  `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`.
 - **Scheduled job locks** — the cron jobs carry their own `@SchedulerLock`, so only one instance runs them
   at a time.
 
 ShedLock uses a JDBC lock provider on the service's own datasource.
+
+Lock contention for deployment-page repair is an expected deferral and is logged without an exception stack trace.
+Full regeneration, system migration/merge, history refresh and structure reconciliation use the throwing lock path;
+their callers receive or log a failure instead of silently accepting an incomplete operation. Persistent retention
+refresh tasks remain pending when generation is deferred. Missing and outdated pages
+remain identifiable through persistent deployment/page tracking. The scheduled repair job first processes the oldest
+never-attempted items without an age cutoff. Persisted attempt timestamps then rotate repeatedly failing pages behind
+untried and less recently attempted pages, so a poison page cannot block the backlog.
 
 ## Cross-cutting concepts
 

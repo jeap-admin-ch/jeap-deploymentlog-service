@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -22,6 +21,36 @@ import java.util.Set;
 public class DeploymentRepositoryImpl implements DeploymentRepository {
 
     private final JpaDeploymentRepository jpaDeploymentRepository;
+
+    @Override
+    public boolean isPageGenerationRepairRequired(UUID deploymentId) {
+        return jpaDeploymentRepository.isPageGenerationRepairRequired(deploymentId);
+    }
+
+    @Override
+    public Optional<UUID> getPageGenerationRequestId(UUID deploymentId) {
+        return jpaDeploymentRepository.getPageGenerationRequestId(deploymentId);
+    }
+
+    @Override
+    public void completePageGenerationRequest(UUID deploymentId, UUID requestId) {
+        jpaDeploymentRepository.completePageGenerationRequest(deploymentId, requestId);
+    }
+
+    @Override
+    public void resumePageGeneration(UUID deploymentId) {
+        jpaDeploymentRepository.resumePageGeneration(deploymentId, UUID.randomUUID());
+    }
+
+    @Override
+    public void suppressPageGeneration(UUID deploymentId, ZonedDateTime pageStateTimestamp) {
+        jpaDeploymentRepository.suppressPageGeneration(deploymentId, pageStateTimestamp);
+    }
+
+    @Override
+    public void classifyLegacyPageGeneration(boolean housekeepingEnabled, ZonedDateTime cutoff, int keepPerEnvironment) {
+        jpaDeploymentRepository.classifyLegacyPageGeneration(housekeepingEnabled, cutoff, keepPerEnvironment);
+    }
 
     @Override
     public Deployment save(Deployment deployment) {
@@ -89,8 +118,19 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
 
     @Override
     public List<UUID> getDeploymentIdsWithMissingOrOutdatedGeneratedPages(int limit, ZonedDateTime from, ZonedDateTime to) {
-        Pageable pageable = PageRequest.of(0, limit, Sort.by("lastModified").descending());
+        Pageable pageable = PageRequest.of(0, limit);
         return jpaDeploymentRepository.getDeploymentIdsMissingOrOutdatedGeneratedPages(from, to, pageable);
+    }
+
+    @Override
+    public List<UUID> getDeploymentIdsWithMissingOrOutdatedGeneratedPages(int limit, ZonedDateTime to) {
+        Pageable pageable = PageRequest.of(0, limit);
+        return jpaDeploymentRepository.getAllDeploymentIdsMissingOrOutdatedGeneratedPages(to, pageable);
+    }
+
+    @Override
+    public void markPageGenerationAttempted(List<UUID> deploymentIds, ZonedDateTime attemptedAt) {
+        jpaDeploymentRepository.markPageGenerationAttempted(deploymentIds, attemptedAt);
     }
 
     @Override

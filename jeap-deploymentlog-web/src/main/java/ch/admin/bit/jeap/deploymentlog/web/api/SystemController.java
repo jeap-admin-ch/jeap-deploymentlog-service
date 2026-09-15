@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -176,6 +177,9 @@ public class SystemController {
     private void triggerDocgenForUndeployment(String systemName, UUID deploymentId) {
         try {
             docgenAsyncService.triggerDocgenForUndeployment(systemName, deploymentId);
+        } catch (TaskRejectedException ex) {
+            log.info("Docgen queue is full for undeployment {}; page generation is deferred to the repair job",
+                    value("deploymentId", deploymentId));
         } catch (Exception ex) {
             log.error("Failed to trigger docgen for undeployment {} - will re-attempt generation in scheduled task",
                     value("deploymentId", deploymentId), ex);

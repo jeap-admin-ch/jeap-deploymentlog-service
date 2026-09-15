@@ -20,13 +20,40 @@ Setting a cron expression to `-` disables the corresponding job.
 ### Missing page generation
 
 The job looks for deployments whose page is missing or older than the deployment's last state change, and
-re-triggers the generation for them. Two guards keep it from fighting the normal, request-triggered
+re-triggers the generation for them. The following guards keep it from fighting the normal, request-triggered
 generation:
 
 - Only deployments **older than `min-age-minutes`** (default 5) are considered — a younger one is assumed
   to be still generating.
-- Only deployments **younger than `max-age-minutes`** (default 1440, i.e. one day) are considered, and at
-  most `retried-pages-limit` (default 50) per run.
+- Discovery is limited to `max-age-minutes` (default 10080, i.e. seven days), based on `Deployment.startedAt`.
+  Persisted pending generation requests are exempt from this maximum age, so they remain repairable during longer
+  outages. Older missing or outdated pages without a pending request require explicit regeneration or a larger window.
+- At most `retried-pages-limit` (default 50) are submitted per run. The last repair
+  attempt is persisted per deployment when the worker starts it, not when selecting or enqueueing it. Never-attempted
+  pages are selected oldest-first, followed by the least recently
+  attempted pages; permanently failing pages therefore cannot block newer entries in the backlog. Pages intentionally
+  removed by Confluence housekeeping are marked accordingly and excluded from automatic repair. A deployment state
+  update or explicit single-deployment generation request clears that marker before remote generation, so even a failed
+  attempt or queue rejection leaves the page eligible for subsequent repair.
+
+On upgrade, historical deployments without a page-tracking row are initially held out of automatic repair. The first
+repair run classifies them once using the configured Confluence housekeeping policy (enabled flag, minimum age,
+retained-page count, productive environments, and the latest deployment/success protections). Historical deletions were
+not recorded, so this is a policy-based classification, not a reconstruction of the deletion history. Missing pages
+that would already qualify for housekeeping stay suppressed; other missing pages enter repair if within the configured
+age window. An explicit request or
+state update clears this legacy marker too and always takes precedence over that classification.
+
+Repair tasks use the background queue. New deployment and undeployment pages overtake queued repair work, while the
+configured live-task burst guarantees that the repair backlog continues to make progress. Multiple queued requests
+for the same deployment are coalesced into one task.
+Before executing a queued repair, the worker rechecks persistent page state and suppression under the system lock.
+Confluence housekeeping uses the same lock, so a repair queued before a deliberate deletion cannot recreate the page
+after that deletion. Obsolete repairs for pages already brought up to date are skipped as well.
+Explicit generation persists a pending request identifier before enqueueing. Housekeeping cannot suppress deployments
+with an outstanding request, even if the worker times out waiting for the system lock. Pending requests also enter
+repair when an older page still exists. Only successful generation acknowledges the captured request identifier;
+a newer request received during generation remains pending. This also preserves requests across process restarts.
 
 Re-triggering a deployment regenerates its whole page path, not just its deployment letter page: the system
 page, the deployment history page of the environment, the yearly deployment list page and the deployment
@@ -180,7 +207,7 @@ more than two stages, has to adjust the `productive`, `development` and `staging
 | Confluence rejects an update as a conflict | The adapter waits `retry-on-conflict-wait-duration`, re-reads the page, re-renders the content and retries — up to three update attempts per call. If the conflict persists, the retry around the whole call repeats it up to four times with exponential backoff, so at most twelve update requests are sent. |
 | Jira issue cannot be updated               | Logged as a warning; the page generation succeeds. Use `repairJiraLinks` to catch up.                       |
 | Jira unavailable during a ready-for-deploy check | The request fails with `503` and the deployment is **not** recorded — the check is synchronous by design. |
-| Docgen lock cannot be acquired within 3 minutes | The run is skipped with a warning; the repair job picks a deployment up later, while a persisted retention refresh remains pending for the next housekeeping run. |
+| Docgen lock cannot be acquired within 30 seconds (default) | Deployment-page generation is deferred to repair, while a persisted retention refresh remains pending. Non-repairable full generation, migration/merge and structure/history refreshes report failure instead of silently succeeding. |
 | An instance dies mid-generation            | Its lock expires; the pages it did not finish are detected as missing or outdated and repaired.            |
 
 ## Related

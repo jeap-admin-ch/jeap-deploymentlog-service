@@ -17,7 +17,7 @@ class SchedulingConfigProperties {
     private int retriedPagesLimit = 50;
 
     private long minAgeMinutes = 5;
-    private long maxAgeMinutes = Duration.ofHours(24).toMinutes();
+    private long maxAgeMinutes = Duration.ofDays(7).toMinutes();
     // Property listed here to log it in init(), used as expression in SchedulingService#generateMissingPages()
     private String cron;
     private int keepDeploymentPagePerEnvCount = 200;

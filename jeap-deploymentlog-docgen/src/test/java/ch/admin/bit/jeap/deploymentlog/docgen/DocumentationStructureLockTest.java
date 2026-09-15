@@ -7,6 +7,7 @@ import org.springframework.transaction.TransactionStatus;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,5 +50,18 @@ class DocumentationStructureLockTest {
                 "reconciled",
                 "transaction-committed",
                 "shedlock-released");
+    }
+
+    @Test
+    void returnsEmptyWithoutStartingTransactionWhenShedLockIsBusy() {
+        DocgenLocks docgenLocks = mock(DocgenLocks.class);
+        PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+        when(docgenLocks.tryRunWithDocumentationStructureLock(any())).thenReturn(Optional.empty());
+        DocumentationStructureLock lock = new DocumentationStructureLock(docgenLocks, transactionManager);
+
+        Optional<String> result = lock.tryRunLocked(() -> "result");
+
+        assertThat(result).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(transactionManager);
     }
 }

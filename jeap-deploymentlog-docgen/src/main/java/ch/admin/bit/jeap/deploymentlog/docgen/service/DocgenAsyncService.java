@@ -6,11 +6,11 @@ import ch.admin.bit.jeap.deploymentlog.domain.System;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static net.logstash.logback.argument.StructuredArguments.value;
 
@@ -24,42 +24,65 @@ public class DocgenAsyncService {
 
     private final DocumentationGenerator documentationGenerator;
     private final DeploymentRepository deploymentRepository;
+    private final DeploymentService deploymentService;
     private final DataRetentionRepository dataRetentionRepository;
     private final Counter errorCounter;
     private final DocgenLocks locks;
+    private final DocgenTaskDispatcher dispatcher;
 
     public DocgenAsyncService(DocumentationGenerator documentationGenerator, DeploymentRepository deploymentRepository,
                               DataRetentionRepository dataRetentionRepository, MeterRegistry meterRegistry,
-                              DocgenLocks locks) {
+                              DocgenLocks locks, DocgenTaskDispatcher dispatcher, DeploymentService deploymentService) {
         this.documentationGenerator = documentationGenerator;
         this.deploymentRepository = deploymentRepository;
+        this.deploymentService = deploymentService;
         this.dataRetentionRepository = dataRetentionRepository;
         this.locks = locks;
+        this.dispatcher = dispatcher;
         this.errorCounter = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error");
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocgenForUndeployment(String systemName, UUID deploymentId) {
-        triggerDeploymentPageGeneration(deploymentId, systemName);
+        deploymentService.resumePageGeneration(deploymentId);
+        dispatcher.submitLive(deploymentTaskKey(deploymentId),
+                () -> triggerDeploymentPageGeneration(deploymentId, systemName));
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocgenForDeployment(UUID deploymentId) {
-        triggerDeploymentPageGeneration(deploymentId, null);
+        deploymentService.resumePageGeneration(deploymentId);
+        dispatcher.submitLive(deploymentTaskKey(deploymentId),
+                () -> triggerDeploymentPageGeneration(deploymentId, null));
+    }
+
+    public void triggerRepairDocgenForDeployment(UUID deploymentId) {
+        dispatcher.submitRepair(deploymentTaskKey(deploymentId),
+                () -> triggerDeploymentPageGeneration(deploymentId, null, true));
     }
 
     private void triggerDeploymentPageGeneration(UUID deploymentId, String knownSystemName) {
+        triggerDeploymentPageGeneration(deploymentId, knownSystemName, false);
+    }
+
+    private void triggerDeploymentPageGeneration(UUID deploymentId, String knownSystemName, boolean repair) {
         String systemName = knownSystemName;
         String componentName = null;
         try {
+            if (repair) {
+                deploymentService.markPageGenerationAttempted(deploymentId);
+            }
             if (systemName == null) {
                 systemName = deploymentRepository.getSystemNameForDeployment(deploymentId);
             }
             componentName = deploymentRepository.getComponentNameForDeployment(deploymentId);
             String lockedSystemName = systemName;
             String loggedComponentName = componentName;
-            locks.runIfLockAquiredBeforeTimeout(systemName, () ->
-                    generateDeploymentPages(deploymentId, lockedSystemName, loggedComponentName));
+            locks.runIfLockAquiredBeforeTimeout(systemName, () -> {
+                // Housekeeping uses the same system lock. Recheck after acquiring it, since a queued repair
+                // may have become obsolete or suppressed while waiting for the worker or another instance.
+                if (!repair || deploymentRepository.isPageGenerationRepairRequired(deploymentId)) {
+                    generateDeploymentPages(deploymentId, lockedSystemName, loggedComponentName);
+                }
+            });
         } catch (Exception ex) {
             errorCounter.increment();
             log.warn("Failed to trigger page generation for deployment {}, system {} and component {}",
@@ -68,14 +91,17 @@ public class DocgenAsyncService {
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocgenForSystem(String systemName, Integer year) {
-        locks.runIfLockAquiredBeforeTimeout(systemName, () ->
-                documentationGenerator.generateAllPagesForSystem(systemName, year));
+        dispatcher.submitBackground("system:" + systemName.toLowerCase(Locale.ROOT) + ":" + year,
+                () -> runLockedForSystem(systemName,
+                        () -> documentationGenerator.generateAllPagesForSystem(systemName, year)));
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerDocumentationStructureReconciliation() {
+        dispatcher.submitBackground("documentation-structure", this::reconcileDocumentationStructure);
+    }
+
+    private void reconcileDocumentationStructure() {
         try {
             // DocumentationGenerator acquires the dedicated global structure lock. Acquiring it here as a
             // system lock as well would resolve to the same non-reentrant ShedLock name and block until timeout.
@@ -86,15 +112,19 @@ public class DocgenAsyncService {
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerGenerateJiraLinksForSystem(String systemName, ZonedDateTime from, ZonedDateTime to) {
-        runLockedForSystem(systemName, () ->
-                documentationGenerator.generateJiraLinksForSystem(systemName, from, to));
+        String taskKey = "jira-links:" + systemName.toLowerCase(Locale.ROOT) + ":" + from + ":" + to;
+        dispatcher.submitBackground(taskKey, () -> runLockedForSystem(systemName, () ->
+                documentationGenerator.generateJiraLinksForSystem(systemName, from, to)));
     }
 
     private void generateDeploymentPages(UUID deploymentId, String systemName, String componentName) {
         try {
-            documentationGenerator.generateDeploymentPages(deploymentId);
+            UUID requestId = deploymentRepository.getPageGenerationRequestId(deploymentId).orElse(null);
+            if (documentationGenerator.generateDeploymentPages(deploymentId) != null && requestId != null) {
+                // A request arriving while generation was running must remain pending for the next run.
+                deploymentService.completePageGenerationRequest(deploymentId, requestId);
+            }
         } catch (Exception ex) {
             errorCounter.increment();
             log.warn("Failed to generate pages for deployment {}, system {} and component {}",
@@ -103,10 +133,9 @@ public class DocgenAsyncService {
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerMigrationForSystem(System system) {
-        locks.runIfLockAquiredBeforeTimeout(system.getName(), () ->
-                migrateSystem(system));
+        dispatcher.submitBackground("migration:" + system.getId(), () ->
+                runLockedForSystem(system.getName(), () -> migrateSystem(system)));
     }
 
     private void migrateSystem(System system) {
@@ -118,10 +147,9 @@ public class DocgenAsyncService {
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerMergeSystems(System system, System oldSystem) {
-        locks.runIfLockAquiredBeforeTimeout(system.getName(), () ->
-                mergeSystems(system, oldSystem));
+        dispatcher.submitBackground("merge:" + system.getId() + ":" + oldSystem.getId(), () ->
+                runLockedForSystem(system.getName(), () -> mergeSystems(system, oldSystem)));
     }
 
     private void mergeSystems(System system, System oldSystem) {
@@ -139,23 +167,31 @@ public class DocgenAsyncService {
      */
     private void runLockedForSystem(String systemName, Runnable task) {
         try {
-            locks.runIfLockAquiredBeforeTimeout(systemName, task);
+            locks.runWithSystemLock(systemName, task);
         } catch (Exception ex) {
             errorCounter.increment();
             log.warn("Docgen failed for system {}", value(SYSTEM_NAME, systemName), ex);
         }
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerUpdateDeploymentListPages(String systemName, Collection<SystemEnv> systemEnvs) {
         // Update deployment history page per system (docgen lock is held per system name to avoid race conditions when
         // generating confluence pages). One task per system, so that a system waiting for its lock does not hold up
         // the other systems of the same batch.
-        runLockedForSystem(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(systemEnvs));
+        List<SystemEnv> requestedEnvironments = List.copyOf(systemEnvs);
+        String environmentKey = requestedEnvironments.stream()
+                .map(systemEnv -> systemEnv.getSystemId() + ":" + systemEnv.getEnvId())
+                .distinct().sorted().collect(Collectors.joining(","));
+        dispatcher.submitBackground("deployment-history:" + systemName.toLowerCase(Locale.ROOT) + ":" + environmentKey, () ->
+                runLockedForSystem(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(requestedEnvironments)));
     }
 
-    @Async(DeploymentAsyncExecutorConfiguration.ASYNC_THREADPOOL_TASK_EXECUTOR)
     public void triggerUpdatesAfterDataRetention(DataRetentionRefreshTask refreshTask) {
+        dispatcher.submitBackground("retention-refresh:" + refreshTask.id(), () ->
+                updatePagesAfterDataRetention(refreshTask));
+    }
+
+    private void updatePagesAfterDataRetention(DataRetentionRefreshTask refreshTask) {
         DataRetentionResult result = refreshTask.result();
         List<String> affectedSystemNames = result.systemEnvironments().stream()
                 .map(SystemEnv::getSystemName)
@@ -163,8 +199,12 @@ public class DocgenAsyncService {
                 .sorted()
                 .toList();
         runLockedForSystems(affectedSystemNames, 0, () -> {
-            documentationGenerator.updatePagesAfterDataRetention(result);
-            dataRetentionRepository.deletePendingRefreshTask(refreshTask.id());
+            if (documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(result)) {
+                dataRetentionRepository.deletePendingRefreshTask(refreshTask.id());
+            } else {
+                log.info("Documentation structure is busy; keeping data-retention refresh {} pending",
+                        refreshTask.id());
+            }
         });
     }
 
@@ -174,5 +214,9 @@ public class DocgenAsyncService {
             return;
         }
         runLockedForSystem(systemNames.get(index), () -> runLockedForSystems(systemNames, index + 1, task));
+    }
+
+    private static String deploymentTaskKey(UUID deploymentId) {
+        return "deployment:" + deploymentId;
     }
 }

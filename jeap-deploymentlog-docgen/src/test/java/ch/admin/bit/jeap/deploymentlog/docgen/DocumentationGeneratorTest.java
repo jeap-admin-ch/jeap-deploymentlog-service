@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.System;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -83,6 +86,9 @@ class DocumentationGeneratorTest {
     @Mock
     JiraIssuePageRepository jiraIssuePageRepositoryMock;
 
+    @Mock
+    DocumentationTransactionRunner transactionRunnerMock;
+
     private DocumentationGenerator documentationGenerator;
     private final Map<String, DocumentationStructurePage> structurePages = new HashMap<>();
 
@@ -105,6 +111,42 @@ class DocumentationGeneratorTest {
 
         // then
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
+    }
+
+    @Test
+    void generateAllPages_acquiresStructureLockBeforeStartingPageTransaction() {
+        documentationGenerator.generateAllPages();
+
+        InOrder inOrder = inOrder(documentationStructureLockMock, transactionRunnerMock);
+        inOrder.verify(documentationStructureLockMock).runLocked(any());
+        inOrder.verify(transactionRunnerMock).run(any());
+    }
+
+    @Test
+    void nonRepairableOperationsReportContentionWithoutStartingPageTransaction() {
+        doThrow(new IllegalStateException("Structure lock busy"))
+                .when(documentationStructureLockMock).runLocked(any());
+
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.generateAllPages());
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.generateAllPagesForSystem("system", null));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.migrateSystem(new System("system")));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.mergeSystems(new System("new"), new System("old")));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.reconcileDocumentationStructure());
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.updateDeploymentHistoryPages(List.of()));
+
+        verifyNoInteractions(transactionRunnerMock);
+    }
+
+    @Test
+    void dataRetentionRefreshReportsDeferralWhenStructureIsBusy() {
+        doReturn(Optional.empty()).when(documentationStructureLockMock).tryRunLocked(any());
+        DataRetentionResult result = new DataRetentionResult(
+                Set.of(), Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID()));
+
+        boolean completed = documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(result);
+
+        assertFalse(completed);
+        verifyNoInteractions(transactionRunnerMock);
     }
 
     @Test
@@ -313,7 +355,8 @@ class DocumentationGeneratorTest {
                 componentPageGeneratorMock,
                 componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
-                jiraIssuePageRepositoryMock);
+                jiraIssuePageRepositoryMock,
+                transactionRunnerMock);
 
         String systemName = "SYSTEM A";
         System system = new System(systemName);
@@ -536,7 +579,11 @@ class DocumentationGeneratorTest {
             structurePages.remove(page.getStructureKey());
             return null;
         }).when(documentationStructurePageRepositoryMock).delete(any(DocumentationStructurePage.class));
+        lenient().when(documentationStructureLockMock.tryRunLocked(any()))
+                .thenAnswer(invocation -> Optional.of(invocation.<Supplier<?>>getArgument(0).get()));
         lenient().when(documentationStructureLockMock.runLocked(any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
+        lenient().when(transactionRunnerMock.run(any()))
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
 
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
@@ -561,6 +608,7 @@ class DocumentationGeneratorTest {
                 componentPageGeneratorMock,
                 componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
-                jiraIssuePageRepositoryMock);
+                jiraIssuePageRepositoryMock,
+                transactionRunnerMock);
     }
 }

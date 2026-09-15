@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.validation.Valid;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -127,6 +128,9 @@ public class DeploymentController {
     private void triggerDocgenForDeployment(UUID deploymentId) {
         try {
             docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+        } catch (TaskRejectedException ex) {
+            log.info("Docgen queue is full for deployment {}; page generation is deferred to the repair job",
+                    value("deploymentId", deploymentId));
         } catch (Exception ex) {
             log.error("Failed to trigger docgen for deployment {} - will re-attempt generation in scheduled task",
                     value("deploymentId", deploymentId), ex);

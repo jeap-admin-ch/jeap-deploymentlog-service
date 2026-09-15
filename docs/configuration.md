@@ -109,9 +109,10 @@ Deployment and flow counters and timers are published on persisted terminal stat
 is additionally rebuilt from persistent flow data at startup and on this interval. See
 [Operations](operations.md#metrics) for the metric names, labels and state rules.
 
-## Scheduled jobs
+## Docgen execution and scheduled jobs
 
-Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekeeping cron expression. See
+The scheduled-job properties use the prefix `jeap.deploymentlog.documentation-generator.scheduled`. Execution limits
+and the legacy housekeeping cron use the same `documentation-generator` namespace. See
 [Operations](operations.md#scheduled-jobs) for what the jobs do.
 
 | Property                                                                | Default          | Description                                                                                                     |
@@ -119,9 +120,17 @@ Prefix `jeap.deploymentlog.documentation-generator.scheduled`, plus the housekee
 | `jeap.deploymentlog.documentation-generator.scheduled.cron`             | `0 0/10 * * * *` | Cron expression of the repair job generating missing and outdated pages. Set to `-` to disable the job.           |
 | `jeap.deploymentlog.documentation-generator.scheduled.retried-pages-limit` | `50`          | Maximum number of deployment pages that one repair run picks up.                                                |
 | `jeap.deploymentlog.documentation-generator.scheduled.min-age-minutes`  | `5`              | Minimum age of a deployment before the repair job regenerates its page — younger ones are assumed to be still in progress. |
-| `jeap.deploymentlog.documentation-generator.scheduled.max-age-minutes`  | `1440`           | Maximum age of a deployment considered by the repair job. Must be greater than `min-age-minutes`, otherwise the startup fails. |
+| `jeap.deploymentlog.documentation-generator.scheduled.max-age-minutes`  | `10080`          | Maximum deployment age for repair discovery (7 days, based on `startedAt`). Persisted pending generation requests remain eligible beyond this limit. Must exceed `min-age-minutes`. |
 | `jeap.deploymentlog.documentation-generator.scheduled.keep-deployment-page-per-env-count` | `200` | Legacy fallback for the number of deployment pages kept when the new `housekeeping.confluence-pages.keep-per-environment` property is not set. |
 | `jeap.deploymentlog.documentation-generator.housekeeping.cron`          | `0 30 3 * * *`   | Cron expression of the housekeeping job deleting outdated pages. Set to `-` to disable the job.                   |
+| `jeap.deploymentlog.documentation-generator.async.queue-capacity`       | `512`            | Maximum number of queued, deduplicated Docgen tasks. A live task may displace a queued deployment-repair task, which remains discoverable by the repair job. |
+| `jeap.deploymentlog.documentation-generator.async.live-task-burst`      | `10`             | Number of live deployment tasks that may run consecutively before one queued background task is selected.        |
+| `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`       | `PT30S`          | Maximum time a Docgen task waits for a per-system or documentation-structure lock before leaving the page to the repair job. |
+
+The repair job processes never-attempted missing or outdated pages oldest-first, then rotates by the persistent last
+attempt time. Discovery is limited to the last seven days by default (previously one day); persisted pending generation
+requests remain eligible regardless of maximum age. A permanently failing page cannot prevent the remaining eligible
+backlog from being processed. Explicit instance settings for `max-age-minutes` override the new default.
 
 The common housekeeping run supports the following properties. The legacy
 `jeap.deploymentlog.documentation-generator.housekeeping.cron` remains the fallback when the new cron property is

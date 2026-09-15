@@ -187,6 +187,7 @@ public class DeploymentService {
             eventPublisher.publishEvent(DeploymentTerminalMetricEvent.from(deployment));
         }
 
+        deployment.resumePageGeneration();
         return deployment.getId();
     }
 
@@ -240,6 +241,15 @@ public class DeploymentService {
         return deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(limit, from, to);
     }
 
+    public List<UUID> getMissingDeploymentPages(int limit, long minAgeMinutes) {
+        ZonedDateTime to = ZonedDateTime.now().minusMinutes(minAgeMinutes);
+        return deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(limit, to);
+    }
+
+    public void markPageGenerationAttempted(UUID deploymentId) {
+        deploymentRepository.markPageGenerationAttempted(List.of(deploymentId), ZonedDateTime.now());
+    }
+
     @TransactionalReadReplica
     public long countMissingDeploymentPages(int maxAgeDays) {
         ZonedDateTime from = ZonedDateTime.now().minusDays(maxAgeDays);
@@ -252,6 +262,25 @@ public class DeploymentService {
         return systemRepository.getAllSystemIds().stream()
                 .flatMap(systemId -> getOutdatedNonProductiveDeploymentPagesForSystem(systemId, keepAtLeastPageCount, to))
                 .toList();
+    }
+
+    public void suppressPageGeneration(DeploymentPage deploymentPage) {
+        deploymentRepository.suppressPageGeneration(deploymentPage.getDeploymentId(),
+                deploymentPage.getDeploymentStateTimestamp());
+        deploymentPageRepository.delete(deploymentPage);
+    }
+
+    public void resumePageGeneration(UUID deploymentId) {
+        deploymentRepository.resumePageGeneration(deploymentId);
+    }
+
+    public void completePageGenerationRequest(UUID deploymentId, UUID requestId) {
+        deploymentRepository.completePageGenerationRequest(deploymentId, requestId);
+    }
+
+    public void classifyLegacyPageGeneration(boolean housekeepingEnabled, Duration minAge, int keepPerEnvironment) {
+        deploymentRepository.classifyLegacyPageGeneration(housekeepingEnabled,
+                ZonedDateTime.now().minus(minAge), keepPerEnvironment);
     }
 
     private Stream<DeploymentPage> getOutdatedNonProductiveDeploymentPagesForSystem(UUID systemId, int keepAtLeastPageCount, ZonedDateTime to) {

@@ -60,6 +60,58 @@ class DeploymentServiceTest {
     @Captor
     ArgumentCaptor<Deployment> deploymentCaptor;
 
+    @Test
+    void selectingMissingPagesDoesNotMarkUnexecutedAttempts() {
+        UUID firstDeploymentId = UUID.randomUUID();
+        UUID secondDeploymentId = UUID.randomUUID();
+        when(deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(
+                eq(2), any(ZonedDateTime.class)))
+                .thenReturn(List.of(firstDeploymentId, secondDeploymentId));
+
+        List<UUID> result = deploymentService.getMissingDeploymentPages(2, 5);
+
+        assertThat(result).containsExactly(firstDeploymentId, secondDeploymentId);
+        verify(deploymentRepository, never()).markPageGenerationAttempted(anyList(), any());
+    }
+
+    @Test
+    void markStartedRepairAttemptForFairRetryRotation() {
+        UUID deploymentId = UUID.randomUUID();
+        deploymentService.markPageGenerationAttempted(deploymentId);
+        verify(deploymentRepository).markPageGenerationAttempted(eq(List.of(deploymentId)), any(ZonedDateTime.class));
+    }
+
+    @Test
+    void getMissingDeploymentPagesDoesNotIssueEmptyRetryUpdate() {
+        when(deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(
+                eq(2), any(ZonedDateTime.class)))
+                .thenReturn(List.of());
+
+        assertThat(deploymentService.getMissingDeploymentPages(2, 5)).isEmpty();
+
+        verify(deploymentRepository, never()).markPageGenerationAttempted(anyList(), any());
+    }
+
+    @Test
+    void suppressPageGenerationMarksExistingDeploymentAndDeletesPageTracking() {
+        DeploymentPage deploymentPage = createDeploymentPage(ZonedDateTime.now());
+
+        deploymentService.suppressPageGeneration(deploymentPage);
+
+        verify(deploymentRepository).suppressPageGeneration(deploymentPage.getDeploymentId(),
+                deploymentPage.getDeploymentStateTimestamp());
+        verify(deploymentPageRepository).delete(deploymentPage);
+    }
+
+    @Test
+    void suppressPageGenerationDeletesOrphanedPageTracking() {
+        DeploymentPage deploymentPage = createDeploymentPage(ZonedDateTime.now());
+
+        deploymentService.suppressPageGeneration(deploymentPage);
+
+        verify(deploymentPageRepository).delete(deploymentPage);
+    }
+
 
     @Test
     void createDeployment_envExists_deploymentCreated() {
@@ -208,9 +260,13 @@ class DeploymentServiceTest {
     @Test
     void updateState_failure_notCreated() throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
 
-        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(getDeployment()));
+        Deployment deployment = getDeployment();
+        deployment.suppressPageGeneration();
+        when(deploymentRepository.findByExternalIdForUpdate(anyString())).thenReturn(Optional.of(deployment));
 
         deploymentService.updateState("externalId", DeploymentState.FAILURE, "badly failed", ZonedDateTime.now(), Map.of());
+
+        assertThat(deployment.isPageGenerationSuppressed()).isFalse();
 
         verify(environmentComponentVersionStateRepository, never()).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never()).save(any(EnvironmentComponentVersionState.class));

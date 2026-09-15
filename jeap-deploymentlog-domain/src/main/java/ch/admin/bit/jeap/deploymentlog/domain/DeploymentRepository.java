@@ -1,15 +1,29 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Interface to be implemented by a persistence provider to access @{@link Deployment}s
  */
 public interface DeploymentRepository {
+
+    boolean isPageGenerationRepairRequired(UUID deploymentId);
+
+    Optional<UUID> getPageGenerationRequestId(UUID deploymentId);
+
+    void completePageGenerationRequest(UUID deploymentId, UUID requestId);
+
+    void resumePageGeneration(UUID deploymentId);
+
+    void suppressPageGeneration(UUID deploymentId, ZonedDateTime pageStateTimestamp);
+
+    void classifyLegacyPageGeneration(boolean housekeepingEnabled, ZonedDateTime cutoff, int keepPerEnvironment);
 
     Deployment save(Deployment deployment);
 
@@ -32,6 +46,13 @@ public interface DeploymentRepository {
     Optional<Deployment> findById(UUID deploymentId);
 
     List<UUID> getDeploymentIdsWithMissingOrOutdatedGeneratedPages(int limit, ZonedDateTime from, ZonedDateTime to);
+
+    default List<UUID> getDeploymentIdsWithMissingOrOutdatedGeneratedPages(int limit, ZonedDateTime to) {
+        return getDeploymentIdsWithMissingOrOutdatedGeneratedPages(
+                limit, ZonedDateTime.ofInstant(Instant.EPOCH, ZoneOffset.UTC), to);
+    }
+
+    void markPageGenerationAttempted(List<UUID> deploymentIds, ZonedDateTime attemptedAt);
 
     long countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime from);
 

@@ -146,15 +146,17 @@ flowchart TD
   Undeploy["Undeployment recorded"]
   Job["Job endpoint called"]
   Sched["Scheduled repair job"]
-  Async["DocgenAsyncService<br/>@Async + per-system lock"]
+  Dispatch["Priority dispatcher<br/>one worker + deduplication"]
+  Async["DocgenAsyncService<br/>per-system lock"]
   Gen["DocumentationGenerator"]
   Conf["ConfluenceAdapter"]
   Jira["JiraAdapter"]
 
-  Rec --> Async
-  Undeploy --> Async
-  Job --> Async
-  Sched --> Async
+  Rec -->|live priority| Dispatch
+  Undeploy -->|live priority| Dispatch
+  Job -->|background| Dispatch
+  Sched -->|background| Dispatch
+  Dispatch --> Async
   Async --> Gen
   Gen --> Conf
   Gen --> Jira

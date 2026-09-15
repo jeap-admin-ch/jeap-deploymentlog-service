@@ -9,14 +9,27 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Publish idempotent deployment and flow counters and duration timers through Micrometer and the existing Prometheus
-  actuator endpoint. Reconstruct the current open-flow gauges from persistent flow data at startup and reconcile them
-  periodically across service instances.
+- Publish deployment/flow counters, duration timers and restart-safe open-flow gauges through Prometheus.
+- Prioritize live deployment pages over queued repair and batch work, with deduplication and configurable fairness.
+- Persist page-generation requests across failures and restarts. Repair runs every ten minutes, discovers pages from
+  the last seven days by default (previously one day), and keeps pending requests eligible regardless of age.
+  Attempts rotate so failing pages cannot starve the backlog.
 
 ### Fixed
 
-- Prevent `flow_open` reconciliation from double-applying concurrent local flow transitions, and restrict periodic
-  database reconciliation to indexed `OPEN` flows instead of scanning the complete flow history.
+- Protect deployment API capacity with one asynchronous Docgen worker per instance and no generation transaction while
+  waiting for documentation locks. A full Docgen queue no longer fails deployment or undeployment requests.
+- Default lock-acquisition timeout to 30 seconds: defer repairable work without stack traces and report failures for
+  operations without automatic repair.
+- Prevent housekeeping from overwriting deployment updates, suppressing pending requests or recreating deliberately
+  removed pages through stale repair tasks.
+- Preserve concurrent refresh requests and retain data-retention refresh tasks until their page updates succeed.
+- Prevent double-applied `flow_open` changes and restrict periodic aggregation to indexed open flows.
+
+### Migration
+
+Flyway adds deployment repair/request fields and lookup indexes. Historical missing pages are classified once using
+the configured Confluence housekeeping policy before entering automatic repair.
 
 ## [15.1.0] - 2026-09-15
 

@@ -41,6 +41,22 @@ class DocgenLocksTest {
     private SimpleLock lockMock;
 
     @Test
+    void nonRepairableSystemTaskReportsLockContention() {
+        doReturn(Optional.empty()).when(plainLockProviderMock).lock(any());
+        DocgenLocks locks = new DocgenLocks(plainLockProviderMock);
+        locks.setTryAcquireTimeout(Duration.ZERO);
+        Runnable task = mock(Runnable.class);
+        try {
+            assertThatThrownBy(() -> locks.runWithSystemLock("system", task))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("docgen-system");
+            verifyNoInteractions(task);
+        } finally {
+            locks.shutdown();
+        }
+    }
+
+    @Test
     void runIfLockAquiredBeforeTimeout_wrapsTheLockAndDelegatesUnlockToTheUnderlyingLock() {
         doReturn(Optional.of(lockMock)).when(extensibleLockProviderMock).lock(any());
         DocgenLocks locks = new DocgenLocks(extensibleLockProviderMock);

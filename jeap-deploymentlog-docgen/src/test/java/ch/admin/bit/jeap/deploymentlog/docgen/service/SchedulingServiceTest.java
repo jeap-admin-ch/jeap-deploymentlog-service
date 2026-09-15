@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskRejectedException;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -67,12 +68,48 @@ class SchedulingServiceTest {
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, docgenLocksMock, meterRegistryMock);
         UUID outdatedDeploymentId = UUID.randomUUID();
-        when(deploymentServiceMock.getMissingDeploymentPages(anyInt(), anyLong(), anyLong()))
+        when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 10_080))
                 .thenReturn(List.of(outdatedDeploymentId));
 
         schedulingService.generateMissingPages();
 
-        verify(docgenAsyncServiceMock).triggerDocgenForDeployment(outdatedDeploymentId);
+        verify(deploymentServiceMock).getMissingDeploymentPages(50, 5, 10_080);
+        verify(docgenAsyncServiceMock).triggerRepairDocgenForDeployment(outdatedDeploymentId);
+    }
+
+    @Test
+    void generateMissingPages_usesConfiguredAgeWindow() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingConfigProperties props = new SchedulingConfigProperties();
+        props.setMaxAgeMinutes(2_880);
+        SchedulingService schedulingService = new SchedulingService(
+                deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
+                new HousekeepingConfigProperties(), dataRetentionRepository, docgenLocksMock, meterRegistryMock);
+        when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 2_880)).thenReturn(List.of());
+
+        schedulingService.generateMissingPages();
+
+        verify(deploymentServiceMock).getMissingDeploymentPages(50, 5, 2_880);
+    }
+
+    @Test
+    void generateMissingPages_leavesRemainingPagesForNextRunWhenQueueIsFull() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingConfigProperties props = new SchedulingConfigProperties();
+        SchedulingService schedulingService = new SchedulingService(
+                deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
+                new HousekeepingConfigProperties(), dataRetentionRepository, docgenLocksMock, meterRegistryMock);
+        UUID firstDeploymentId = UUID.randomUUID();
+        UUID secondDeploymentId = UUID.randomUUID();
+        when(deploymentServiceMock.getMissingDeploymentPages(anyInt(), anyLong(), anyLong()))
+                .thenReturn(List.of(firstDeploymentId, secondDeploymentId));
+        org.mockito.Mockito.doThrow(new TaskRejectedException("queue full"))
+                .when(docgenAsyncServiceMock).triggerRepairDocgenForDeployment(firstDeploymentId);
+
+        schedulingService.generateMissingPages();
+
+        verify(docgenAsyncServiceMock).triggerRepairDocgenForDeployment(firstDeploymentId);
+        verify(docgenAsyncServiceMock, never()).triggerRepairDocgenForDeployment(secondDeploymentId);
     }
 
     @Test
@@ -92,11 +129,15 @@ class SchedulingServiceTest {
                 .build();
         when(deploymentServiceMock.getOutdatedNonProductiveDeploymentPages(Duration.ofDays(7), 200))
                 .thenReturn(List.of(deploymentPage));
+        when(deploymentServiceMock.getSystemAndEnvsForDeploymentIds(Set.of(deploymentPage.getDeploymentId())))
+                .thenReturn(Set.of(new SystemEnv(UUID.randomUUID(), "system", UUID.randomUUID())));
 
         schedulingService.outdatedPageHousekeeping();
 
         verify(confluenceAdapter).deletePage(pageId);
-        verify(deploymentPageRepository).delete(deploymentPage);
+        verify(deploymentServiceMock).suppressPageGeneration(deploymentPage);
+        verify(docgenLocksMock).runIfLockAquiredBeforeTimeout(eq("system"), any());
+        verify(deploymentPageRepository, never()).delete(deploymentPage);
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 @Component
@@ -23,6 +24,11 @@ public class DocumentationStructureLock {
 
     public <T> T runLocked(Supplier<T> task) {
         return docgenLocks.runWithDocumentationStructureLock(() -> Objects.requireNonNull(
+                transactionTemplate.execute(status -> task.get())));
+    }
+
+    public <T> Optional<T> tryRunLocked(Supplier<T> task) {
+        return docgenLocks.tryRunWithDocumentationStructureLock(() -> Objects.requireNonNull(
                 transactionTemplate.execute(status -> task.get())));
     }
 }

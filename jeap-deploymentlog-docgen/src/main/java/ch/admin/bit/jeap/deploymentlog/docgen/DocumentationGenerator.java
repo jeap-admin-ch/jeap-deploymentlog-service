@@ -8,6 +8,7 @@ import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
@@ -52,15 +53,21 @@ public class DocumentationGenerator {
     private final ComponentRepository componentRepository;
     private final JiraProjectPageGenerator jiraProjectPageGenerator;
     private final JiraIssuePageRepository jiraIssuePageRepository;
+    private final DocumentationTransactionRunner transactionRunner;
 
     @Timed("deploymentlog_generate_deployment_page")
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId) {
+        return trySynchronizeDocumentationStructure()
+                .map(structure -> transactionRunner.run(() -> generateDeploymentPages(deploymentId, structure)))
+                .orElse(null);
+    }
+
+    private GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId, DocumentationStructure structure) {
         Deployment deployment = deploymentRepository.getById(deploymentId);
         Environment environment = deployment.getEnvironment();
         System system = deployment.getComponentVersion().getComponent().getSystem();
 
-        DocumentationStructure structure = synchronizeDocumentationStructure();
         SystemStructure systemStructure = structure.systems().get(system.getId());
         String deploymentListParentPageId = generateDeploymentHistoryPageForEnvironment(
                 systemStructure.deploymentsPageId(), environment, system);
@@ -76,9 +83,16 @@ public class DocumentationGenerator {
         return generatedPage;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void migrateSystem(System system) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
+        transactionRunner.run(() -> {
+            migrateSystem(system, structure);
+            return null;
+        });
+    }
+
+    private void migrateSystem(System system, DocumentationStructure structure) {
         SystemStructure systemStructure = structure.systems().get(system.getId());
         componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
         recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
@@ -87,12 +101,19 @@ public class DocumentationGenerator {
         generateAllJiraProjectPages(structure);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void mergeSystems(System system, System oldSystem) {
+        DocumentationStructure structure = synchronizeDocumentationStructure();
+        transactionRunner.run(() -> {
+            mergeSystems(system, oldSystem, structure);
+            return null;
+        });
+    }
+
+    private void mergeSystems(System system, System oldSystem, DocumentationStructure structure) {
         log.info("Retrieve the deployments for the system '{}' to merge into '{}'", oldSystem.getName(), system.getName());
         List<DeploymentPageQueryResult> deployments = deploymentPageRepository.getDeploymentPagesForSystem(oldSystem.getId());
 
-        DocumentationStructure structure = synchronizeDocumentationStructure();
         SystemStructure targetStructure = structure.systems().get(system.getId());
 
         documentationStructurePageRepository.findByStructureKey(systemComponentsPageKey(oldSystem.getId()))
@@ -239,9 +260,16 @@ public class DocumentationGenerator {
         return pageId;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateAllPages() {
         DocumentationStructure structure = synchronizeDocumentationStructure();
+        transactionRunner.run(() -> {
+            generateAllPages(structure);
+            return null;
+        });
+    }
+
+    private void generateAllPages(DocumentationStructure structure) {
         findOrderedSystems().forEach(system -> {
             SystemStructure systemStructure = structure.systems().get(system.getId());
             componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
@@ -253,10 +281,17 @@ public class DocumentationGenerator {
         generateAllJiraProjectPages(structure);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateAllPagesForSystem(String systemName, Integer year) {
-        System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
         DocumentationStructure structure = synchronizeDocumentationStructure();
+        transactionRunner.run(() -> {
+            generateAllPagesForSystem(systemName, year, structure);
+            return null;
+        });
+    }
+
+    private void generateAllPagesForSystem(String systemName, Integer year, DocumentationStructure structure) {
+        System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
         SystemStructure systemStructure = structure.systems().get(system.getId());
         componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
         recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, year);
@@ -345,9 +380,17 @@ public class DocumentationGenerator {
     }
 
     @Timed("update_deployment_history_pages")
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateDeploymentHistoryPages(Collection<SystemEnv> envsBySystems) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
+        transactionRunner.run(() -> {
+            updateDeploymentHistoryPages(envsBySystems, structure);
+            return null;
+        });
+    }
+
+    private void updateDeploymentHistoryPages(Collection<SystemEnv> envsBySystems,
+                                              DocumentationStructure structure) {
         for (SystemEnv systemEnv : envsBySystems) {
             System system = systemRepository.getById(systemEnv.getSystemId());
             Environment env = environmentRepository.getById(systemEnv.getEnvId());
@@ -358,12 +401,29 @@ public class DocumentationGenerator {
         }
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updatePagesAfterDataRetention(DataRetentionResult result) {
-        if (result.isEmpty()) {
-            return;
+        if (!result.isEmpty()) {
+            DocumentationStructure structure = synchronizeDocumentationStructure();
+            transactionRunner.run(() -> {
+                updatePagesAfterDataRetention(result, structure);
+                return null;
+            });
         }
-        DocumentationStructure structure = synchronizeDocumentationStructure();
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public boolean updatePagesAfterDataRetentionIfStructureAvailable(DataRetentionResult result) {
+        if (result.isEmpty()) {
+            return true;
+        }
+        return trySynchronizeDocumentationStructure().map(structure -> transactionRunner.run(() -> {
+            updatePagesAfterDataRetention(result, structure);
+            return true;
+        })).orElse(false);
+    }
+
+    private void updatePagesAfterDataRetention(DataRetentionResult result, DocumentationStructure structure) {
         for (SystemEnv systemEnv : result.systemEnvironments()) {
             SystemStructure systemStructure = structure.systems().get(systemEnv.getSystemId());
             if (systemStructure == null) {
@@ -392,13 +452,17 @@ public class DocumentationGenerator {
         jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void reconcileDocumentationStructure() {
         synchronizeDocumentationStructure();
     }
 
     private DocumentationStructure synchronizeDocumentationStructure() {
         return documentationStructureLock.runLocked(this::synchronizeDocumentationStructureLocked);
+    }
+
+    private Optional<DocumentationStructure> trySynchronizeDocumentationStructure() {
+        return documentationStructureLock.tryRunLocked(this::synchronizeDocumentationStructureLocked);
     }
 
     private DocumentationStructure synchronizeDocumentationStructureLocked() {
