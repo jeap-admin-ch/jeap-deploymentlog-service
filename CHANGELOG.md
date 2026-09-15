@@ -5,11 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [14.1.0] - 2026-09-14
+## [15.1.1] - 2026-09-15
 
 ### Added
 
-- Publish deployment/flow counters, duration timers and restart-safe open-flow gauges through Prometheus.
 - Prioritize live deployment pages over queued repair and batch work, with deduplication and configurable fairness.
 - Persist page-generation requests across failures and restarts. Repair runs every ten minutes, discovers pages from
   the last seven days by default (previously one day), and keeps pending requests eligible regardless of age.
@@ -24,7 +23,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Prevent housekeeping from overwriting deployment updates, suppressing pending requests or recreating deliberately
   removed pages through stale repair tasks.
 - Preserve concurrent refresh requests and retain data-retention refresh tasks until their page updates succeed.
-- Prevent double-applied `flow_open` changes and restrict periodic aggregation to indexed open flows.
 
 ### Migration
 
