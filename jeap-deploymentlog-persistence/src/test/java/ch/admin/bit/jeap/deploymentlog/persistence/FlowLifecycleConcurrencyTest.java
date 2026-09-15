@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
@@ -40,6 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ContextConfiguration(classes = PersistenceConfiguration.class)
 @Import({FlowLifecycleService.class, FlowStageProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
+// These tests commit transactions from worker threads; their fixtures must not leak into other repository tests.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class FlowLifecycleConcurrencyTest {
 
     @Autowired
