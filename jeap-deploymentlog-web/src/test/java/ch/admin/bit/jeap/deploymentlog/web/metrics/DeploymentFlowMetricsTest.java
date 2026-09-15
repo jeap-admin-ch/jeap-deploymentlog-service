@@ -15,6 +15,14 @@ import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -22,10 +30,12 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(OutputCaptureExtension.class)
 class DeploymentFlowMetricsTest {
 
     private final FlowRepository flowRepository = mock(FlowRepository.class);
@@ -222,6 +232,98 @@ class DeploymentFlowMetricsTest {
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "new")
                 .gauge().value()).isZero();
+    }
+
+    @Test
+    void missingDeploymentEndIsLoggedWithoutRecordingDuration(CapturedOutput output) {
+        metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "missing-end", "System", "component", "DEV", DeploymentState.FAILURE,
+                ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer()).isNull();
+        assertThat(output).contains("missing-end", "startedAt or endedAt is missing");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = DeploymentState.class, names = {"STARTED", "CANCELLED"})
+    void nonTerminalMetricStatesDoNotCreateDeploymentMeters(DeploymentState state) {
+        metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "ignored", "System", "component", "DEV", state, null, null));
+
+        assertThat(meterRegistry.getMeters()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(ints = {-1})
+    void invalidClosedRollbackDurationIsLoggedAndOmitted(Integer seconds, CapturedOutput output) {
+        ZonedDateTime bornAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+        FlowTerminalMetricEvent event = flowEvent(FlowType.ROLLBACK, FlowState.CLOSED,
+                bornAt, seconds == null ? null : bornAt.plusSeconds(seconds));
+
+        metrics.flowReachedTerminalState(event);
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER).counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
+        assertThat(output).contains("Not recording flow duration for " + event.flowId());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = FlowState.class, names = {"OPEN", "ABORTED"})
+    void unsuccessfulRollbacksNeverRecordDuration(FlowState state) {
+        ZonedDateTime bornAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+        metrics.flowReachedTerminalState(flowEvent(FlowType.ROLLBACK, state, bornAt, bornAt.plusMinutes(1)));
+
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
+        if (state == FlowState.OPEN) {
+            assertThat(meterRegistry.getMeters()).isEmpty();
+        }
+    }
+
+    @Test
+    void missingFlowBirthIsLoggedWithoutRecordingDuration(CapturedOutput output) {
+        FlowTerminalMetricEvent event = flowEvent(FlowType.NEW, FlowState.CLOSED, null,
+                ZonedDateTime.parse("2026-09-14T10:00:00+02:00"));
+        metrics.flowReachedTerminalState(event);
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER).counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        assertThat(output).contains(event.flowId().toString(), "startedAt or endedAt is missing");
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlowType.class)
+    void allClosedFlowTypesRecordZeroDurationAndNormalizeTypeLabel(FlowType type) {
+        ZonedDateTime time = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+        metrics.flowReachedTerminalState(flowEvent(type, FlowState.CLOSED, time, time));
+
+        var timer = meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION)
+                .tag("type", type.name().toLowerCase(java.util.Locale.ROOT)).timer();
+        assertThat(timer.count()).isEqualTo(1);
+        assertThat(timer.totalTime(TimeUnit.SECONDS)).isZero();
+        if (type != FlowType.ROLLBACK) {
+            assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
+        }
+    }
+
+    @Test
+    void failedReconciliationRetainsLastGaugeAndNextRefreshRecovers() {
+        OpenFlowMetricIdentity flow = new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", FlowType.NEW);
+        when(flowRepository.findOpenFlowsForMetrics())
+                .thenReturn(List.of(flow))
+                .thenThrow(new DataAccessResourceFailureException("database unavailable"))
+                .thenReturn(List.of());
+
+        metrics.refreshOpenFlowGaugesOnSchedule();
+        assertThatThrownBy(metrics::refreshOpenFlowGaugesOnSchedule)
+                .isInstanceOf(DataAccessResourceFailureException.class);
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN).gauge().value()).isEqualTo(1);
+
+        metrics.refreshOpenFlowGaugesOnSchedule();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN).gauge().value()).isZero();
     }
 
     private FlowTerminalMetricEvent flowEvent(FlowType type, FlowState state,
