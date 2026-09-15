@@ -24,11 +24,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   removed pages through stale repair tasks.
 - Preserve concurrent refresh requests and retain data-retention refresh tasks until their page updates succeed.
 
-### Migration
-
-Flyway adds deployment repair/request fields and lookup indexes. Historical missing pages are classified once using
-the configured Confluence housekeeping policy before entering automatic repair.
-
 ## [15.1.0] - 2026-09-15
 
 ### Added
