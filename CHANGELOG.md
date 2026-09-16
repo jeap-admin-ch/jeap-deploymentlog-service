@@ -18,13 +18,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   returns 404. The page is reused and moved instead of repeatedly attempting a duplicate create; an invisible title
   conflict now fails once with an actionable error.
 
-## [16.0.0] - 2026-09-16 ⚠️ DO NOT USE
+## [16.0.0] - 2026-09-16 — Superseded by 16.0.1
 
-> **WARNING:** Do not deploy this version. Its first repair run can execute an unbounded legacy-classification update,
-> and structure recovery can repeatedly try to create an existing Confluence page. Use 16.0.1 or later.
+> **Upgrade recommended:** Version 16.0.1 replaces this release. On large datasets, the first repair run in 16.0.0
+> can execute an unbounded legacy-classification update, and structure recovery can repeatedly try to create an
+> existing Confluence page.
 
 > **WARNING — Breaking upgrade:** This release changes the checksum of V30. If the original V30 was already applied,
-> do not deploy without completing the reviewed Flyway repair/migrate procedure below; `flyway migrate` alone will
+> complete the reviewed Flyway repair/migrate procedure below before deploying; `flyway migrate` alone will
 > fail validation. When upgrading from V29 or earlier, historical pages deleted without a suppression marker may be
 > recreated within the repair window (seven days by default).
 
@@ -46,11 +47,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release and the same database/schema configuration, then `flyway validate` and `flyway migrate`. Repair does not
   undo the original data update. Do not delete migration history or disable validation.
 
-## [15.1.1] - 2026-09-15 ⚠️ DO NOT USE
+## [15.1.1] - 2026-09-15 — Superseded by 16.0.1
 
-> **WARNING:** Do not deploy this version. Its V30 migration includes a potentially long-running historical data
-> UPDATE that can cause database connection timeouts and prevent service startup. Use 16.0.1 or later
-> and follow the 16.0.0 migration instructions above.
+> **Upgrade recommended:** Version 16.0.1 replaces this release. Its V30 migration includes a potentially long-running
+> historical data UPDATE that can cause database connection timeouts and prevent service startup. Follow the 16.0.0
+> migration instructions above when upgrading.
 
 ### Added
 
