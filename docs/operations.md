@@ -36,13 +36,14 @@ generation:
   update or explicit single-deployment generation request clears that marker before remote generation, so even a failed
   attempt or queue rejection leaves the page eligible for subsequent repair.
 
-On upgrade, historical deployments without a page-tracking row are initially held out of automatic repair. The first
-repair run classifies them once using the configured Confluence housekeeping policy (enabled flag, minimum age,
-retained-page count, productive environments, and the latest deployment/success protections). Historical deletions were
-not recorded, so this is a policy-based classification, not a reconstruction of the deletion history. Missing pages
-that would already qualify for housekeeping stay suppressed; other missing pages enter repair if within the configured
-age window. An explicit request or
-state update clears this legacy marker too and always takes precedence over that classification.
+From version 16.0.0, V30 no longer marks historical deployments without a page-tracking row for legacy classification.
+These missing pages enter automatic repair directly within the configured age window (seven days by default).
+Pages historically deleted by housekeeping without a suppression marker can therefore be recreated. Existing
+suppression markers and future housekeeping deletions remain protected.
+Databases that already applied the original V30 retain its legacy markers. The repair job still classifies these rows
+using the configured Confluence housekeeping policy before admitting them to repair. An explicit request or state
+update clears the legacy marker and takes precedence over classification. See the 16.0.0 migration instructions in
+[CHANGELOG.md](../CHANGELOG.md) for the required Flyway migrate/repair procedure when upgrading.
 
 Repair tasks use the background queue. New deployment and undeployment pages overtake queued repair work, while the
 configured live-task burst guarantees that the repair backlog continues to make progress. Multiple queued requests

@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [15.1.1] - 2026-09-15
+## [16.0.0] - 2026-09-16
+
+> **WARNING — Breaking upgrade:** This release changes the checksum of V30. If the original V30 was already applied,
+> do not deploy without completing the reviewed Flyway repair/migrate procedure below; `flyway migrate` alone will
+> fail validation. When upgrading from V29 or earlier, historical pages deleted without a suppression marker may be
+> recreated within the repair window (seven days by default).
+
+### Changed
+
+- Remove the historical deployment UPDATE from V30 to avoid a potentially long-running data update during startup.
+  Historical missing pages now enter automatic repair within the configured age window (seven days by default),
+  including pages previously deleted by housekeeping without a persisted suppression marker. Existing suppression
+  and legacy-classification markers remain respected.
+
+### Migration
+
+- Run `flyway migrate` with this release's complete migration set and the target database/schema configuration before
+  starting the upgraded service. For databases at V29 or earlier, V30 now only adds the page-generation columns.
+  After a failed migration, first verify that schema and history agree and that V30 was fully rolled back.
+- **Breaking migration checksum change:** if the original V30 was already applied successfully, `flyway migrate`
+  alone fails validation. Back up the database and review the schema/history and all checksum differences first.
+  Only if the expected V30 change is the sole mismatch, run `flyway repair` with the complete migration set from this
+  release and the same database/schema configuration, then `flyway validate` and `flyway migrate`. Repair does not
+  undo the original data update. Do not delete migration history or disable validation.
+
+## [15.1.1] - 2026-09-15 ⚠️ DO NOT USE
+
+> **WARNING:** Do not deploy this version. Its V30 migration includes a potentially long-running historical data
+> UPDATE that can cause database connection timeouts and prevent service startup. Use 16.0.0 or later and follow
+> the 16.0.0 migration instructions above.
 
 ### Added
 
