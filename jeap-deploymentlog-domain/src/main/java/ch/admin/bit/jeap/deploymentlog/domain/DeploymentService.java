@@ -278,9 +278,10 @@ public class DeploymentService {
         deploymentRepository.completePageGenerationRequest(deploymentId, requestId);
     }
 
-    public void classifyLegacyPageGeneration(boolean housekeepingEnabled, Duration minAge, int keepPerEnvironment) {
-        deploymentRepository.classifyLegacyPageGeneration(housekeepingEnabled,
-                ZonedDateTime.now().minus(minAge), keepPerEnvironment);
+    public int releaseLegacyPageGeneration(int limit, long minAgeMinutes, long maxAgeMinutes) {
+        ZonedDateTime now = ZonedDateTime.now();
+        return deploymentRepository.releaseLegacyPageGeneration(
+                limit, now.minusMinutes(maxAgeMinutes), now.minusMinutes(minAgeMinutes));
     }
 
     private Stream<DeploymentPage> getOutdatedNonProductiveDeploymentPagesForSystem(UUID systemId, int keepAtLeastPageCount, ZonedDateTime to) {

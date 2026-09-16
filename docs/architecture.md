@@ -159,6 +159,9 @@ Two levels of locking keep concurrent generation runs apart:
 ShedLock uses a JDBC lock provider on the service's own datasource.
 
 Lock contention for deployment-page repair is an expected deferral and is logged without an exception stack trace.
+Global structure reconciliation holds its distributed documentation lock across the Confluence operations, but no
+database transaction. Individual tracking writes commit independently, so a slow Confluence response cannot leave an
+idle database connection attached to the whole reconciliation run; a later run resumes idempotently after failure.
 Full regeneration, system migration/merge, history refresh and structure reconciliation use the throwing lock path;
 their callers receive or log a failure instead of silently accepting an incomplete operation. Persistent retention
 refresh tasks remain pending when generation is deferred. Missing and outdated pages

@@ -5,9 +5,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 @EnableConfigurationProperties(value = DocumentationGeneratorConfluenceProperties.class)
 class ConfluenceCustomRestClientIT {
@@ -43,5 +50,22 @@ class ConfluenceCustomRestClientIT {
         ConfluenceCustomRestClient confluenceCustomRestClient = new ConfluenceCustomRestClient(properties, RestClient.builder());
         String blogpost = confluenceCustomRestClient.createBlogpost("ARCDOCTEST", "My First Blogpost from api", content);
         assertThat(blogpost).isNotNull();
+    }
+
+    @Test
+    void findPageIdByTitle() {
+        properties.setUrl("https://confluence.example");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(once(), requestTo(
+                        "https://confluence.example/rest/api/content?type=page&spaceKey=SPACE&title=Borderguard"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"results":[{"id":"815771307","title":"Borderguard"}],"size":1}
+                        """, MediaType.APPLICATION_JSON));
+        ConfluenceCustomRestClient client = new ConfluenceCustomRestClient(properties, builder, null);
+
+        assertThat(client.findPageIdByTitle("SPACE", "Borderguard")).contains("815771307");
+        server.verify();
     }
 }

@@ -48,8 +48,13 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
-    public void classifyLegacyPageGeneration(boolean housekeepingEnabled, ZonedDateTime cutoff, int keepPerEnvironment) {
-        jpaDeploymentRepository.classifyLegacyPageGeneration(housekeepingEnabled, cutoff, keepPerEnvironment);
+    public int releaseLegacyPageGeneration(int limit, ZonedDateTime from, ZonedDateTime to) {
+        List<UUID> deploymentIds = jpaDeploymentRepository.findLegacyPageGenerationIds(
+                from, to, PageRequest.of(0, limit));
+        if (!deploymentIds.isEmpty()) {
+            jpaDeploymentRepository.releaseLegacyPageGeneration(deploymentIds);
+        }
+        return deploymentIds.size();
     }
 
     @Override

@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [16.0.0] - 2026-09-16
+## [16.0.1] - 2026-09-16
+
+### Fixed
+
+- Release legacy page-generation markers in bounded repair batches instead of running one correlated bulk update over
+  the deployment history. This keeps the scheduled repair transaction short and limits newly admitted work to the
+  configured repair window.
+- Do not keep a database transaction open while reconciling the global Confluence structure. Tracking writes commit
+  independently while the documentation-structure lock still serializes reconciliation across service instances.
+- Recover an existing Confluence page by its space-wide unique title when its tracked id or expected parent lookup
+  returns 404. The page is reused and moved instead of repeatedly attempting a duplicate create; an invisible title
+  conflict now fails once with an actionable error.
+
+## [16.0.0] - 2026-09-16 ⚠️ DO NOT USE
+
+> **WARNING:** Do not deploy this version. Its first repair run can execute an unbounded legacy-classification update,
+> and structure recovery can repeatedly try to create an existing Confluence page. Use 16.0.1 or later.
 
 > **WARNING — Breaking upgrade:** This release changes the checksum of V30. If the original V30 was already applied,
 > do not deploy without completing the reviewed Flyway repair/migrate procedure below; `flyway migrate` alone will
@@ -33,8 +49,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [15.1.1] - 2026-09-15 ⚠️ DO NOT USE
 
 > **WARNING:** Do not deploy this version. Its V30 migration includes a potentially long-running historical data
-> UPDATE that can cause database connection timeouts and prevent service startup. Use 16.0.0 or later and follow
-> the 16.0.0 migration instructions above.
+> UPDATE that can cause database connection timeouts and prevent service startup. Use 16.0.1 or later
+> and follow the 16.0.0 migration instructions above.
 
 ### Added
 

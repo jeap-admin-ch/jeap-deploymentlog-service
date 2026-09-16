@@ -40,10 +40,12 @@ From version 16.0.0, V30 no longer marks historical deployments without a page-t
 These missing pages enter automatic repair directly within the configured age window (seven days by default).
 Pages historically deleted by housekeeping without a suppression marker can therefore be recreated. Existing
 suppression markers and future housekeeping deletions remain protected.
-Databases that already applied the original V30 retain its legacy markers. The repair job still classifies these rows
-using the configured Confluence housekeeping policy before admitting them to repair. An explicit request or state
-update clears the legacy marker and takes precedence over classification. See the 16.0.0 migration instructions in
-[CHANGELOG.md](../CHANGELOG.md) for the required Flyway migrate/repair procedure when upgrading.
+Databases that already applied the original V30 retain its legacy markers. The repair job releases at most
+`retried-pages-limit` markers per run, only within the configured repair age window, before selecting work. This avoids
+an unbounded startup or scheduled bulk update. Those pages are repaired gradually; historical pages outside the repair
+window require explicit regeneration. An explicit request or state update clears the marker immediately. See the
+16.0.0 migration instructions in [CHANGELOG.md](../CHANGELOG.md) for the required Flyway migrate/repair procedure when
+upgrading.
 
 Repair tasks use the background queue. New deployment and undeployment pages overtake queued repair work, while the
 configured live-task burst guarantees that the repair backlog continues to make progress. Multiple queued requests
@@ -210,6 +212,7 @@ more than two stages, has to adjust the `productive`, `development` and `staging
 | Jira unavailable during a ready-for-deploy check | The request fails with `503` and the deployment is **not** recorded — the check is synchronous by design. |
 | Docgen lock cannot be acquired within 30 seconds (default) | Deployment-page generation is deferred to repair, while a persisted retention refresh remains pending. Non-repairable full generation, migration/merge and structure/history refreshes report failure instead of silently succeeding. |
 | An instance dies mid-generation            | Its lock expires; the pages it did not finish are detected as missing or outdated and repaired.            |
+| Tracked structure page returns 404 but its title still exists | The page is recovered by its space-wide unique title and moved to the expected parent. If the technical user cannot see it, generation fails once with a permission-oriented error instead of retrying duplicate creation. |
 
 ## Related
 

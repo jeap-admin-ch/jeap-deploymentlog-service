@@ -53,7 +53,6 @@ public class SchedulingService {
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
-    private boolean legacyPageGenerationClassified;
 
     @Scheduled(cron = "${jeap.deploymentlog.documentation-generator.scheduled.cron:'-'}")
     @SchedulerLock(name = "generate-missing-pages", lockAtLeastFor = "60s", lockAtMostFor = "5m")
@@ -61,12 +60,12 @@ public class SchedulingService {
         LockAssert.assertLocked();
         log.debug("Checking for missing pages that need to be generated...");
 
-        if (!legacyPageGenerationClassified) {
-            deploymentService.classifyLegacyPageGeneration(housekeepingConfig.getConfluencePages().isEnabled(),
-                    housekeepingConfig.getConfluencePages().getMinAge(),
-                    housekeepingConfig.getConfluencePages().effectiveKeepPerEnvironment(
-                            configProperties.getKeepDeploymentPagePerEnvCount()));
-            legacyPageGenerationClassified = true;
+        int released = deploymentService.releaseLegacyPageGeneration(
+                configProperties.getRetriedPagesLimit(),
+                configProperties.getMinAgeMinutes(),
+                configProperties.getMaxAgeMinutes());
+        if (released > 0) {
+            log.info("Released {} legacy deployments for bounded page repair", released);
         }
 
         List<UUID> deploymentIds = deploymentService.getMissingDeploymentPages(

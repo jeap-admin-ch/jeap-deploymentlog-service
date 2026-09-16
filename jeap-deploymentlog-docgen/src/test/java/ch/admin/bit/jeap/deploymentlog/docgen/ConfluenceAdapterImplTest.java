@@ -102,6 +102,78 @@ class ConfluenceAdapterImplTest {
     }
 
     @Test
+    void addOrUpdatePageUnderAncestor_recoversPageByGlobalTitleAndMovesIt() {
+        String pageId = "existing-page";
+        String pageName = "Borderguard";
+        String ancestorId = "expected-parent";
+        String content = "content";
+        doThrow(new NotFoundException()).when(confluenceClientMock)
+                .getPageByTitle(SPACE_KEY, ancestorId, pageName);
+        when(confluenceClientImplMock.findPageIdByTitle(SPACE_KEY, pageName)).thenReturn(Optional.of(pageId));
+        when(confluenceClientMock.getPageWithContentAndVersionById(pageId))
+                .thenReturn(new ConfluencePage(pageId, pageName, 3));
+        when(confluenceClientMock.getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY))
+                .thenReturn(sha256Hex(content));
+
+        String result = confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
+
+        assertEquals(pageId, result);
+        verify(confluenceClientMock).updatePage(
+                eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(4), anyString(), eq(true));
+        verify(confluenceClientMock, never()).addPageUnderAncestor(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void addOrUpdatePageUnderAncestor_recoversConcurrentCreateInsteadOfRetryingPost() {
+        String pageId = "concurrently-created-page";
+        String pageName = "Borderguard";
+        String ancestorId = "expected-parent";
+        String content = "content";
+        RequestFailedException alreadyExists = mock(RequestFailedException.class);
+        when(alreadyExists.getMessage()).thenReturn(
+                "A page with this title already exists: Borderguard, response: 400");
+        doThrow(new NotFoundException()).when(confluenceClientMock)
+                .getPageByTitle(SPACE_KEY, ancestorId, pageName);
+        when(confluenceClientImplMock.findPageIdByTitle(SPACE_KEY, pageName))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(pageId));
+        when(confluenceClientMock.addPageUnderAncestor(
+                eq(SPACE_KEY), eq(ancestorId), eq(pageName), eq(content), anyString()))
+                .thenThrow(alreadyExists);
+        when(confluenceClientMock.getPageWithContentAndVersionById(pageId))
+                .thenReturn(new ConfluencePage(pageId, pageName, 1));
+        when(confluenceClientMock.getPropertyByKey(pageId, CONTENT_HASH_PROPERTY_KEY))
+                .thenReturn(sha256Hex(content));
+
+        String result = confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> content);
+
+        assertEquals(pageId, result);
+        verify(confluenceClientMock).updatePage(
+                eq(pageId), eq(ancestorId), eq(pageName), eq(content), eq(2), anyString(), eq(true));
+        verify(confluenceClientMock, times(1)).addPageUnderAncestor(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void addOrUpdatePageUnderAncestor_failsOnceWithClearErrorWhenExistingPageIsNotVisible() {
+        String pageName = "Borderguard";
+        String ancestorId = "expected-parent";
+        RequestFailedException alreadyExists = mock(RequestFailedException.class);
+        when(alreadyExists.getMessage()).thenReturn(
+                "A page with this title already exists: Borderguard, response: 400");
+        doThrow(new NotFoundException()).when(confluenceClientMock)
+                .getPageByTitle(SPACE_KEY, ancestorId, pageName);
+        when(confluenceClientImplMock.findPageIdByTitle(SPACE_KEY, pageName)).thenReturn(Optional.empty());
+        when(confluenceClientMock.addPageUnderAncestor(any(), any(), any(), any(), any()))
+                .thenThrow(alreadyExists);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> confluenceAdapter.addOrUpdatePageUnderAncestor(ancestorId, pageName, () -> "content"));
+
+        assertTrue(exception.getMessage().contains("not visible to the configured user"));
+        verify(confluenceClientMock, times(1)).addPageUnderAncestor(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void addOrUpdatePageUnderAncestor_existingPageWithNewContent() {
         String pageId = "pageId";
         String pageName = "pageName";

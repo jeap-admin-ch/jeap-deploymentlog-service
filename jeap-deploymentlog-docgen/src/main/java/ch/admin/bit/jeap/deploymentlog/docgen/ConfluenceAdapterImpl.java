@@ -24,6 +24,8 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
     private static final String VERSION_MESSAGE = "Documentation generated";
     private static final String NOT_FOUND_RESPONSE = "response: 404";
     private static final String CONFLICT_RESPONSE = "response: 409";
+    private static final String BAD_REQUEST_RESPONSE = "response: 400";
+    private static final String PAGE_TITLE_ALREADY_EXISTS = "page with this title already exists";
     private static final int MAX_CONFLICT_RETRIES = 2;
 
     private final ConfluenceClient confluenceClient;
@@ -40,18 +42,35 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
 
     @Override
     public String addOrUpdatePageUnderAncestor(String ancestorId, String pageName, Supplier<String> contentSupplier) {
-        String contentId;
-        try {
-            contentId = confluenceClient.getPageByTitle(props.getSpaceKey(), ancestorId, pageName);
-            updatePage(contentId, ancestorId, pageName, contentSupplier);
-        } catch (NotFoundException e) {
-            log.info("Creating page {}", pageName);
-            String content = contentSupplier.get();
-            contentId = confluenceClient.addPageUnderAncestor(props.getSpaceKey(), ancestorId, pageName, content, VERSION_MESSAGE);
-            confluenceClient.setPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY, hash(content));
+        Optional<LocatedPage> existingPage = findExistingPage(ancestorId, pageName);
+        if (existingPage.isPresent()) {
+            LocatedPage locatedPage = existingPage.get();
+            updatePage(locatedPage.pageId(), ancestorId, pageName, contentSupplier, locatedPage.moveRequired());
+            return locatedPage.pageId();
         }
 
-        return contentId;
+        log.info("Creating page {}", pageName);
+        String content = contentSupplier.get();
+        try {
+            String contentId = confluenceClient.addPageUnderAncestor(
+                    props.getSpaceKey(), ancestorId, pageName, content, VERSION_MESSAGE);
+            confluenceClient.setPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY, hash(content));
+            return contentId;
+        } catch (RequestFailedException ex) {
+            if (!isPageTitleAlreadyExists(ex)) {
+                throw ex;
+            }
+            Optional<String> recoveredPageId = confluenceCustomRestClient.findPageIdByTitle(
+                    props.getSpaceKey(), pageName);
+            if (recoveredPageId.isEmpty()) {
+                throw new IllegalStateException("Confluence reports that page '" + pageName
+                        + "' already exists, but it is not visible to the configured user", ex);
+            }
+            log.info("Confluence page {} was created concurrently or was not found below its tracked parent; " +
+                    "reusing page {}", pageName, recoveredPageId.get());
+            updatePage(recoveredPageId.get(), ancestorId, pageName, contentSupplier, true);
+            return recoveredPageId.get();
+        }
     }
 
     @Override
@@ -107,12 +126,24 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
         }
     }
 
-    private void updatePage(String contentId, String ancestorId, String pageName, Supplier<String> contentSupplier) {
+    private Optional<LocatedPage> findExistingPage(String ancestorId, String pageName) {
+        try {
+            return Optional.of(new LocatedPage(
+                    confluenceClient.getPageByTitle(props.getSpaceKey(), ancestorId, pageName), false));
+        } catch (NotFoundException ex) {
+            Optional<String> pageId = confluenceCustomRestClient.findPageIdByTitle(props.getSpaceKey(), pageName);
+            pageId.ifPresent(id -> log.info("Found Confluence page {} by title as page {}; restoring its parent", pageName, id));
+            return pageId.map(id -> new LocatedPage(id, true));
+        }
+    }
+
+    private void updatePage(String contentId, String ancestorId, String pageName,
+                            Supplier<String> contentSupplier, boolean moveRequired) {
         ConfluencePage existingPage = confluenceClient.getPageWithContentAndVersionById(contentId);
         String existingContentHash = confluenceClient.getPropertyByKey(contentId, CONTENT_HASH_PROPERTY_KEY);
         String content = contentSupplier.get();
 
-        if (notSameHash(existingContentHash, hash(content)) || !existingPage.getTitle().equals(pageName)) {
+        if (moveRequired || notSameHash(existingContentHash, hash(content)) || !existingPage.getTitle().equals(pageName)) {
             log.info("Updating page {}", pageName);
             // On conflict, render the content again to include the change of the concurrent writer
             String updatedContent = updatePageWithRetryOnConflict(contentId, ancestorId, pageName, content,
@@ -167,6 +198,15 @@ class ConfluenceAdapterImpl implements ConfluenceAdapter {
 
     private static boolean isNotFound(RequestFailedException rfe) {
         return StringUtils.hasText(rfe.getMessage()) && rfe.getMessage().contains(NOT_FOUND_RESPONSE);
+    }
+
+    private static boolean isPageTitleAlreadyExists(RequestFailedException rfe) {
+        return StringUtils.hasText(rfe.getMessage())
+                && rfe.getMessage().contains(BAD_REQUEST_RESPONSE)
+                && rfe.getMessage().toLowerCase().contains(PAGE_TITLE_ALREADY_EXISTS);
+    }
+
+    private record LocatedPage(String pageId, boolean moveRequired) {
     }
 
     @SneakyThrows

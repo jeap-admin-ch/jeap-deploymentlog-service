@@ -45,30 +45,19 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
     void suppressPageGeneration(@Param("id") UUID deploymentId,
                                 @Param("pageStateTimestamp") ZonedDateTime pageStateTimestamp);
 
-    @Modifying
     @Query("""
-            update Deployment d set d.pageGenerationSuppressed = case when
-                :enabled = true and d.lastModified < :cutoff and d.environment.productive = false
-                and exists (select newer.id from Deployment newer
-                    where newer.componentVersion.component = d.componentVersion.component
-                    and newer.environment = d.environment and newer.startedAt > d.startedAt)
-                and (not exists (select success.id from Deployment success
-                    where success.componentVersion.component = d.componentVersion.component
-                    and success.environment = d.environment and success.state = 'SUCCESS')
-                    or exists (select success.id from Deployment success
-                    where success.componentVersion.component = d.componentVersion.component
-                    and success.environment = d.environment and success.state = 'SUCCESS'
-                    and success.startedAt > d.startedAt))
-                and :keep <= (select count(p.id) from DeploymentPage p, Deployment retained
-                    where retained.id = p.deploymentId and retained.environment = d.environment
-                    and retained.componentVersion.component.system = d.componentVersion.component.system
-                    and p.deploymentStateTimestamp > d.lastModified)
-                then true else false end, d.pageGenerationLegacyUnclassified = false
+            select d.id from Deployment d
             where d.pageGenerationLegacyUnclassified = true and d.pageGenerationRequestId is null
+            and d.startedAt between :from and :to
+            order by d.startedAt, d.id
             """)
-    void classifyLegacyPageGeneration(@Param("enabled") boolean housekeepingEnabled,
-                                      @Param("cutoff") ZonedDateTime cutoff,
-                                      @Param("keep") int keepPerEnvironment);
+    List<UUID> findLegacyPageGenerationIds(@Param("from") ZonedDateTime from,
+                                           @Param("to") ZonedDateTime to,
+                                           Pageable pageable);
+
+    @Modifying
+    @Query("update Deployment d set d.pageGenerationLegacyUnclassified = false where d.id in :ids")
+    void releaseLegacyPageGeneration(@Param("ids") List<UUID> deploymentIds);
 
     Optional<Deployment> findByExternalId(String externalId);
 

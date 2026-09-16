@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -73,8 +74,27 @@ class SchedulingServiceTest {
 
         schedulingService.generateMissingPages();
 
+        verify(deploymentServiceMock).releaseLegacyPageGeneration(50, 5, 10_080);
         verify(deploymentServiceMock).getMissingDeploymentPages(50, 5, 10_080);
         verify(docgenAsyncServiceMock).triggerRepairDocgenForDeployment(outdatedDeploymentId);
+    }
+
+    @Test
+    void generateMissingPages_checksForBoundedLegacyBatchOnEveryRun() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingConfigProperties props = new SchedulingConfigProperties();
+        SchedulingService schedulingService = new SchedulingService(
+                deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
+                new HousekeepingConfigProperties(), dataRetentionRepository, docgenLocksMock, meterRegistryMock);
+        when(deploymentServiceMock.releaseLegacyPageGeneration(50, 5, 10_080))
+                .thenReturn(50, 1, 0);
+        when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 10_080)).thenReturn(List.of());
+
+        schedulingService.generateMissingPages();
+        schedulingService.generateMissingPages();
+        schedulingService.generateMissingPages();
+
+        verify(deploymentServiceMock, times(3)).releaseLegacyPageGeneration(50, 5, 10_080);
     }
 
     @Test

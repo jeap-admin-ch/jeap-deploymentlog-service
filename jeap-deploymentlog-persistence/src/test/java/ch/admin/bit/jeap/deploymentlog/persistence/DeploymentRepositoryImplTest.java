@@ -495,67 +495,43 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
-    void classifyLegacyMissingPagesUsingHousekeepingPolicy() {
+    void releasesLegacyMissingPagesInBoundedRepairWindowBatches() {
         Environment dev = new Environment("DEV");
-        Environment prod = new Environment("PROD");
         environmentRepository.save(dev);
-        environmentRepository.save(prod);
         System system = new System("legacy");
         systemRepository.save(system);
         Component component = new Component("component", system);
         componentRepository.save(component);
         DeploymentTarget target = TestDataFactory.createDeploymentTarget();
         ZonedDateTime now = ZonedDateTime.now();
-        Deployment removed = deploymentRepository.save(TestDataFactory.createDeployment(dev, component, now.minusDays(30), target));
-        Deployment lastSuccess = deploymentRepository.save(TestDataFactory.createDeployment(dev, component, now.minusDays(20), target));
-        lastSuccess.success(now.minusDays(20), "success");
-        Deployment recentFailure = deploymentRepository.save(TestDataFactory.createDeployment(dev, component, now.minusDays(10), target));
-        Deployment latest = deploymentRepository.save(TestDataFactory.createDeployment(dev, component, now.minusDays(1), target));
-        Deployment productive = deploymentRepository.save(TestDataFactory.createDeployment(prod, component, now.minusDays(30), target));
-        deploymentRepository.save(TestDataFactory.createDeployment(prod, component, now, target));
-        jpaDeploymentPageRepository.save(DeploymentPage.builder().id(UUID.randomUUID())
-                .deploymentId(latest.getId()).pageId("latest").lastUpdatedAt(now)
-                .deploymentStateTimestamp(latest.getLastModified()).build());
+        Deployment outsideWindow = deploymentRepository.save(
+                TestDataFactory.createDeployment(dev, component, now.minusDays(8), target));
+        Deployment oldest = deploymentRepository.save(
+                TestDataFactory.createDeployment(dev, component, now.minusDays(6), target));
+        Deployment middle = deploymentRepository.save(
+                TestDataFactory.createDeployment(dev, component, now.minusDays(5), target));
+        Deployment newest = deploymentRepository.save(
+                TestDataFactory.createDeployment(dev, component, now.minusDays(4), target));
         entityManager.flush();
-        // Emulate V30 on a populated database, including historic last-modified timestamps.
-        entityManager.createNativeQuery("update deployment set last_modified = started_at").executeUpdate();
-        entityManager.createNativeQuery("update deployment set page_generation_legacy_unclassified = true " +
-                "where not exists (select 1 from deployment_page p where p.deployment_id = deployment.id)").executeUpdate();
+        entityManager.createNativeQuery("update deployment set page_generation_legacy_unclassified = true")
+                .executeUpdate();
         entityManager.clear();
         assertThat(deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(20, now.plusDays(1))).isEmpty();
 
-        deploymentRepository.classifyLegacyPageGeneration(true, now.minusDays(7), 1);
+        assertThat(deploymentRepository.releaseLegacyPageGeneration(
+                2, now.minusDays(7), now.minusMinutes(5))).isEqualTo(2);
         entityManager.clear();
-
-        assertThat(deploymentRepository.getById(removed.getId()).isPageGenerationSuppressed()).isTrue();
         assertThat(deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(20, now.plusDays(1)))
-                .contains(lastSuccess.getId(), recentFailure.getId(), productive.getId()).doesNotContain(removed.getId());
-        deploymentRepository.resumePageGeneration(removed.getId());
+                .containsExactly(oldest.getId(), middle.getId());
+        assertThat(deploymentRepository.getById(newest.getId()).isPageGenerationLegacyUnclassified()).isTrue();
+        assertThat(deploymentRepository.getById(outsideWindow.getId()).isPageGenerationLegacyUnclassified()).isTrue();
+
+        assertThat(deploymentRepository.releaseLegacyPageGeneration(
+                2, now.minusDays(7), now.minusMinutes(5))).isEqualTo(1);
+        entityManager.clear();
         assertThat(deploymentRepository.getDeploymentIdsWithMissingOrOutdatedGeneratedPages(20, now.plusDays(1)))
-                .contains(removed.getId());
-
-        entityManager.createNativeQuery("update deployment set page_generation_legacy_unclassified = true, page_generation_request_id = null").executeUpdate();
-        deploymentRepository.resumePageGeneration(removed.getId());
-        deploymentRepository.classifyLegacyPageGeneration(true, now.minusDays(7), 1);
-        entityManager.clear();
-        assertThat(deploymentRepository.getById(removed.getId()).isPageGenerationSuppressed())
-                .as("explicit requests before classification must remain repairable").isFalse();
-
-        entityManager.createNativeQuery("update deployment set page_generation_legacy_unclassified = true, page_generation_request_id = null").executeUpdate();
-        deploymentRepository.classifyLegacyPageGeneration(false, now.minusDays(7), 1);
-        entityManager.clear();
-        assertThat(deploymentRepository.getById(removed.getId()).isPageGenerationSuppressed())
-                .as("disabled housekeeping must not exclude historical missing pages").isFalse();
-
-        entityManager.createNativeQuery("update deployment set last_modified = :modified, " +
-                        "page_generation_legacy_unclassified = true where id = :id")
-                .setParameter("modified", now.minusDays(9)).setParameter("id", removed.getId()).executeUpdate();
-        entityManager.createNativeQuery("update deployment_page set deployment_state_timestamp = :modified")
-                .setParameter("modified", now.minusDays(10)).executeUpdate();
-        deploymentRepository.classifyLegacyPageGeneration(true, now.minusDays(7), 1);
-        entityManager.clear();
-        assertThat(deploymentRepository.getById(removed.getId()).isPageGenerationSuppressed())
-                .as("the keep count orders pages by state timestamp, not deployment start time").isFalse();
+                .containsExactly(oldest.getId(), middle.getId(), newest.getId())
+                .doesNotContain(outsideWindow.getId());
     }
 
     @Test

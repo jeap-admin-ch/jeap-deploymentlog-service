@@ -23,7 +23,7 @@ public interface DeploymentRepository {
 
     void suppressPageGeneration(UUID deploymentId, ZonedDateTime pageStateTimestamp);
 
-    void classifyLegacyPageGeneration(boolean housekeepingEnabled, ZonedDateTime cutoff, int keepPerEnvironment);
+    int releaseLegacyPageGeneration(int limit, ZonedDateTime from, ZonedDateTime to);
 
     Deployment save(Deployment deployment);
 
