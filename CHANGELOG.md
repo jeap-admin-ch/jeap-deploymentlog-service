@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.0.2] - 2026-09-16
+
+### Fixed
+
+- Log each distinct syntactically invalid Jira issue key only once per service instance instead of repeating the same
+  warning whenever documentation generation scans historical changelogs.
+
 ## [16.0.1] - 2026-09-16
 
 ### Fixed
@@ -17,7 +24,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Recover an existing Confluence page by its space-wide unique title when its tracked id or expected parent lookup
   returns 404. The page is reused and moved instead of repeatedly attempting a duplicate create; an invisible title
   conflict now fails once with an actionable error.
-
 ## [16.0.0] - 2026-09-16 — Superseded by 16.0.1
 
 > **Upgrade recommended:** Version 16.0.1 replaces this release. On large datasets, the first repair run in 16.0.0
