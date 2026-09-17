@@ -126,13 +126,17 @@ class DocumentationGeneratorTest {
     void nonRepairableOperationsReportContentionWithoutStartingPageTransaction() {
         doThrow(new IllegalStateException("Structure lock busy"))
                 .when(documentationStructureLockMock).runLocked(any());
+        System system = new System("system");
+        System newSystem = new System("new");
+        System oldSystem = new System("old");
+        List<SystemEnv> noEnvironments = List.of();
 
         assertThrows(IllegalStateException.class, () -> documentationGenerator.generateAllPages());
         assertThrows(IllegalStateException.class, () -> documentationGenerator.generateAllPagesForSystem("system", null));
-        assertThrows(IllegalStateException.class, () -> documentationGenerator.migrateSystem(new System("system")));
-        assertThrows(IllegalStateException.class, () -> documentationGenerator.mergeSystems(new System("new"), new System("old")));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.migrateSystem(system));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.mergeSystems(newSystem, oldSystem));
         assertThrows(IllegalStateException.class, () -> documentationGenerator.reconcileDocumentationStructure());
-        assertThrows(IllegalStateException.class, () -> documentationGenerator.updateDeploymentHistoryPages(List.of()));
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.updateDeploymentHistoryPages(noEnvironments));
 
         verifyNoInteractions(transactionRunnerMock);
     }
@@ -340,7 +344,8 @@ class DocumentationGeneratorTest {
         DocumentationGenerator generator = new DocumentationGenerator(
                 confluenceAdapterMock,
                 jiraAdapterMock,
-                new TemplateRenderer(generatorConfig.templateEngine(applicationContext)),
+                new TemplateRenderer(generatorConfig.templateEngine(applicationContext),
+                        new VersionFlowDiagramRenderer()),
                 props,
                 systemRepositoryMock,
                 environmentRepositoryMock,
@@ -587,7 +592,8 @@ class DocumentationGeneratorTest {
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
 
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
-        TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext));
+        TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext),
+                new VersionFlowDiagramRenderer());
         DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
         props.setRootPageId(ROOT_PAGE_ID);
         documentationGenerator = new DocumentationGenerator(

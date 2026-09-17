@@ -80,6 +80,8 @@ class ComponentPageDtoFactoryTest {
         assertThat(result.getType()).isEqualTo("NEW");
         assertThat(result.getDuration()).isEqualTo("01:02:03");
         assertThat(result.getDeployments()).extracting("stage").containsExactly("PROD", "DEV");
+        assertThat(result.getDeployments()).extracting("startedAtInstant").containsExactly(
+                second.getStartedAt().toInstant(), first.getStartedAt().toInstant());
         assertThat(result.getDeployments()).extracting("pageUrl").containsExactly(
                 "https://confluence.example/pages/viewpage.action?pageId=deployment-page", null);
         assertThat(result.getJiraIssues()).extracting("key").containsExactly("ABC-1", "ABC-2");

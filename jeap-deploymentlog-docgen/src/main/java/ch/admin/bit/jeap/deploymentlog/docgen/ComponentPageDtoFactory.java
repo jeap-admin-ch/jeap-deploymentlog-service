@@ -75,6 +75,7 @@ class ComponentPageDtoFactory {
                 .orElse(null);
         return ComponentFlowDeploymentDto.builder()
                 .startedAt(format(deployment.getStartedAt()))
+                .startedAtInstant(deployment.getStartedAt().toInstant())
                 .stage(deployment.getEnvironment().getName())
                 .state(deployment.getState().name())
                 .pageUrl(pageUrl)

@@ -14,6 +14,7 @@ class TemplateRenderer {
 
     public static final String DEPLOYMENT_LETTER = "deploymentLetter";
     private final ITemplateEngine templateEngine;
+    private final VersionFlowDiagramRenderer versionFlowDiagramRenderer;
 
     String renderSystemPage(SystemPageDto systemPageDto) {
         Context context = new Context(Locale.GERMAN);
@@ -24,7 +25,8 @@ class TemplateRenderer {
     String renderComponentPage(ComponentPageDto componentPageDto) {
         Context context = new Context(Locale.GERMAN);
         context.setVariable("component", componentPageDto);
-        return templateEngine.process("component", context).trim();
+        String componentPage = templateEngine.process("component", context).trim();
+        return versionFlowDiagramRenderer.render(componentPageDto) + componentPage;
     }
 
     String renderJiraProjectPage(JiraProjectPageDto jiraProjectPageDto) {

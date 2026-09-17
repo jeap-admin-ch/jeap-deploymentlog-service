@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +41,8 @@ class TemplateRendererTest {
                 .build());
 
         assertThat(content)
+                .startsWith("<ac:structured-macro ac:name=\"expand\">")
+                .contains("<ac:parameter ac:name=\"title\">Version Flows Diagram</ac:parameter>")
                 .contains("Version Flows")
                 .contains("noch keine Version Flows bekannt")
                 .doesNotContain("<table class=\"wrapped\" style=\"table-layout");
@@ -58,13 +61,17 @@ class TemplateRendererTest {
                 .targetStage("PROD<&>")
                 .deployments(List.of(
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:00:00")
+                                .startedAtInstant(Instant.parse("2026-08-01T08:00:00Z"))
                                 .stage("DEV").state("FAILURE").build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:05:00")
+                                .startedAtInstant(Instant.parse("2026-08-01T08:05:00Z"))
                                 .stage("DEV").state("SUCCESS")
                                 .pageUrl("https://confluence.example/pages/viewpage.action?pageId=page-123").build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:10:00")
+                                .startedAtInstant(Instant.parse("2026-08-01T08:10:00Z"))
                                 .stage("REF").state("STARTED").build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:15:00")
+                                .startedAtInstant(Instant.parse("2026-08-01T08:15:00Z"))
                                 .stage("REF").state("CANCELLED").build()))
                 .jiraIssues(List.of(JiraIssueDto.builder().key("JEAP-1")
                         .url("https://jira.example/browse/JEAP-1").build()))
@@ -77,6 +84,8 @@ class TemplateRendererTest {
                 .build());
 
         assertThat(content)
+                .startsWith("<ac:structured-macro ac:name=\"expand\">")
+                .contains("<svg", "<polyline", "<title>a-very-long-version&lt;&amp;&gt; · DEV · FAILURE")
                 .contains("a-very-long-version&lt;&amp;&gt;")
                 .contains("PROD&lt;&amp;&gt;")
                 .contains("ABORTED", "AD_HOC", "page-123", "JEAP-1")
@@ -436,6 +445,7 @@ class TemplateRendererTest {
     @BeforeEach
     void setUp() {
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
-        templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext));
+        templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext),
+                new VersionFlowDiagramRenderer());
     }
 }
