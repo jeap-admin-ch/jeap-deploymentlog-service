@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
@@ -9,6 +10,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.FlowTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricIdentity;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
@@ -26,6 +28,8 @@ import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -48,20 +52,58 @@ class DeploymentFlowMetricsTest {
         metrics = new DeploymentFlowMetrics(meterRegistry, flowRepository);
     }
 
-    @Test
-    void recordsTerminalDeploymentCounterAndDurationExactlyWithDocumentedLabels() {
+    @ParameterizedTest
+    @EnumSource(DeploymentType.class)
+    void recordsTerminalDeploymentCounterAndDurationWithExactDeploymentTypeLabels(DeploymentType deploymentType) {
         ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "Turnus", "turnus-scs", "PROD",
-                DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
+                Set.of(deploymentType), DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD", "result", "success")
-                .counter().count()).isEqualTo(1);
+        var counter = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD", "result", "success",
+                        "deployment_type", deploymentType.name())
+                .counter();
+        assertThat(counter.count()).isEqualTo(1);
+        assertTags(counter, Map.of(
+                "system", "Turnus",
+                "component", "turnus-scs",
+                "environment", "PROD",
+                "result", "success",
+                "deployment_type", deploymentType.name()));
+
         Timer duration = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
-                .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD").timer();
+                .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD",
+                        "deployment_type", deploymentType.name()).timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(75);
+        assertTags(duration, Map.of(
+                "system", "Turnus",
+                "component", "turnus-scs",
+                "environment", "PROD",
+                "deployment_type", deploymentType.name()));
+    }
+
+    @Test
+    void recordsOneSeriesPerDeploymentTypeForMultiTypeDeployment() {
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+        metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "external-id", "System", "component", "PROD",
+                Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE),
+                DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
+
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counters())
+                .extracting(counter -> counter.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
+                        Counter::count)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("CODE", 1.0),
+                        org.assertj.core.groups.Tuple.tuple("INFRASTRUCTURE", 1.0));
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timers())
+                .extracting(timer -> timer.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
+                        Timer::count)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("CODE", 1L),
+                        org.assertj.core.groups.Tuple.tuple("INFRASTRUCTURE", 1L));
     }
 
     @Test
@@ -69,7 +111,7 @@ class DeploymentFlowMetricsTest {
         ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
-                DeploymentState.FAILURE, startedAt, startedAt.minusSeconds(1)));
+                Set.of(DeploymentType.CONFIG), DeploymentState.FAILURE, startedAt, startedAt.minusSeconds(1)));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "failed").counter().count()).isEqualTo(1);
@@ -81,7 +123,7 @@ class DeploymentFlowMetricsTest {
         ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
-                DeploymentState.CANCELLED, startedAt, startedAt.plusSeconds(30)));
+                Set.of(DeploymentType.INFRASTRUCTURE), DeploymentState.CANCELLED, startedAt, startedAt.plusSeconds(30)));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "cancelled").counter().count()).isEqualTo(1);
@@ -94,7 +136,8 @@ class DeploymentFlowMetricsTest {
     void skipsDeploymentDurationWhenATimestampIsMissing() {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
-                DeploymentState.SUCCESS, null, ZonedDateTime.parse("2026-09-14T10:00:00+02:00")));
+                Set.of(DeploymentType.CODE), DeploymentState.SUCCESS, null,
+                ZonedDateTime.parse("2026-09-14T10:00:00+02:00")));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
         assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer()).isNull();
@@ -105,13 +148,26 @@ class DeploymentFlowMetricsTest {
         ZonedDateTime bornAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
         metrics.flowReachedTerminalState(flowEvent(FlowType.NEW, FlowState.CLOSED, bornAt, bornAt.plusMinutes(12)));
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
-                .tags("system", "System", "component", "component", "type", "new", "state", "closed")
-                .counter().count()).isEqualTo(1);
+        var counter = meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
+                .tags("system", "System", "component", "component", "type", "new", "state", "closed",
+                        "deployment_type", "CODE")
+                .counter();
+        assertThat(counter.count()).isEqualTo(1);
+        assertTags(counter, Map.of(
+                "system", "System",
+                "component", "component",
+                "type", "new",
+                "state", "closed",
+                "deployment_type", "CODE"));
         Timer duration = meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION)
-                .tags("system", "System", "component", "component", "type", "new").timer();
+                .tags("system", "System", "component", "component", "type", "new", "deployment_type", "CODE").timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(12 * 60);
+        assertTags(duration, Map.of(
+                "system", "System",
+                "component", "component",
+                "type", "new",
+                "deployment_type", "CODE"));
         assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
     }
 
@@ -126,7 +182,7 @@ class DeploymentFlowMetricsTest {
 
         assertThat(prometheusMeterRegistry.scrape())
                 .contains("flow_duration_seconds_count")
-                .contains("flow_duration_seconds_sum{component=\"component\",system=\"System\",type=\"new\"} 720.0")
+                .contains("flow_duration_seconds_sum{component=\"component\",deployment_type=\"CODE\",system=\"System\",type=\"new\"} 720.0")
                 .doesNotContain("flow_duration_minutes")
                 .doesNotContain("flow_duration_seconds_seconds");
     }
@@ -138,9 +194,15 @@ class DeploymentFlowMetricsTest {
                 FlowType.ROLLBACK, FlowState.CLOSED, bornAt, bornAt.plusSeconds(90)));
 
         Timer recovery = meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
-                .tags("system", "System", "component", "component", "environment", "PROD").timer();
+                .tags("system", "System", "component", "component", "environment", "PROD",
+                        "deployment_type", "CODE").timer();
         assertThat(recovery.count()).isEqualTo(1);
         assertThat(recovery.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
+        assertTags(recovery, Map.of(
+                "system", "System",
+                "component", "component",
+                "environment", "PROD",
+                "deployment_type", "CODE"));
     }
 
     @Test
@@ -149,7 +211,7 @@ class DeploymentFlowMetricsTest {
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
-                .tags("type", "ad_hoc", "state", "aborted").counter().count()).isEqualTo(1);
+                .tags("type", "ad_hoc", "state", "aborted", "deployment_type", "CODE").counter().count()).isEqualTo(1);
         assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
         assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
     }
@@ -163,9 +225,15 @@ class DeploymentFlowMetricsTest {
                 .thenReturn(List.of());
 
         metrics.refreshOpenFlowGauges();
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
+        var gauge = meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "retry")
-                .gauge().value()).isEqualTo(2);
+                .gauge();
+        assertThat(gauge.value()).isEqualTo(2);
+        assertTags(gauge, Map.of(
+                "system", "System",
+                "component", "component",
+                "type", "retry",
+                "deployment_type", "CODE"));
 
         metrics.refreshOpenFlowGauges();
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
@@ -251,7 +319,8 @@ class DeploymentFlowMetricsTest {
     @Test
     void missingDeploymentEndIsLoggedWithoutRecordingDuration(CapturedOutput output) {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
-                UUID.randomUUID(), "missing-end", "System", "component", "DEV", DeploymentState.FAILURE,
+                UUID.randomUUID(), "missing-end", "System", "component", "DEV", Set.of(DeploymentType.CODE),
+                DeploymentState.FAILURE,
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
@@ -262,7 +331,19 @@ class DeploymentFlowMetricsTest {
     @Test
     void nonTerminalMetricStatesDoNotCreateDeploymentMeters() {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
-                UUID.randomUUID(), "ignored", "System", "component", "DEV", DeploymentState.STARTED, null, null));
+                UUID.randomUUID(), "ignored", "System", "component", "DEV", Set.of(DeploymentType.CODE),
+                DeploymentState.STARTED, null, null));
+
+        assertThat(meterRegistry.getMeters()).isEmpty();
+    }
+
+    @Test
+    void deploymentWithoutKnownTypeDoesNotCreateAnUntypedSeries() {
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+
+        metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "unclassified", "System", "component", "DEV", Set.of(),
+                DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(1)));
 
         assertThat(meterRegistry.getMeters()).isEmpty();
     }
@@ -343,5 +424,13 @@ class DeploymentFlowMetricsTest {
                                                ZonedDateTime bornAt, ZonedDateTime endedAt) {
         return new FlowTerminalMetricEvent(
                 UUID.randomUUID(), "System", "component", "PROD", type, state, bornAt, endedAt);
+    }
+
+    private static void assertTags(io.micrometer.core.instrument.Meter meter, Map<String, String> expectedTags) {
+        assertThat(meter.getId().getTags())
+                .extracting(io.micrometer.core.instrument.Tag::getKey, io.micrometer.core.instrument.Tag::getValue)
+                .containsExactlyInAnyOrderElementsOf(expectedTags.entrySet().stream()
+                        .map(entry -> org.assertj.core.groups.Tuple.tuple(entry.getKey(), entry.getValue()))
+                        .toList());
     }
 }

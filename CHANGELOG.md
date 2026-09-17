@@ -12,6 +12,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add a collapsed diagram above the component version-flow table to visualize deployments by stage and ordinal
   deployment time, including overlapping stage lanes and deployment status icons. The server-generated SVG is
   embedded through the Confluence HTML macro.
+- Add the `deployment_type` label to deployment and flow metrics for filtering `CODE`, `CONFIG` and
+  `INFRASTRUCTURE` deployments.
 
 ## [16.2.0] - 2026-09-17
 

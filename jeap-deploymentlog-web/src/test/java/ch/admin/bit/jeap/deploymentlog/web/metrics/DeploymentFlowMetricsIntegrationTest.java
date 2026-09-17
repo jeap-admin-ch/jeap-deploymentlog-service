@@ -92,15 +92,15 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
         String system = fixture.system();
         assertThat(scrape.lines().filter(line -> line.contains("system=\"" + system + "\"")).toList())
                 .contains(
-                        "deployment_counter_total{component=\"service\",environment=\"DEV\",result=\"success\",system=\"" + system + "\"} 1.0",
-                        "deployment_duration_seconds_count{component=\"service\",environment=\"DEV\",system=\"" + system + "\"} 1",
-                        "deployment_duration_seconds_sum{component=\"service\",environment=\"DEV\",system=\"" + system + "\"} 90.0",
-                        "flow_counter_total{component=\"service\",state=\"closed\",system=\"" + system + "\",type=\"rollback\"} 1.0",
-                        "flow_open{component=\"service\",system=\"" + system + "\",type=\"rollback\"} 0.0",
-                        "flow_duration_seconds_count{component=\"service\",system=\"" + system + "\",type=\"rollback\"} 1",
-                        "flow_duration_seconds_sum{component=\"service\",system=\"" + system + "\",type=\"rollback\"} 90.0",
-                        "flow_recovery_duration_seconds_count{component=\"service\",environment=\"DEV\",system=\"" + system + "\"} 1",
-                        "flow_recovery_duration_seconds_sum{component=\"service\",environment=\"DEV\",system=\"" + system + "\"} 90.0");
+                        "deployment_counter_total{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",result=\"success\",system=\"" + system + "\"} 1.0",
+                        "deployment_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 1",
+                        "deployment_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 90.0",
+                        "flow_counter_total{component=\"service\",deployment_type=\"CODE\",state=\"closed\",system=\"" + system + "\",type=\"rollback\"} 1.0",
+                        "flow_open{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 0.0",
+                        "flow_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 1",
+                        "flow_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 90.0",
+                        "flow_recovery_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 1",
+                        "flow_recovery_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 90.0");
         assertThat(scrape).doesNotContain(fixture.externalId(), "flow_duration_minutes", "flow_duration_seconds_seconds");
     }
 
@@ -119,14 +119,17 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             default -> throw new IllegalArgumentException("Expected a terminal deployment state");
         };
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tags("system", fixture.system(),
-                "result", result).counter().count()).isEqualTo(1);
-        var duration = registry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).tag("system", fixture.system()).timer();
+                "result", result, "deployment_type", "CODE").counter().count()).isEqualTo(1);
+        var duration = registry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+                .tags("system", fixture.system(), "deployment_type", "CODE").timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
         if (state == DeploymentState.SUCCESS) {
-            assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER).tag("system", fixture.system()).counter().count()).isEqualTo(1);
+            assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER)
+                    .tags("system", fixture.system(), "deployment_type", "CODE").counter().count()).isEqualTo(1);
             for (String name : new String[]{DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
-                var timer = registry.get(name).tag("system", fixture.system()).timer();
+                var timer = registry.get(name)
+                        .tags("system", fixture.system(), "deployment_type", "CODE").timer();
                 assertThat(timer.count()).isEqualTo(1);
                 assertThat(timer.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
             }

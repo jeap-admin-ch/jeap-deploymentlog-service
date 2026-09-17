@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
@@ -43,6 +44,7 @@ public class DeploymentFlowMetrics {
     public static final String SYSTEM = "system";
     public static final String COMPONENT = "component";
     public static final String ENVIRONMENT = "environment";
+    public static final String DEPLOYMENT_TYPE = "deployment_type";
 
     private final MeterRegistry meterRegistry;
     private final FlowRepository flowRepository;
@@ -67,21 +69,26 @@ public class DeploymentFlowMetrics {
             return;
         }
 
-        Counter.builder(DEPLOYMENT_COUNTER)
-                .tags(SYSTEM, event.system(),
-                        COMPONENT, event.component(),
-                        ENVIRONMENT, event.environment(),
-                        "result", result)
-                .register(meterRegistry)
-                .increment();
+        java.util.Optional<Duration> duration =
+                validDuration(event.startedAt(), event.endedAt(), "deployment", event.externalId());
+        event.deploymentTypes().stream().sorted().forEach(deploymentType -> {
+            Counter.builder(DEPLOYMENT_COUNTER)
+                    .tags(SYSTEM, event.system(),
+                            COMPONENT, event.component(),
+                            ENVIRONMENT, event.environment(),
+                            "result", result,
+                            DEPLOYMENT_TYPE, deploymentType.name())
+                    .register(meterRegistry)
+                    .increment();
 
-        validDuration(event.startedAt(), event.endedAt(), "deployment", event.externalId())
-                .ifPresent(duration -> Timer.builder(DEPLOYMENT_DURATION)
-                        .tags(SYSTEM, event.system(),
-                                COMPONENT, event.component(),
-                                ENVIRONMENT, event.environment())
-                        .register(meterRegistry)
-                        .record(duration));
+            duration.ifPresent(value -> Timer.builder(DEPLOYMENT_DURATION)
+                    .tags(SYSTEM, event.system(),
+                            COMPONENT, event.component(),
+                            ENVIRONMENT, event.environment(),
+                            DEPLOYMENT_TYPE, deploymentType.name())
+                    .register(meterRegistry)
+                    .record(value));
+        });
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -94,7 +101,8 @@ public class DeploymentFlowMetrics {
                 .tags(SYSTEM, event.system(),
                         COMPONENT, event.component(),
                         "type", type,
-                        "state", normalized(event.state()))
+                        "state", normalized(event.state()),
+                        DEPLOYMENT_TYPE, DeploymentType.CODE.name())
                 .register(meterRegistry)
                 .increment();
 
@@ -106,14 +114,16 @@ public class DeploymentFlowMetrics {
                     Timer.builder(FLOW_DURATION)
                             .tags(SYSTEM, event.system(),
                                     COMPONENT, event.component(),
-                                    "type", type)
+                                    "type", type,
+                                    DEPLOYMENT_TYPE, DeploymentType.CODE.name())
                             .register(meterRegistry)
                             .record(duration);
                     if (event.type() == FlowType.ROLLBACK) {
                         Timer.builder(FLOW_RECOVERY_DURATION)
                                 .tags(SYSTEM, event.system(),
                                         COMPONENT, event.component(),
-                                        ENVIRONMENT, event.finalEnvironment())
+                                        ENVIRONMENT, event.finalEnvironment(),
+                                        DEPLOYMENT_TYPE, DeploymentType.CODE.name())
                                 .register(meterRegistry)
                                 .record(duration);
                     }
@@ -173,7 +183,8 @@ public class DeploymentFlowMetrics {
             Gauge.builder(FLOW_OPEN, value, AtomicLong::doubleValue)
                     .tags(SYSTEM, key.system(),
                             COMPONENT, key.component(),
-                            "type", normalized(key.type()))
+                            "type", normalized(key.type()),
+                            DEPLOYMENT_TYPE, DeploymentType.CODE.name())
                     .register(meterRegistry);
             return value;
         });
