@@ -43,8 +43,16 @@ class TemplateRendererTest {
         assertThat(content)
                 .startsWith("<ac:structured-macro ac:name=\"expand\">")
                 .contains("<ac:parameter ac:name=\"title\">Version Flows Diagram</ac:parameter>")
+                .contains("<ac:structured-macro ac:name=\"html\" ac:schema-version=\"1\">",
+                        "<ac:plain-text-body><![CDATA[<div class=\"chart-shell\"><svg",
+                        "max-height:70vh;overflow:auto",
+                        "Keine Deployment-Daten für das Diagramm vorhanden.")
                 .contains("Version Flows")
                 .contains("noch keine Version Flows bekannt")
+                .doesNotContain("plantuml", "PlantUML", "@startuml", "@enduml", "@startdot", "@enddot", "digraph")
+                .doesNotContain("<script", "</script>", "JavaScript", "javascript", "document.",
+                        "createElementNS", "JSON", "\"stages\":", "\"flows\":")
+                .doesNotContain("<ac:image", "ri:attachment", ".png")
                 .doesNotContain("<table class=\"wrapped\" style=\"table-layout");
     }
 
@@ -85,17 +93,25 @@ class TemplateRendererTest {
 
         assertThat(content)
                 .startsWith("<ac:structured-macro ac:name=\"expand\">")
-                .contains("<svg", "<polyline", "<title>a-very-long-version&lt;&amp;&gt; · DEV · FAILURE")
+                .contains("<ac:structured-macro ac:name=\"html\" ac:schema-version=\"1\">",
+                        "<ac:plain-text-body><![CDATA[<div class=\"chart-shell\"><svg",
+                        "<polyline", "<circle", "<title>",
+                        "a-very-long-version&lt;&amp;&gt; | DEV | 2026-08-01 10:00:00 | FAILURE",
+                        ">✓</text>", ">✕</text>", ">◷</text>", ">−</text>")
                 .contains("a-very-long-version&lt;&amp;&gt;")
                 .contains("PROD&lt;&amp;&gt;")
                 .contains("ABORTED", "AD_HOC", "page-123", "JEAP-1")
+                .doesNotContain("plantuml", "@startuml", "@enduml",
+                        "a-very-long-version<&>", "@startdot", "@enddot", "digraph")
+                .doesNotContain("<script", "</script>", "JavaScript", "javascript", "document.",
+                        "createElementNS", "JSON", "\"stages\":", "\"flows\":")
                 .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>",
                         "<ac:emoticon ac:name=\"minus\"/>", "<ac:emoticon ac:name=\"question\"/>")
                 .contains("background-color: #ffebe6", "width: 31%")
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
+                .doesNotContain("<ac:image", "ri:attachment", ".png")
                 .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—",
-                        ">STARTED<", ">CANCELLED<")
-                .doesNotContain("a-very-long-version<&>");
+                        ">STARTED<", ">CANCELLED<");
     }
 
     @Test

@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 @Component
 class VersionFlowDiagramRenderer {
@@ -40,64 +41,75 @@ class VersionFlowDiagramRenderer {
     private static final String TEXT_END = "</text>";
 
     String render(ComponentPageDto page) {
-        DiagramLayout layout = createLayout(page.getFlows());
+        DiagramLayout layout = createLayout(page == null ? null : page.getFlows());
+        String html = """
+                <div class="chart-shell">%s</div>
+                <style>
+                .chart-shell{max-width:100%%;max-height:70vh;overflow:auto;border:1px solid #dfe1e6;border-radius:4px;background:#fff}
+                .chart-shell svg{display:block;max-width:none}
+                </style>
+                """.formatted(renderSvg(layout));
         return """
                 <ac:structured-macro ac:name="expand">
                 <ac:parameter ac:name="title">Version Flows Diagram</ac:parameter>
                 <ac:rich-text-body>
-                %s
+                <ac:structured-macro ac:name="html" ac:schema-version="1">
+                <ac:plain-text-body><![CDATA[%s]]></ac:plain-text-body>
+                </ac:structured-macro>
                 </ac:rich-text-body>
                 </ac:structured-macro>
-                """.formatted(renderSvg(layout));
+                """.formatted(splitCdata(html));
     }
 
     DiagramLayout createLayout(List<ComponentFlowDto> flows) {
         List<ComponentFlowDto> safeFlows = flows == null ? List.of() : flows;
         List<String> stages = orderedStages(safeFlows);
-
         TreeSet<Instant> timestamps = new TreeSet<>();
         List<MutableFlow> mutableFlows = createMutableFlows(safeFlows, timestamps);
         List<Instant> ordinalTimestamps = List.copyOf(timestamps);
         assignOrdinals(mutableFlows, ordinalTimestamps);
-
-        Map<String, List<StageRun>> runsByStage = identifyStageRuns(mutableFlows);
-        Map<String, Integer> maxLaneByStage = allocateLanes(runsByStage);
+        Map<String, Integer> maxLaneByStage = allocateLanes(identifyStageRuns(mutableFlows));
         Map<String, Integer> stageX = calculateStagePositions(stages, maxLaneByStage);
-
         int height = TOP_MARGIN + BOTTOM_MARGIN
                 + Math.max(1, ordinalTimestamps.size() - 1) * ORDINAL_SPACING;
         int width = stages.isEmpty()
                 ? LEFT_MARGIN + RIGHT_MARGIN + 240
                 : stageX.get(stages.getLast()) + RIGHT_MARGIN
                 + Math.max(0, maxLaneByStage.getOrDefault(stages.getLast(), 1) - 1) * LANE_SPACING;
-
-        List<FlowPath> paths = createPaths(mutableFlows, ordinalTimestamps.size(), stageX);
-        return new DiagramLayout(List.copyOf(stages), List.copyOf(ordinalTimestamps), List.copyOf(paths),
-                timestampLabels(ordinalTimestamps),
-                Map.copyOf(stageX), width, height);
+        return new DiagramLayout(List.copyOf(stages), ordinalTimestamps,
+                createPaths(mutableFlows, ordinalTimestamps.size(), stageX),
+                timestampLabels(ordinalTimestamps), Map.copyOf(stageX), width, height);
     }
 
     private List<MutableFlow> createMutableFlows(List<ComponentFlowDto> flows, TreeSet<Instant> timestamps) {
         List<MutableFlow> mutableFlows = new ArrayList<>();
         for (int flowIndex = 0; flowIndex < flows.size(); flowIndex++) {
             ComponentFlowDto flow = flows.get(flowIndex);
-            List<MutablePoint> points = new ArrayList<>();
-            List<ComponentFlowDeploymentDto> deployments =
-                    flow.getDeployments() == null ? List.of() : flow.getDeployments();
-            for (int deploymentIndex = 0; deploymentIndex < deployments.size(); deploymentIndex++) {
-                ComponentFlowDeploymentDto deployment = deployments.get(deploymentIndex);
-                String stage = normalizeStage(deployment.getStage());
-                if (stage == null || deployment.getStartedAtInstant() == null) {
-                    continue;
+            if (flow != null) {
+                List<MutablePoint> points = new ArrayList<>();
+                List<ComponentFlowDeploymentDto> deployments =
+                        flow.getDeployments() == null ? List.of() : flow.getDeployments();
+                for (int deploymentIndex = 0; deploymentIndex < deployments.size(); deploymentIndex++) {
+                    ComponentFlowDeploymentDto deployment = deployments.get(deploymentIndex);
+                    MutablePoint point = createPoint(deployment, deploymentIndex);
+                    if (point != null) {
+                        timestamps.add(point.timestamp());
+                        points.add(point);
+                    }
                 }
-                timestamps.add(deployment.getStartedAtInstant());
-                points.add(new MutablePoint(deployment, stage, deploymentIndex));
+                points.sort(Comparator.comparing(MutablePoint::timestamp).thenComparingInt(MutablePoint::sourceIndex));
+                mutableFlows.add(new MutableFlow(flowIndex, flow.getVersion(), points));
             }
-            points.sort(Comparator.comparing(MutablePoint::timestamp)
-                    .thenComparingInt(MutablePoint::sourceIndex));
-            mutableFlows.add(new MutableFlow(flowIndex, flow.getVersion(), points));
         }
         return mutableFlows;
+    }
+
+    private MutablePoint createPoint(ComponentFlowDeploymentDto deployment, int sourceIndex) {
+        if (deployment == null || deployment.getStartedAtInstant() == null) {
+            return null;
+        }
+        String stage = normalizeStage(deployment.getStage());
+        return stage == null ? null : new MutablePoint(deployment, stage, sourceIndex);
     }
 
     private void assignOrdinals(List<MutableFlow> flows, List<Instant> ordinalTimestamps) {
@@ -105,8 +117,7 @@ class VersionFlowDiagramRenderer {
         for (int i = 0; i < ordinalTimestamps.size(); i++) {
             ordinalByTimestamp.put(ordinalTimestamps.get(i), i);
         }
-        flows.forEach(flow -> flow.points().forEach(
-                point -> point.ordinal = ordinalByTimestamp.get(point.timestamp())));
+        flows.forEach(flow -> flow.points().forEach(point -> point.ordinal = ordinalByTimestamp.get(point.timestamp())));
     }
 
     private List<FlowPath> createPaths(List<MutableFlow> mutableFlows, int timestampCount,
@@ -127,48 +138,37 @@ class VersionFlowDiagramRenderer {
                         List.copyOf(points)));
             }
         }
-        return paths;
+        return List.copyOf(paths);
     }
 
     private List<String> timestampLabels(List<Instant> timestamps) {
-        Map<String, Long> minuteCounts = timestamps.stream()
-                .collect(java.util.stream.Collectors.groupingBy(MINUTE_FORMATTER::format,
-                        LinkedHashMap::new, java.util.stream.Collectors.counting()));
+        Map<String, Long> minuteCounts = timestamps.stream().collect(Collectors.groupingBy(
+                MINUTE_FORMATTER::format, LinkedHashMap::new, Collectors.counting()));
         return timestamps.stream()
                 .map(timestamp -> minuteCounts.get(MINUTE_FORMATTER.format(timestamp)) > 1
-                        ? SECOND_FORMATTER.format(timestamp)
-                        : MINUTE_FORMATTER.format(timestamp))
+                        ? SECOND_FORMATTER.format(timestamp) : MINUTE_FORMATTER.format(timestamp))
                 .toList();
     }
 
     private List<String> orderedStages(List<ComponentFlowDto> flows) {
+        List<String> stages = flows.stream()
+                .filter(Objects::nonNull)
+                .map(ComponentFlowDto::getDeployments)
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+                .map(ComponentFlowDeploymentDto::getStage)
+                .map(this::normalizeStage)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<String> orderedStages = KNOWN_STAGES.stream()
+                .filter(stages::contains)
+                .collect(Collectors.toCollection(ArrayList::new));
         TreeSet<String> unknownStages = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        List<String> presentKnownStages = new ArrayList<>();
-        for (ComponentFlowDto flow : flows) {
-            collectStages(flow, presentKnownStages, unknownStages);
-        }
-        presentKnownStages.sort(Comparator.comparingInt(KNOWN_STAGES::indexOf));
-        presentKnownStages.addAll(unknownStages);
-        return presentKnownStages;
-    }
-
-    private void collectStages(ComponentFlowDto flow, List<String> presentKnownStages, TreeSet<String> unknownStages) {
-        if (flow.getDeployments() == null) {
-            return;
-        }
-        for (ComponentFlowDeploymentDto deployment : flow.getDeployments()) {
-            String stage = normalizeStage(deployment.getStage());
-            if (stage == null) {
-                continue;
-            }
-            if (KNOWN_STAGES.contains(stage)) {
-                if (!presentKnownStages.contains(stage)) {
-                    presentKnownStages.add(stage);
-                }
-            } else {
-                unknownStages.add(stage);
-            }
-        }
+        stages.stream().filter(stage -> !KNOWN_STAGES.contains(stage)).forEach(unknownStages::add);
+        orderedStages.addAll(unknownStages);
+        return orderedStages;
     }
 
     private Map<String, List<StageRun>> identifyStageRuns(List<MutableFlow> flows) {
@@ -192,13 +192,11 @@ class VersionFlowDiagramRenderer {
         Map<String, Integer> maxLaneByStage = new HashMap<>();
         runsByStage.forEach((stage, runs) -> {
             runs.sort(Comparator.comparingInt((StageRun run) -> run.startOrdinal)
-                    .thenComparingInt(run -> run.endOrdinal)
-                    .thenComparingInt(run -> run.flowIndex));
+                    .thenComparingInt(run -> run.endOrdinal).thenComparingInt(run -> run.flowIndex));
             List<Integer> laneEndOrdinals = new ArrayList<>();
             for (StageRun run : runs) {
                 int laneIndex = 0;
-                while (laneIndex < laneEndOrdinals.size()
-                        && laneEndOrdinals.get(laneIndex) >= run.startOrdinal) {
+                while (laneIndex < laneEndOrdinals.size() && laneEndOrdinals.get(laneIndex) >= run.startOrdinal) {
                     laneIndex++;
                 }
                 if (laneIndex == laneEndOrdinals.size()) {
@@ -227,15 +225,15 @@ class VersionFlowDiagramRenderer {
 
     private String renderSvg(DiagramLayout layout) {
         StringBuilder svg = new StringBuilder();
-        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"Version Flows\" ")
-                .append("width=\"").append(layout.width()).append("\" height=\"").append(layout.height())
-                .append("\" viewBox=\"0 0 ").append(layout.width()).append(' ')
-                .append(layout.height()).append("\">");
-        svg.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>");
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" ")
+                .append("aria-label=\"Deployment-Verlauf je Version\" width=\"").append(layout.width())
+                .append("\" height=\"").append(layout.height()).append("\" viewBox=\"0 0 ")
+                .append(layout.width()).append(' ').append(layout.height()).append("\">")
+                .append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>");
         if (layout.stages().isEmpty() || layout.flows().isEmpty()) {
-            svg.append("<text x=\"20\" y=\"30\" fill=\"#5e6c84\">Keine Deployment-Daten für das Diagramm vorhanden.</text>")
-                    .append("</svg>");
-            return svg.toString();
+            return svg.append("<text x=\"20\" y=\"30\" fill=\"#5e6c84\">")
+                    .append("Keine Deployment-Daten für das Diagramm vorhanden.</text></svg>")
+                    .toString();
         }
 
         for (int ordinal = 0; ordinal < layout.ordinalTimestamps().size(); ordinal++) {
@@ -265,7 +263,7 @@ class VersionFlowDiagramRenderer {
         for (FlowPath flow : layout.flows()) {
             if (flow.points().size() > 1) {
                 svg.append("<polyline fill=\"none\" stroke=\"").append(flow.color())
-                        .append("\" stroke-width=\"2\" points=\"");
+                        .append("\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" points=\"");
                 for (DiagramPoint point : flow.points()) {
                     svg.append(point.x()).append(',').append(point.y()).append(' ');
                 }
@@ -275,38 +273,44 @@ class VersionFlowDiagramRenderer {
                 renderPoint(svg, flow, point);
             }
         }
-        svg.append("</svg>");
-        return svg.toString();
+        return svg.append("</svg>").toString();
     }
 
     private void renderPoint(StringBuilder svg, FlowPath flow, DiagramPoint point) {
         String state = point.state() == null ? "UNKNOWN" : point.state().toUpperCase(Locale.ROOT);
-        String tooltip = "%s · %s · %s · %s".formatted(
-                Objects.toString(flow.version(), ""), point.stage(), state,
-                Objects.toString(point.startedAt(), ""));
+        String tooltip = "%s | %s | %s | %s".formatted(
+                Objects.toString(flow.version(), ""), point.stage(),
+                Objects.toString(point.startedAt(), point.timestamp().toString()), state);
         if (point.pageUrl() != null && !point.pageUrl().isBlank()) {
             svg.append("<a href=\"").append(xml(point.pageUrl())).append("\">");
         }
-        svg.append("<g data-version=\"").append(xml(flow.version())).append("\" data-stage=\"")
-                .append(xml(point.stage())).append("\" data-lane=\"").append(point.lane()).append("\">")
-                .append("<title>").append(xml(tooltip)).append("</title>")
+        svg.append("<g class=\"deployment-point\" data-version=\"").append(xml(flow.version()))
+                .append("\" data-stage=\"").append(xml(point.stage())).append("\" data-lane=\"")
+                .append(point.lane()).append("\"><title>").append(xml(tooltip)).append("</title>")
                 .append("<circle cx=\"").append(point.x()).append("\" cy=\"").append(point.y())
-                .append("\" r=\"5\" fill=\"").append(flow.color()).append("\"/>")
-                .append(TEXT_START).append(point.x() + 15).append(Y_ATTRIBUTE).append(point.y() + 6)
-                .append("\" font-size=\"20\" font-weight=\"bold\" fill=\"").append(statusColor(state)).append("\">")
-                .append(xml(statusIcon(state))).append(TEXT_END).append("</g>");
+                .append("\" r=\"6\" fill=\"").append(flow.color())
+                .append("\" stroke=\"#ffffff\" stroke-width=\"1.5\"/>")
+                .append(TEXT_START).append(point.x() + 13).append(Y_ATTRIBUTE).append(point.y() + 6)
+                .append("\" font-size=\"17\" font-weight=\"bold\" fill=\"").append(statusColor(state))
+                .append("\">").append(xml(statusIcon(state))).append(TEXT_END);
         if (point.firstChronological()) {
-            int labelWidth = Math.max(90, Math.min(260, Objects.toString(flow.version(), "").length() * 8 + 14));
-            svg.append("<rect x=\"").append(point.x() + 40).append(Y_ATTRIBUTE).append(point.y() - 13)
-                    .append("\" width=\"").append(labelWidth).append("\" height=\"22\" rx=\"3\" ")
-                    .append("fill=\"#ffffff\" fill-opacity=\"0.92\"/>")
+            String version = Objects.toString(flow.version(), "");
+            int labelWidth = Math.max(48, Math.min(280, version.length() * 7 + 14));
+            svg.append("<rect x=\"").append(point.x() + 39).append(Y_ATTRIBUTE).append(point.y() - 13)
+                    .append("\" width=\"").append(labelWidth).append("\" height=\"23\" rx=\"4\" ")
+                    .append("fill=\"#ffffff\" fill-opacity=\"0.94\" stroke=\"#a5adba\"/>")
                     .append(TEXT_START).append(point.x() + 46).append(Y_ATTRIBUTE).append(point.y() + 3)
-                    .append("\" fill=\"").append(flow.color()).append("\" font-size=\"12\" font-weight=\"bold\">")
-                    .append(xml(flow.version())).append(TEXT_END);
+                    .append("\" fill=\"#172b4d\" font-size=\"11\" font-weight=\"bold\">")
+                    .append(xml(abbreviateVersion(version))).append(TEXT_END);
         }
+        svg.append("</g>");
         if (point.pageUrl() != null && !point.pageUrl().isBlank()) {
             svg.append("</a>");
         }
+    }
+
+    private String abbreviateVersion(String version) {
+        return version.length() * 7 + 14 > 280 ? version.substring(0, Math.min(37, version.length())) + "…" : version;
     }
 
     private String statusColor(String state) {
@@ -322,18 +326,11 @@ class VersionFlowDiagramRenderer {
     private String statusIcon(String state) {
         return switch (state) {
             case "SUCCESS" -> "✓";
-            case "FAILURE" -> "×";
+            case "FAILURE" -> "✕";
             case "CANCELLED" -> "−";
-            case "STARTED" -> "?";
-            default -> state.isBlank() ? "•" : state.substring(0, 1);
+            case "STARTED" -> "◷";
+            default -> "•";
         };
-    }
-
-    private String normalizeStage(String stage) {
-        if (stage == null || stage.isBlank()) {
-            return null;
-        }
-        return stage.trim().toUpperCase(Locale.ROOT);
     }
 
     private String xml(String value) {
@@ -345,6 +342,14 @@ class VersionFlowDiagramRenderer {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&apos;");
+    }
+
+    String splitCdata(String value) {
+        return value.replace("]]>", "]]]]><![CDATA[>");
+    }
+
+    private String normalizeStage(String stage) {
+        return stage == null || stage.isBlank() ? null : stage.trim().toUpperCase(Locale.ROOT);
     }
 
     record DiagramLayout(List<String> stages, List<Instant> ordinalTimestamps, List<FlowPath> flows,

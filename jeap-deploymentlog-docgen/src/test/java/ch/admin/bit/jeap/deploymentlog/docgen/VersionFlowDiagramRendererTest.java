@@ -33,6 +33,7 @@ class VersionFlowDiagramRendererTest {
                 deployment("custom-a", "CANCELLED", "2026-09-01T13:00:00Z"));
 
         DiagramLayout layout = renderer.createLayout(List.of(flow));
+        String content = renderer.render(ComponentPageDto.builder().flows(List.of(flow)).build());
 
         assertThat(layout.stages()).containsExactly("DEV", "TEST", "CUSTOM-A", "CUSTOM-B");
         assertThat(layout.ordinalTimestamps()).containsExactly(
@@ -44,15 +45,18 @@ class VersionFlowDiagramRendererTest {
                 formattedMinute("2026-09-01T10:00:00Z"), formattedMinute("2026-09-01T11:00:00Z"),
                 formattedMinute("2026-09-01T12:00:00Z"), formattedMinute("2026-09-01T13:00:00Z"));
         assertThat(layout.flows().getFirst().points())
-                .extracting(DiagramPoint::y)
-                .containsExactly(182, 138, 94, 50);
-        assertThat(layout.flows().getFirst().points())
                 .extracting(DiagramPoint::firstChronological)
                 .containsExactly(true, false, false, false);
+        assertThat(layout.flows().getFirst().points())
+                .extracting(DiagramPoint::y)
+                .containsExactly(182, 138, 94, 50);
+        assertThat(content).contains(
+                "y=\"186\" font-size=\"10\" fill=\"#5e6c84\">" + formattedMinute("2026-09-01T10:00:00Z"),
+                "y=\"54\" font-size=\"10\" fill=\"#5e6c84\">" + formattedMinute("2026-09-01T13:00:00Z"));
     }
 
     @Test
-    void keepsOnePositiveLaneForAStageRunAndSeparatesOverlappingRunsByTenPixels() {
+    void keepsOnePositiveLaneForAStageRunAndAssignsOverlappingRunsToAdditionalLanes() {
         ComponentFlowDto first = flow("1.0.0",
                 deployment("DEV", "STARTED", "2026-09-01T10:00:00Z"),
                 deployment("DEV", "SUCCESS", "2026-09-01T12:00:00Z"),
@@ -90,18 +94,10 @@ class VersionFlowDiagramRendererTest {
     }
 
     @Test
-    void rendersCollapsedLinkedSvgWithStatusIconsTooltipAndNoLegend() {
-        ComponentFlowDeploymentDto successful = ComponentFlowDeploymentDto.builder()
-                .startedAt("2026-09-01 12:00:00")
-                .startedAtInstant(Instant.parse("2026-09-01T10:00:00Z"))
-                .stage("DEV<&>")
-                .state("SUCCESS")
-                .pageUrl("https://confluence.example/page?a=1&b=2")
-                .build();
-        ComponentFlowDto flow = flow("1.0<&>", successful,
-                deployment("PROD", "FAILURE", "2026-09-01T11:00:00Z"),
-                deployment("PROD", "CANCELLED", "2026-09-01T12:00:00Z"),
-                deployment("PROD", "STARTED", "2026-09-01T13:00:00Z"));
+    void rendersCollapsedStructuredHtmlMacroWithSelfContainedScrollableDiagram() {
+        ComponentFlowDto flow = flow("1.0.0",
+                deployment("DEV", "SUCCESS", "2026-09-01T10:00:00Z"),
+                deployment("REF", "STARTED", "2026-09-01T11:00:00Z"));
         DiagramPoint firstPoint = renderer.createLayout(List.of(flow)).flows().getFirst().points().getFirst();
 
         String content = renderer.render(ComponentPageDto.builder().flows(List.of(flow)).build());
@@ -109,16 +105,66 @@ class VersionFlowDiagramRendererTest {
         assertThat(content)
                 .startsWith("<ac:structured-macro ac:name=\"expand\">")
                 .contains("<ac:parameter ac:name=\"title\">Version Flows Diagram</ac:parameter>")
-                .contains("<svg", "<polyline", ">✓</text>", ">×</text>", ">−</text>", ">?</text>")
-                .contains(">DEV&lt;&amp;&gt;</text>", ">PROD</text>", ">Stage</text>")
+                .contains("<ac:structured-macro ac:name=\"html\" ac:schema-version=\"1\">")
+                .contains("<ac:plain-text-body><![CDATA[<div class=\"chart-shell\"><svg")
+                .contains("max-height:70vh;overflow:auto", "<svg xmlns=\"http://www.w3.org/2000/svg\"",
+                        "aria-label=\"Deployment-Verlauf je Version\"", "<polyline", "<circle", "<title>")
                 .contains("<circle cx=\"" + firstPoint.x() + "\"",
-                        "<text x=\"" + (firstPoint.x() + 15) + "\"",
-                        "<rect x=\"" + (firstPoint.x() + 40) + "\"",
-                        "<text x=\"" + (firstPoint.x() + 46) + "\"")
-                .contains("<title>1.0&lt;&amp;&gt; · DEV&lt;&amp;&gt; · SUCCESS · 2026-09-01 12:00:00</title>")
-                .contains("href=\"https://confluence.example/page?a=1&amp;b=2\"")
-                .contains("data-version=\"1.0&lt;&amp;&gt;\"")
-                .doesNotContain("Legende", "Legend", "icon legend", "1.0<&>");
+                        "<text x=\"" + (firstPoint.x() + 13) + "\"")
+                .contains(">✓</text>", ">◷</text>")
+                .contains("DEV</text>", "REF</text>", ">Stage</text>")
+                .containsOnlyOnce(">1.0.0</text>")
+                .contains("]]></ac:plain-text-body>")
+                .doesNotContain("plantuml", "PlantUML", "@startuml", "@enduml", "<ac:image",
+                        "ri:attachment", "<script", "</script>", "JavaScript", "javascript",
+                        "document.", "createElementNS", "JSON", "\"stages\":", "\"flows\":");
+    }
+
+    @Test
+    void securelyEscapesSvgValuesAndSplitsCdataTerminators() {
+        ComponentFlowDto flow = flow("release \"quoted\" 'single' <b>& ]]>",
+                ComponentFlowDeploymentDto.builder()
+                        .stage("dev<&]]>")
+                        .state("SUCCESS")
+                        .startedAt("line1\nline2<&]]>")
+                        .startedAtInstant(Instant.parse("2026-09-01T10:00:00Z"))
+                        .pageUrl("https://example.invalid/?a=1&b=\"quoted\"")
+                        .build());
+
+        String content = renderer.render(ComponentPageDto.builder().flows(List.of(flow)).build());
+
+        assertThat(content)
+                .contains("release &quot;quoted&quot; &apos;single&apos; &lt;b&gt;&amp; ]]&gt;",
+                        "DEV&lt;&amp;]]&gt;", "line1\nline2&lt;&amp;]]&gt;",
+                        "href=\"https://example.invalid/?a=1&amp;b=&quot;quoted&quot;\"")
+                .doesNotContain("<b>", "<script", "</script>", "\"stages\":", "\"flows\":")
+                .endsWith("</ac:structured-macro>\n");
+        assertThat(renderer.splitCdata("before]]>after"))
+                .isEqualTo("before]]]]><![CDATA[>after");
+    }
+
+    @Test
+    void rendersOnlyDiagramFieldsAndNoJsonModel() {
+        ComponentFlowDto flow = ComponentFlowDto.builder()
+                .version("release-1")
+                .versionControlUrl("https://git.example/repository")
+                .jiraIssues(List.of())
+                .deployments(List.of(ComponentFlowDeploymentDto.builder()
+                        .stage("DEV").state("SUCCESS").startedAt("display time")
+                        .startedAtInstant(Instant.parse("2026-09-01T10:00:00Z"))
+                        .pageUrl("https://confluence.example/page").build()))
+                .build();
+
+        String content = renderer.render(ComponentPageDto.builder()
+                .componentName("<component>")
+                .flows(List.of(flow))
+                .build());
+
+        assertThat(content)
+                .contains("data-version=\"release-1\"", "data-stage=\"DEV\"",
+                        "<title>release-1 | DEV | display time | SUCCESS</title>",
+                        "href=\"https://confluence.example/page\"")
+                .doesNotContain("git.example", "<component>", "\"version\":", "\"stage\":", "\"state\":");
     }
 
     @Test
@@ -136,17 +182,24 @@ class VersionFlowDiagramRendererTest {
     }
 
     @Test
-    void safelyRendersEmptyDiagramAndIgnoresDeploymentsWithoutStageOrTimestamp() {
-        ComponentFlowDto incomplete = flow("1.0.0",
-                ComponentFlowDeploymentDto.builder().stage("DEV").state("SUCCESS").build(),
-                ComponentFlowDeploymentDto.builder().startedAtInstant(Instant.EPOCH).state("FAILURE").build(),
-                ComponentFlowDeploymentDto.builder().startedAtInstant(Instant.EPOCH).stage(" ").build());
+    void safelyRendersEmptyDiagramAndIgnoresNullOrIncompleteDeployments() {
+        ComponentFlowDto incomplete = ComponentFlowDto.builder().version("1.0.0")
+                .deployments(java.util.Arrays.asList(
+                        null,
+                        ComponentFlowDeploymentDto.builder().stage("DEV").state("SUCCESS").build(),
+                        ComponentFlowDeploymentDto.builder().startedAtInstant(Instant.EPOCH).state("FAILURE").build(),
+                        ComponentFlowDeploymentDto.builder().startedAtInstant(Instant.EPOCH).stage(" ").build()))
+                .build();
 
-        DiagramLayout layout = renderer.createLayout(List.of(incomplete));
+        DiagramLayout layout = renderer.createLayout(java.util.Arrays.asList(null, incomplete));
         String content = renderer.render(ComponentPageDto.builder().flows(List.of(incomplete)).build());
 
         assertThat(layout.flows()).isEmpty();
-        assertThat(content).contains("Keine Deployment-Daten für das Diagramm vorhanden.");
+        assertThat(content)
+                .contains("Keine Deployment-Daten für das Diagramm vorhanden.")
+                .contains("<div class=\"chart-shell\"><svg", "</svg></div>")
+                .doesNotContain("plantuml", "@startuml", "@enduml", "<script", "JavaScript",
+                        "document.", "createElementNS", "\"stages\":", "\"flows\":");
     }
 
     private FlowPath flowPath(DiagramLayout layout, String version) {
@@ -157,10 +210,7 @@ class VersionFlowDiagramRendererTest {
     }
 
     private ComponentFlowDto flow(String version, ComponentFlowDeploymentDto... deployments) {
-        return ComponentFlowDto.builder()
-                .version(version)
-                .deployments(List.of(deployments))
-                .build();
+        return ComponentFlowDto.builder().version(version).deployments(List.of(deployments)).build();
     }
 
     private ComponentFlowDeploymentDto deployment(String stage, String state, String instant) {

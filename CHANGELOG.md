@@ -9,8 +9,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Add a collapsed SVG diagram above the component version-flow table to visualize deployments by stage and ordinal
-  deployment time, including overlapping stage lanes and deployment status icons.
+- Add a collapsed diagram above the component version-flow table to visualize deployments by stage and ordinal
+  deployment time, including overlapping stage lanes and deployment status icons. The server-generated SVG is
+  embedded through the Confluence HTML macro.
 
 ## [16.2.0] - 2026-09-17
 
