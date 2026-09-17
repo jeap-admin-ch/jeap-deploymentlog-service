@@ -41,7 +41,7 @@ class TemplateRendererTest {
                 .build());
 
         assertThat(content)
-                .startsWith("<ac:structured-macro ac:name=\"expand\">")
+                .startsWith("<ac:structured-macro ac:name=\"info\"")
                 .contains("<ac:parameter ac:name=\"title\">Version Flows Diagram</ac:parameter>")
                 .contains("<ac:structured-macro ac:name=\"html\" ac:schema-version=\"1\">",
                         "<ac:plain-text-body><![CDATA[<div class=\"chart-shell\"><svg",
@@ -53,7 +53,13 @@ class TemplateRendererTest {
                 .doesNotContain("<script", "</script>", "JavaScript", "javascript", "document.",
                         "createElementNS", "JSON", "\"stages\":", "\"flows\":")
                 .doesNotContain("<ac:image", "ri:attachment", ".png")
-                .doesNotContain("<table class=\"wrapped\" style=\"table-layout");
+                .doesNotContain("<table class=\"wrapped\" style=\"table-layout")
+                .containsSubsequence(
+                        "Diese Seite wurde automatisch generiert.",
+                        "<ac:structured-macro ac:name=\"expand\">",
+                        "<ac:structured-macro ac:name=\"html\"",
+                        "<svg",
+                        "<h2>Version Flows</h2>");
     }
 
     @Test
@@ -92,7 +98,7 @@ class TemplateRendererTest {
                 .build());
 
         assertThat(content)
-                .startsWith("<ac:structured-macro ac:name=\"expand\">")
+                .startsWith("<ac:structured-macro ac:name=\"info\"")
                 .contains("<ac:structured-macro ac:name=\"html\" ac:schema-version=\"1\">",
                         "<ac:plain-text-body><![CDATA[<div class=\"chart-shell\"><svg",
                         "<polyline", "<circle", "<title>",
@@ -111,7 +117,13 @@ class TemplateRendererTest {
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
                 .doesNotContain("<ac:image", "ri:attachment", ".png")
                 .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—",
-                        ">STARTED<", ">CANCELLED<");
+                        ">STARTED<", ">CANCELLED<")
+                .containsSubsequence(
+                        "Diese Seite wurde automatisch generiert.",
+                        "<ac:structured-macro ac:name=\"expand\">",
+                        "<ac:structured-macro ac:name=\"html\"",
+                        "<svg",
+                        "<h2>Version Flows</h2>");
     }
 
     @Test

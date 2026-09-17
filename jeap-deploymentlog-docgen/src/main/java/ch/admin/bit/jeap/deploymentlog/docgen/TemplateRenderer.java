@@ -25,8 +25,8 @@ class TemplateRenderer {
     String renderComponentPage(ComponentPageDto componentPageDto) {
         Context context = new Context(Locale.GERMAN);
         context.setVariable("component", componentPageDto);
-        String componentPage = templateEngine.process("component", context).trim();
-        return versionFlowDiagramRenderer.render(componentPageDto) + componentPage;
+        context.setVariable("versionFlowDiagram", versionFlowDiagramRenderer.render(componentPageDto));
+        return templateEngine.process("component", context).trim();
     }
 
     String renderJiraProjectPage(JiraProjectPageDto jiraProjectPageDto) {

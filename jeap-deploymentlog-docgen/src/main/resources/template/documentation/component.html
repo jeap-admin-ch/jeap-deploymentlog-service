@@ -1,5 +1,6 @@
 <th:block xmlns:th="http://www.thymeleaf.org">
     <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
+    <th:block th:utext="${versionFlowDiagram}"></th:block>
 
     <h2>Version Flows</h2>
     <p th:if="${component.flows.isEmpty()}">Für diese Komponente sind noch keine Version Flows bekannt.</p>
@@ -40,6 +41,14 @@
             <td th:text="${flow.targetStage}"></td>
             <td>
                 <table class="wrapped" style="width: 100%;">
+                    <thead>
+                    <tr>
+                        <th>Zeitpunkt</th>
+                        <th>Stage</th>
+                        <th>Status</th>
+                        <th>Detail</th>
+                    </tr>
+                    </thead>
                     <tbody>
                     <tr th:each="deployment: ${flow.deployments}">
                         <td th:text="${deployment.startedAt}"></td>
