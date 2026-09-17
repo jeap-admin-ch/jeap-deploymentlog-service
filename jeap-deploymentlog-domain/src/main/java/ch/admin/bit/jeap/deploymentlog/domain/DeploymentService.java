@@ -183,7 +183,7 @@ public class DeploymentService {
             default -> throw new InvalidDeploymentStateForUpdateException(state);
         }
 
-        if (firstTerminalProcessing && (state == DeploymentState.SUCCESS || state == DeploymentState.FAILURE)) {
+        if (firstTerminalProcessing) {
             eventPublisher.publishEvent(DeploymentTerminalMetricEvent.from(deployment));
         }
 

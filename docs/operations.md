@@ -157,7 +157,7 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | `deploymentlog.docgen.jiraissuelink.error`   | counter | Incremented after all retries to create or update a stable Jira link to a DeploymentLog issue page failed. |
 | `deploymentlog_generate_deployment_page`     | timer   | Duration of generating the pages for one deployment.                                              |
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
-| `deployment_counter`                         | counter | Terminal deployments, tagged with `system`, `component`, `environment` and `result` (`success` or `failed`). |
+| `deployment_counter`                         | counter | Terminal deployments, tagged with `system`, `component`, `environment` and `result` (`success`, `failed` or `cancelled`). |
 | `deployment_duration_seconds`                | timer   | Duration of a terminal deployment from `started_at` to `ended_at`, tagged with `system`, `component` and `environment`. |
 | `flow_counter`                               | counter | Terminal flow transitions, tagged with `system`, `component`, `type` and `state` (`closed` or `aborted`). |
 | `flow_open`                                  | gauge   | Current persistent number of open flows, tagged with `system`, `component` and `type`. |

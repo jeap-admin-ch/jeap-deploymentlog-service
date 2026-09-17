@@ -28,7 +28,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             assertThat(openFlows(fixture)).isEqualTo(1);
         });
 
-        assertRecordedOnce(fixture, true);
+        assertRecordedOnce(fixture, DeploymentState.SUCCESS);
         assertThat(openFlows(fixture)).isZero();
     }
 
@@ -49,11 +49,11 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
         });
 
         update(fixture, DeploymentState.SUCCESS);
-        assertRecordedOnce(fixture, true);
+        assertRecordedOnce(fixture, DeploymentState.SUCCESS);
     }
 
     @ParameterizedTest
-    @EnumSource(value = DeploymentState.class, names = {"SUCCESS", "FAILURE"})
+    @EnumSource(value = DeploymentState.class, names = {"SUCCESS", "FAILURE", "CANCELLED"})
     void concurrentAndRepeatedStatusUpdatesCountOnce(DeploymentState state) throws Exception {
         Fixture fixture = createFixture(FlowType.ROLLBACK);
         CountDownLatch ready = new CountDownLatch(2);
@@ -73,7 +73,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             second.get(15, TimeUnit.SECONDS);
             update(fixture, state);
 
-            assertRecordedOnce(fixture, state == DeploymentState.SUCCESS);
+            assertRecordedOnce(fixture, state);
             assertThat(openFlows(fixture)).isEqualTo(state == DeploymentState.SUCCESS ? 0 : 1);
         } finally {
             start.countDown();
@@ -111,13 +111,19 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
         }
     }
 
-    private void assertRecordedOnce(Fixture fixture, boolean success) {
+    private void assertRecordedOnce(Fixture fixture, DeploymentState state) {
+        String result = switch (state) {
+            case SUCCESS -> "success";
+            case FAILURE -> "failed";
+            case CANCELLED -> "cancelled";
+            default -> throw new IllegalArgumentException("Expected a terminal deployment state");
+        };
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tags("system", fixture.system(),
-                "result", success ? "success" : "failed").counter().count()).isEqualTo(1);
+                "result", result).counter().count()).isEqualTo(1);
         var duration = registry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).tag("system", fixture.system()).timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
-        if (success) {
+        if (state == DeploymentState.SUCCESS) {
             assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER).tag("system", fixture.system()).counter().count()).isEqualTo(1);
             for (String name : new String[]{DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
                 var timer = registry.get(name).tag("system", fixture.system()).timer();

@@ -300,6 +300,9 @@ class DeploymentServiceTest {
         assertThat(deployment.getStateMessage()).isEqualTo("cancelled by user");
         verify(environmentComponentVersionStateRepository, never()).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never()).save(any(EnvironmentComponentVersionState.class));
+        ArgumentCaptor<DeploymentTerminalMetricEvent> eventCaptor = ArgumentCaptor.forClass(DeploymentTerminalMetricEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().state()).isEqualTo(DeploymentState.CANCELLED);
     }
 
     @Test

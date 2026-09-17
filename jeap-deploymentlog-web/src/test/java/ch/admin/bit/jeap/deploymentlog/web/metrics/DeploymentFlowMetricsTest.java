@@ -77,6 +77,20 @@ class DeploymentFlowMetricsTest {
     }
 
     @Test
+    void recordsCancelledDeploymentCounterAndDuration() {
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
+        metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "external-id", "System", "component", "DEV",
+                DeploymentState.CANCELLED, startedAt, startedAt.plusSeconds(30)));
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tag("result", "cancelled").counter().count()).isEqualTo(1);
+        Timer duration = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer();
+        assertThat(duration.count()).isEqualTo(1);
+        assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(30);
+    }
+
+    @Test
     void skipsDeploymentDurationWhenATimestampIsMissing() {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
@@ -245,11 +259,10 @@ class DeploymentFlowMetricsTest {
         assertThat(output).contains("missing-end", "startedAt or endedAt is missing");
     }
 
-    @ParameterizedTest
-    @EnumSource(value = DeploymentState.class, names = {"STARTED", "CANCELLED"})
-    void nonTerminalMetricStatesDoNotCreateDeploymentMeters(DeploymentState state) {
+    @Test
+    void nonTerminalMetricStatesDoNotCreateDeploymentMeters() {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
-                UUID.randomUUID(), "ignored", "System", "component", "DEV", state, null, null));
+                UUID.randomUUID(), "ignored", "System", "component", "DEV", DeploymentState.STARTED, null, null));
 
         assertThat(meterRegistry.getMeters()).isEmpty();
     }

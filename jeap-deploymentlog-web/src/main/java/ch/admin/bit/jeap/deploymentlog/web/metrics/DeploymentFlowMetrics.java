@@ -60,6 +60,7 @@ public class DeploymentFlowMetrics {
         String result = switch (event.state()) {
             case SUCCESS -> "success";
             case FAILURE -> "failed";
+            case CANCELLED -> "cancelled";
             default -> null;
         };
         if (result == null) {
