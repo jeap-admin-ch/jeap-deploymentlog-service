@@ -41,14 +41,6 @@
             <td th:text="${flow.targetStage}"></td>
             <td>
                 <table class="wrapped" style="width: 100%;">
-                    <thead>
-                    <tr>
-                        <th>Zeitpunkt</th>
-                        <th>Stage</th>
-                        <th>Status</th>
-                        <th>Detail</th>
-                    </tr>
-                    </thead>
                     <tbody>
                     <tr th:each="deployment: ${flow.deployments}">
                         <td th:text="${deployment.startedAt}"></td>

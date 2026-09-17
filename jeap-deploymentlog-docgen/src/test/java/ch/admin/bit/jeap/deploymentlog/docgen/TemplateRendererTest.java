@@ -114,10 +114,12 @@ class TemplateRendererTest {
                 .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>",
                         "<ac:emoticon ac:name=\"minus\"/>", "<ac:emoticon ac:name=\"question\"/>")
                 .contains("background-color: #ffebe6", "width: 31%")
+                .contains("<table class=\"wrapped\" style=\"width: 100%;\">")
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
                 .doesNotContain("<ac:image", "ri:attachment", ".png")
                 .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—",
-                        ">STARTED<", ">CANCELLED<")
+                        ">STARTED<", ">CANCELLED<", "<thead>", "<th>Zeitpunkt</th>",
+                        "<th>Stage</th>", "<th>Status</th>", "<th>Detail</th>")
                 .containsSubsequence(
                         "Diese Seite wurde automatisch generiert.",
                         "<ac:structured-macro ac:name=\"expand\">",
