@@ -76,6 +76,8 @@ public interface DeploymentRepository {
                                                        String versionName,
                                                        UUID excludedDeploymentId);
 
+    boolean existsCodeDeploymentForComponent(UUID componentId);
+
     List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt);
 
     List<Deployment> findCodeDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);

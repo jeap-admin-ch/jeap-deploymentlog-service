@@ -15,9 +15,11 @@ import java.time.Duration;
 public class HousekeepingConfigProperties {
 
     private static final int DEFAULT_RETENTION_BATCH_SIZE = 500;
+    private static final int DEFAULT_COMPONENT_PAGE_CLEANUP_BATCH_SIZE = 100;
 
     private final ConfluencePages confluencePages = new ConfluencePages();
     private final DataRetention dataRetention = new DataRetention();
+    private final ComponentPages componentPages = new ComponentPages();
     private String cron;
 
     @PostConstruct
@@ -40,6 +42,10 @@ public class HousekeepingConfigProperties {
             throw new IllegalArgumentException(
                     "jeap.deploymentlog.housekeeping.data-retention.batch-size must be greater than zero");
         }
+        if (componentPages.batchSize <= 0) {
+            throw new IllegalArgumentException(
+                    "jeap.deploymentlog.housekeeping.component-pages.batch-size must be greater than zero");
+        }
         log.info("Housekeeping configuration: {}", this);
     }
 
@@ -59,5 +65,11 @@ public class HousekeepingConfigProperties {
         private boolean enabled;
         private Duration duration;
         private int batchSize = DEFAULT_RETENTION_BATCH_SIZE;
+    }
+
+    @Data
+    public static class ComponentPages {
+        private boolean enabled = true;
+        private int batchSize = DEFAULT_COMPONENT_PAGE_CLEANUP_BATCH_SIZE;
     }
 }

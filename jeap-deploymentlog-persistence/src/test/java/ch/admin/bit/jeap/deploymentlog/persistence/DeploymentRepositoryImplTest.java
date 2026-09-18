@@ -226,6 +226,35 @@ class DeploymentRepositoryImplTest {
                 .containsExactlyInAnyOrder(recentCode.getId(), oldCode.getId(), recentConfig.getId());
     }
 
+    @Test
+    void existsCodeDeploymentForComponentDistinguishesConfigCodeAndMixedDeployments() {
+        Environment environment = environmentRepository.save(new Environment("CODE-CHECK"));
+        System system = systemRepository.save(new System("code-check-system"));
+        Component configOnly = componentRepository.save(new Component("config-only", system));
+        Component codeOnly = componentRepository.save(new Component("code-only", system));
+        Component mixed = componentRepository.save(new Component("mixed", system));
+        DeploymentTarget target = TestDataFactory.createDeploymentTarget();
+
+        Deployment configDeployment = TestDataFactory.createDeployment(
+                environment, configOnly, ZonedDateTime.now(), target);
+        configDeployment.getDeploymentTypes().add(DeploymentType.CONFIG);
+        deploymentRepository.save(configDeployment);
+        Deployment codeDeployment = TestDataFactory.createDeployment(
+                environment, codeOnly, ZonedDateTime.now(), target);
+        codeDeployment.getDeploymentTypes().add(DeploymentType.CODE);
+        deploymentRepository.save(codeDeployment);
+        Deployment mixedDeployment = TestDataFactory.createDeployment(
+                environment, mixed, ZonedDateTime.now(), target);
+        mixedDeployment.getDeploymentTypes().addAll(Set.of(DeploymentType.CODE, DeploymentType.CONFIG));
+        deploymentRepository.save(mixedDeployment);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(deploymentRepository.existsCodeDeploymentForComponent(configOnly.getId())).isFalse();
+        assertThat(deploymentRepository.existsCodeDeploymentForComponent(codeOnly.getId())).isTrue();
+        assertThat(deploymentRepository.existsCodeDeploymentForComponent(mixed.getId())).isTrue();
+    }
+
     private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,
                                            String issueKey, Set<DeploymentType> deploymentTypes) {
         ComponentVersion componentVersion = ComponentVersion.builder()
@@ -375,6 +404,7 @@ class DeploymentRepositoryImplTest {
                 1, ZonedDateTime.now().plusHours(1));
         assertThat(nextRepairBatch)
                 .as("a failed oldest page must not starve untried missing pages")
+                .isNotEmpty()
                 .doesNotContain(oldDeploymentWithoutPage.getId());
 
         // Housekeeping compares persisted timestamps, with the database's microsecond precision.
@@ -386,6 +416,7 @@ class DeploymentRepositoryImplTest {
                 .getDeploymentIdsWithMissingOrOutdatedGeneratedPages(10, ZonedDateTime.now().plusHours(1));
         assertThat(repairableAfterSuppression)
                 .as("housekeeping-suppressed pages must not be recreated by automatic repair")
+                .isNotEmpty()
                 .doesNotContain(deploymentWithoutPage.getId());
         assertEquals(1, deploymentRepository.countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime.now().minusDays(30)));
 

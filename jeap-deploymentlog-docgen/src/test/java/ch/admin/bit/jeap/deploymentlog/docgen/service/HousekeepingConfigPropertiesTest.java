@@ -20,6 +20,8 @@ class HousekeepingConfigPropertiesTest {
         assertThat(properties.getConfluencePages().effectiveKeepPerEnvironment(200)).isEqualTo(200);
         assertThat(properties.getDataRetention().isEnabled()).isFalse();
         assertThat(properties.getDataRetention().getDuration()).isNull();
+        assertThat(properties.getComponentPages().isEnabled()).isTrue();
+        assertThat(properties.getComponentPages().getBatchSize()).isEqualTo(100);
     }
 
     @Test
@@ -36,5 +38,18 @@ class HousekeepingConfigPropertiesTest {
 
         properties.getDataRetention().setDuration(Duration.ofDays(30));
         properties.validate();
+    }
+
+    @Test
+    void componentPageCleanupRequiresPositiveBatchSize() {
+        HousekeepingConfigProperties properties = new HousekeepingConfigProperties();
+
+        properties.getComponentPages().setBatchSize(0);
+        assertThatIllegalArgumentException().isThrownBy(properties::validate)
+                .withMessageContaining("component-pages.batch-size");
+
+        properties.getComponentPages().setBatchSize(-1);
+        assertThatIllegalArgumentException().isThrownBy(properties::validate)
+                .withMessageContaining("component-pages.batch-size");
     }
 }

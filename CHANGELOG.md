@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.4.0] - 2026-09-18
+
+### Fixed
+
+- Generate and retain component pages only for components with at least one currently persisted `CODE` deployment.
+  Housekeeping now reconciles a bounded batch of tracked component pages after data retention and removes obsolete
+  Confluence pages without keeping a database transaction open during the Confluence request. Components that later
+  receive another `CODE` deployment are recreated through the normal component-page generation flow.
+
 ## [16.3.0] - 2026-09-17
 
 ### Added

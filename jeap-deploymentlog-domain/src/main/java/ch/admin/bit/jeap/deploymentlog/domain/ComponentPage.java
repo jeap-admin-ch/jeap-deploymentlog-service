@@ -27,6 +27,9 @@ public class ComponentPage {
     @Column(nullable = false)
     private ZonedDateTime lastUpdatedAt;
 
+    @Column(name = "cleanup_attempted_at")
+    private ZonedDateTime cleanupAttemptedAt;
+
     private ComponentPage(UUID componentId, String pageId, String parentPageId) {
         this.componentId = componentId;
         updateLocation(pageId, parentPageId);
@@ -40,5 +43,6 @@ public class ComponentPage {
         this.pageId = pageId;
         this.parentPageId = parentPageId;
         this.lastUpdatedAt = ZonedDateTime.now();
+        this.cleanupAttemptedAt = null;
     }
 }

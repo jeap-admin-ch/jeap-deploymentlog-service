@@ -225,6 +225,18 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
                                                           @Param("versionName") String versionName,
                                                           @Param("excludedDeploymentId") UUID excludedDeploymentId);
 
+    @Query(value = """
+            select exists (
+                select 1
+                from deployment d
+                join component_version cv on cv.id = d.component_version_id
+                join deployment_types dt on dt.deployment_id = d.id
+                where cv.component_id = :componentId
+                and dt.type = 'CODE'
+            )
+            """, nativeQuery = true)
+    boolean existsCodeDeploymentForComponent(@Param("componentId") UUID componentId);
+
     @Query("""
             select distinct d from Deployment d
             join d.changelog c

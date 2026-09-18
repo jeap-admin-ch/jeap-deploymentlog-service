@@ -65,9 +65,9 @@ therefore repaired along with the deployment, without being tracked separately.
 
 ### Housekeeping
 
-The common housekeeping run performs two independent cleanup steps: Confluence deployment-page cleanup and
-persistent data retention. Either step can be disabled without disabling the other. The run uses one ShedLock lock,
-so multiple service instances cannot execute it concurrently.
+The common housekeeping run performs three independent cleanup steps in this order: Confluence deployment-page
+cleanup, persistent data retention and component-page reconciliation. Each step can be disabled without disabling
+the others. The run uses one ShedLock lock, so multiple service instances cannot execute it concurrently.
 
 ```properties
 jeap.deploymentlog.housekeeping.cron=0 30 3 * * *
@@ -79,6 +79,9 @@ jeap.deploymentlog.housekeeping.confluence-pages.keep-per-environment=200
 jeap.deploymentlog.housekeeping.data-retention.enabled=false
 jeap.deploymentlog.housekeeping.data-retention.duration=365d
 jeap.deploymentlog.housekeeping.data-retention.batch-size=500
+
+jeap.deploymentlog.housekeeping.component-pages.enabled=true
+jeap.deploymentlog.housekeeping.component-pages.batch-size=100
 ```
 
 The defaults and validation rules for all properties are listed in
@@ -122,6 +125,19 @@ Before database deletion, any remaining deployment detail page and its tracking 
 for one retention unit fails, that complete unit is retained. After successful deletion, the affected deployment
 histories, stage overviews, component pages, Jira project pages and Jira issue pages are regenerated.
 
+#### Component-page reconciliation
+
+Component pages are retained only while their component has at least one currently persisted `CODE` deployment.
+After data retention, and also when data retention is disabled, housekeeping selects up to
+`component-pages.batch-size` obsolete tracking records in deterministic order. Each candidate is rechecked under the
+component system's documentation lock before its Confluence page is deleted.
+
+The candidate query and final conditional tracking deletion use short database transactions. The Confluence deletion
+runs between them without an open database transaction. If Confluence deletion fails, tracking is retained and a
+later housekeeping run retries it while continuing with other candidates. If a concurrent `CODE` deployment appears,
+the recheck or final conditional deletion preserves the tracking as far as the HTTP/database boundary permits; normal
+component-page generation recreates a deleted page when required.
+
 #### Retrying documentation refreshes
 
 Every successful data-retention batch persists its aggregate-page refresh task in the same database transaction as
@@ -139,7 +155,7 @@ The same work can be triggered on demand through the job endpoints, all requirin
 - `POST /api/jobs/docgen/deployment/{deploymentId}` — one deployment, the usual first step when a single
   page is wrong.
 - `POST /api/jobs/docgen/system/{systemName}?year=…` — one system, optionally restricted to one year.
-- `POST /api/jobs/housekeeping` — both enabled housekeeping steps, ahead of their schedule.
+- `POST /api/jobs/housekeeping` — all enabled housekeeping steps, ahead of their schedule.
 - `POST /api/jobs/outdatedPageHousekeeping` — compatibility endpoint delegating to the same housekeeping run.
 - `POST /api/jobs/docgen/system/{systemName}/repairJiraLinks?from=…&to=…` — the Jira remote links of a date
   range.

@@ -4,6 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class ComponentPageGenerator {
     private final ComponentPageDtoFactory dtoFactory;
     private final ComponentPageRepository componentPageRepository;
     private final ComponentRepository componentRepository;
+    private final DeploymentRepository deploymentRepository;
 
     @Transactional
     public String generatePage(String componentsParentPageId, Component component) {
@@ -31,6 +33,12 @@ public class ComponentPageGenerator {
     }
 
     private String generatePage(String componentsParentPageId, Component component, String systemName) {
+        if (!deploymentRepository.existsCodeDeploymentForComponent(component.getId())) {
+            log.info("Skipping component page generation for system '{}' and component '{}': no CODE deployment exists",
+                    systemName, component.getName());
+            return null;
+        }
+
         componentRepository.lockById(component.getId());
         String pageTitle = pageTitle(component, systemName);
         Optional<ComponentPage> trackedPage = componentPageRepository.findByComponentId(component.getId());

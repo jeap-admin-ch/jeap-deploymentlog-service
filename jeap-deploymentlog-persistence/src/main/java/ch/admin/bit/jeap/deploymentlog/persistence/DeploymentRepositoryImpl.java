@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -192,6 +193,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                                                               UUID excludedDeploymentId) {
         return jpaDeploymentRepository.existsSuccessfulDeploymentForBusinessVersion(component, environment,
                 versionName, excludedDeploymentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsCodeDeploymentForComponent(UUID componentId) {
+        return jpaDeploymentRepository.existsCodeDeploymentForComponent(componentId);
     }
 
     @Override

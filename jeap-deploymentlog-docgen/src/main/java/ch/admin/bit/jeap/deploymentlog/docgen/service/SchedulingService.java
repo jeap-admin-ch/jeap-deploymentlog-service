@@ -3,6 +3,9 @@ package ch.admin.bit.jeap.deploymentlog.docgen.service;
 import ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapter;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
+import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
@@ -50,6 +53,8 @@ public class SchedulingService {
     private final SchedulingConfigProperties configProperties;
     private final HousekeepingConfigProperties housekeepingConfig;
     private final DataRetentionRepository dataRetentionRepository;
+    private final ComponentPageRepository componentPageRepository;
+    private final DeploymentRepository deploymentRepository;
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
@@ -103,15 +108,70 @@ public class SchedulingService {
         LockAssert.assertLocked();
         try {
             if (housekeepingConfig.getConfluencePages().isEnabled()) {
-                confluencePageHousekeeping();
+                runHousekeepingStep("deployment-page cleanup", this::confluencePageHousekeeping);
             }
             if (housekeepingConfig.getDataRetention().isEnabled()) {
-                dataRetentionHousekeeping();
+                runHousekeepingStep("data retention", this::dataRetentionHousekeeping);
             }
-        } catch (RuntimeException ex) {
-            log.error("Housekeeping failed", ex);
+            if (housekeepingConfig.getComponentPages().isEnabled()) {
+                runHousekeepingStep("component-page reconciliation", this::componentPageHousekeeping);
+            }
         } finally {
             retryPendingDataRetentionRefreshes();
+        }
+    }
+
+    private void runHousekeepingStep(String name, Runnable step) {
+        try {
+            step.run();
+        } catch (RuntimeException ex) {
+            log.error("Housekeeping step '{}' failed", name, ex);
+        }
+    }
+
+    private void componentPageHousekeeping() {
+        List<ComponentPageCleanupCandidate> candidates = componentPageRepository.findCleanupCandidates(
+                housekeepingConfig.getComponentPages().getBatchSize());
+        if (!candidates.isEmpty()) {
+            log.info("Reconciling {} tracked component pages without CODE deployments", candidates.size());
+        }
+        candidates.forEach(this::attemptComponentPageCleanup);
+    }
+
+    private void attemptComponentPageCleanup(ComponentPageCleanupCandidate candidate) {
+        int marked = componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+                candidate.componentId(), ZonedDateTime.now());
+        if (marked == 0) {
+            log.info("Skipping component page {} because component {} is no longer obsolete",
+                    candidate.pageId(), candidate.componentId());
+            return;
+        }
+        docgenLocks.runIfLockAquiredBeforeTimeout(
+                candidate.systemName(), () -> deleteComponentPageIfStillObsolete(candidate));
+    }
+
+    private void deleteComponentPageIfStillObsolete(ComponentPageCleanupCandidate candidate) {
+        if (deploymentRepository.existsCodeDeploymentForComponent(candidate.componentId())) {
+            log.info("Keeping component page {} because component {} now has a CODE deployment",
+                    candidate.pageId(), candidate.componentId());
+            return;
+        }
+        try {
+            confluenceAdapter.deletePage(candidate.pageId());
+        } catch (RuntimeException ex) {
+            log.error("Failed to delete obsolete component page {} for component {}; tracking is retained for retry",
+                    candidate.pageId(), candidate.componentId(), ex);
+            return;
+        }
+
+        int deleted = componentPageRepository.deleteIfNoCodeDeployment(candidate.componentId());
+        if (deleted == 0) {
+            log.warn("Deleted Confluence component page {} but retained or no longer found tracking for component {}. "
+                            + "A concurrent CODE deployment may recreate the page through normal generation",
+                    candidate.pageId(), candidate.componentId());
+        } else {
+            log.info("Deleted obsolete component page {} and its tracking for component {}",
+                    candidate.pageId(), candidate.componentId());
         }
     }
 
