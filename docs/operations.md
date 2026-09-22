@@ -185,6 +185,11 @@ does not count a terminal deployment or flow twice. A deployment duration is omi
 `started_at` or `ended_at` is missing, or if `ended_at` precedes `started_at`. Flow durations are emitted only for
 successfully closed flows; open and aborted flows do not contribute a duration.
 
+Counter and timer series are registered with a zero baseline when a deployment starts. Every replica also discovers
+running deployments at startup and every 30 seconds by default. The Prometheus exporter includes created timestamps
+unless a downstream application explicitly opts out. These baselines keep `increase(...[$__range])` usable for
+arbitrary dashboard ranges and prevent the first event of a newly observed label combination from being lost.
+
 Deployments carrying multiple deployment types publish one metric series per type. Queries that aggregate across
 `deployment_type` can therefore count such a deployment more than once; dashboards intended to count deployment
 requests should retain or explicitly filter this label. Flow metrics always use `deployment_type="CODE"` because the

@@ -75,9 +75,9 @@ class FlowLifecycleServiceTest {
         assertThat(older.getAbortedBy()).isSameAs(winningFlow);
         verify(flowRepository).findByDeploymentIdAndLockComponent(winningDeployment.getId());
         verify(eventPublisher).publishEvent(
-                new FlowOpenMetricsChangedEvent(winningFlow.getId(), "SYSTEM", "service", FlowType.NEW, false));
+                new FlowOpenMetricsChangedEvent(winningFlow.getId(), "SYSTEM", "service", "PROD", FlowType.NEW, false));
         verify(eventPublisher).publishEvent(
-                new FlowOpenMetricsChangedEvent(older.getId(), "SYSTEM", "service", FlowType.AD_HOC, false));
+                new FlowOpenMetricsChangedEvent(older.getId(), "SYSTEM", "service", "PROD", FlowType.AD_HOC, false));
     }
 
     @Test

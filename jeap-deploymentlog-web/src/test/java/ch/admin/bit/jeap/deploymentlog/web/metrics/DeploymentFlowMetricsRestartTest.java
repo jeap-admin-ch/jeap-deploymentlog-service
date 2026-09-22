@@ -34,7 +34,8 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         open = createFixture(FlowType.RETRY);
         update(closed, DeploymentState.SUCCESS);
 
-        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tag("system", closed.system()).counter().count()).isEqualTo(1);
+        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", closed.system(), "result", "success").counter().count()).isEqualTo(1);
         assertThat(openFlows(closed)).isZero();
         assertThat(openFlows(open)).isEqualTo(1);
     }
@@ -54,7 +55,8 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
             assertThat(registry.find(name).tag("system", closed.system()).meters()).isEmpty();
         }
         update(open, DeploymentState.SUCCESS);
-        assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER).tag("system", open.system()).counter().count()).isEqualTo(1);
+        assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER)
+                .tags("system", open.system(), "state", "closed").counter().count()).isEqualTo(1);
         assertThat(openFlows(open)).isZero();
     }
 }

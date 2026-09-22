@@ -2,7 +2,9 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import lombok.RequiredArgsConstructor;
@@ -142,6 +144,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     public long countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime from) {
         return jpaDeploymentRepository.countDeploymentsWithMissingOrOutdatedGeneratedPages(from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeploymentMetricIdentity> findStartedDeploymentMetricIdentities() {
+        return jpaDeploymentRepository.findMetricIdentitiesByState(DeploymentState.STARTED);
     }
 
     @Override

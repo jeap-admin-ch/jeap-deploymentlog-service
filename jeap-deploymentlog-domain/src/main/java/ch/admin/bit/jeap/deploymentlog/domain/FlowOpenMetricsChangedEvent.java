@@ -2,7 +2,8 @@ package ch.admin.bit.jeap.deploymentlog.domain;
 
 import java.util.UUID;
 
-public record FlowOpenMetricsChangedEvent(UUID flowId, String system, String component, FlowType type, boolean open) {
+public record FlowOpenMetricsChangedEvent(UUID flowId, String system, String component, String finalEnvironment,
+                                          FlowType type, boolean open) {
 
     public static FlowOpenMetricsChangedEvent opened(Flow flow) {
         return from(flow, true);
@@ -15,6 +16,7 @@ public record FlowOpenMetricsChangedEvent(UUID flowId, String system, String com
     private static FlowOpenMetricsChangedEvent from(Flow flow, boolean open) {
         Component component = flow.getComponentVersion().getComponent();
         return new FlowOpenMetricsChangedEvent(
-                flow.getId(), component.getSystem().getName(), component.getName(), flow.getType(), open);
+                flow.getId(), component.getSystem().getName(), component.getName(),
+                flow.getFinalDeploymentEnvironment().getName(), flow.getType(), open);
     }
 }

@@ -99,7 +99,7 @@ class FlowAssignmentServiceTest {
         assertThat(flow.getDeployments()).containsExactly(deployment);
         assertThat(deployment.getFlow()).isSameAs(flow);
         verify(eventPublisher).publishEvent(
-                new FlowOpenMetricsChangedEvent(flow.getId(), "SYSTEM", "service", FlowType.NEW, true));
+                new FlowOpenMetricsChangedEvent(flow.getId(), "SYSTEM", "service", "PROD", FlowType.NEW, true));
     }
 
     @Test

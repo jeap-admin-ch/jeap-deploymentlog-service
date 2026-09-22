@@ -156,9 +156,9 @@ class FlowRepositoryImplTest {
                 new OpenFlowMetricValue("SYSTEM", "service", FlowType.NEW, 3),
                 new OpenFlowMetricValue("SYSTEM", "service", FlowType.ROLLBACK, 0));
         assertThat(flowRepository.findOpenFlowsForMetrics()).containsExactlyInAnyOrder(
-                new OpenFlowMetricIdentity(firstOpen.getId(), "SYSTEM", "service", FlowType.NEW),
-                new OpenFlowMetricIdentity(secondOpen.getId(), "SYSTEM", "service", FlowType.NEW),
-                new OpenFlowMetricIdentity(aborting.getId(), "SYSTEM", "service", FlowType.NEW));
+                new OpenFlowMetricIdentity(firstOpen.getId(), "SYSTEM", "service", "PROD", FlowType.NEW),
+                new OpenFlowMetricIdentity(secondOpen.getId(), "SYSTEM", "service", "PROD", FlowType.NEW),
+                new OpenFlowMetricIdentity(aborting.getId(), "SYSTEM", "service", "PROD", FlowType.NEW));
     }
 
     @Test
@@ -185,7 +185,7 @@ class FlowRepositoryImplTest {
                 expectedCounts.add(new OpenFlowMetricValue(flowComponent.getSystem().getName(),
                         flowComponent.getName(), type, 1));
                 expectedFlows.add(new OpenFlowMetricIdentity(flow.getId(), flowComponent.getSystem().getName(),
-                        flowComponent.getName(), type));
+                        flowComponent.getName(), "PROD", type));
             }
         }
         entityManager.flush();

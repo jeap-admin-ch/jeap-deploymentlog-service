@@ -59,7 +59,7 @@ interface JpaFlowRepository extends CrudRepository<Flow, UUID> {
     List<Object[]> countByStateGroupedBySystemComponentAndType(@Param("state") FlowState state);
 
     @Query("""
-            select flow.id, system.name, component.name, flow.type
+            select flow.id, system.name, component.name, flow.finalDeploymentEnvironment.name, flow.type
             from Flow flow
             join flow.componentVersion componentVersion
             join componentVersion.component component

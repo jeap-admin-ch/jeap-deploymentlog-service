@@ -3,6 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 import ch.admin.bit.jeap.deploymentlog.docgen.api.ConfluenceCustomRestClient;
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
@@ -10,8 +11,12 @@ import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceRestV1Client;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.PropertySource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -24,12 +29,12 @@ import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 
 @AutoConfiguration
+@EnableConfigurationProperties(DocumentationGeneratorProperties.class)
+@PropertySource("classpath:documentationGeneratorDefaultProperties.properties")
 @EnableScheduling
 @EnableSchedulerLock(defaultLockAtMostFor = "10m")
 @EnableRetry
 public class DocumentationGeneratorConfig {
-
-    private static final String CV_TEMPLATE_PATH = "/template/documentation/";
 
     @Bean
     ConfluenceClient confluenceClient(DocumentationGeneratorConfluenceProperties props) {
@@ -47,10 +52,11 @@ public class DocumentationGeneratorConfig {
     }
 
     @Bean
-    SpringResourceTemplateResolver templateResolver(ApplicationContext applicationContext) {
+    SpringResourceTemplateResolver templateResolver(ApplicationContext applicationContext,
+                                                      DocumentationGeneratorProperties properties) {
         SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
         templateResolver.setApplicationContext(applicationContext);
-        templateResolver.setPrefix("classpath:" + CV_TEMPLATE_PATH);
+        templateResolver.setPrefix(properties.getTemplatePath());
         templateResolver.setSuffix(".html");
         templateResolver.setCharacterEncoding(StandardCharsets.UTF_8.displayName());
         templateResolver.setTemplateMode(TemplateMode.HTML);
@@ -58,9 +64,10 @@ public class DocumentationGeneratorConfig {
     }
 
     @Bean
-    SpringTemplateEngine templateEngine(ApplicationContext applicationContext) {
+    SpringTemplateEngine templateEngine(ApplicationContext applicationContext,
+                                        DocumentationGeneratorProperties properties) {
         SpringTemplateEngine templateEngine = new SpringTemplateEngine();
-        templateEngine.setTemplateResolver(templateResolver(applicationContext));
+        templateEngine.setTemplateResolver(templateResolver(applicationContext, properties));
         templateEngine.setEnableSpringELCompiler(true);
         return templateEngine;
     }
@@ -79,6 +86,22 @@ public class DocumentationGeneratorConfig {
     @Bean
     TimedAspect timedAspect(MeterRegistry registry) {
         return new TimedAspect(registry);
+    }
+
+    @Bean
+    ApplicationListener<ApplicationReadyEvent> documentationMetricBaselines(MeterRegistry registry) {
+        return event -> {
+            registerTimedBaseline(registry, "deploymentlog_generate_deployment_page", "generateDeploymentPages");
+            registerTimedBaseline(registry, "update_deployment_history_pages", "updateDeploymentHistoryPages");
+        };
+    }
+
+    private static void registerTimedBaseline(MeterRegistry registry, String name, String method) {
+        Timer.builder(name)
+                .tags("class", DocumentationGenerator.class.getName(),
+                        "method", method,
+                        "exception", "none")
+                .register(registry);
     }
 
 }

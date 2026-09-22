@@ -1,6 +1,9 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
@@ -43,13 +46,41 @@ import static org.mockito.Mockito.when;
 class DeploymentFlowMetricsTest {
 
     private final FlowRepository flowRepository = mock(FlowRepository.class);
+    private final DeploymentRepository deploymentRepository = mock(DeploymentRepository.class);
     private SimpleMeterRegistry meterRegistry;
     private DeploymentFlowMetrics metrics;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        metrics = new DeploymentFlowMetrics(meterRegistry, flowRepository);
+        metrics = new DeploymentFlowMetrics(meterRegistry, deploymentRepository, flowRepository);
+    }
+
+    @Test
+    void deploymentStartRegistersZeroBaselinesForEveryTerminalResult() {
+        metrics.deploymentStarted(new DeploymentStartedMetricEvent(
+                "System", "component", "DEV", Set.of(DeploymentType.CODE)));
+
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counters())
+                .extracting(counter -> counter.getId().getTag("result"), Counter::count)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("success", 0.0),
+                        org.assertj.core.groups.Tuple.tuple("failed", 0.0),
+                        org.assertj.core.groups.Tuple.tuple("cancelled", 0.0));
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
+    }
+
+    @Test
+    void refreshRegistersStartedDeploymentBaselinesOnEveryReplica() {
+        when(deploymentRepository.findStartedDeploymentMetricIdentities()).thenReturn(List.of(
+                new DeploymentMetricIdentity("System", "component", "REF", DeploymentType.CODE)));
+
+        metrics.refreshDeploymentMeterBaselines();
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "System", "component", "component", "environment", "REF",
+                        "deployment_type", "CODE", "result", "success")
+                .counter().count()).isZero();
     }
 
     @ParameterizedTest
@@ -92,7 +123,7 @@ class DeploymentFlowMetricsTest {
                 Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE),
                 DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counters())
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tag("result", "success").counters())
                 .extracting(counter -> counter.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
                         Counter::count)
                 .containsExactlyInAnyOrder(
@@ -115,7 +146,7 @@ class DeploymentFlowMetricsTest {
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "failed").counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
     @Test
@@ -139,8 +170,9 @@ class DeploymentFlowMetricsTest {
                 Set.of(DeploymentType.CODE), DeploymentState.SUCCESS, null,
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00")));
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tag("result", "success").counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
     @Test
@@ -174,7 +206,8 @@ class DeploymentFlowMetricsTest {
     @Test
     void exportsFlowDurationWithTheDocumentedPrometheusNameAndUnit() {
         PrometheusMeterRegistry prometheusMeterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-        DeploymentFlowMetrics prometheusMetrics = new DeploymentFlowMetrics(prometheusMeterRegistry, flowRepository);
+        DeploymentFlowMetrics prometheusMetrics = new DeploymentFlowMetrics(
+                prometheusMeterRegistry, deploymentRepository, flowRepository);
         ZonedDateTime bornAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
 
         prometheusMetrics.flowReachedTerminalState(
@@ -212,7 +245,7 @@ class DeploymentFlowMetricsTest {
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
                 .tags("type", "ad_hoc", "state", "aborted", "deployment_type", "CODE").counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION).timer().count()).isZero();
         assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
     }
 
@@ -220,8 +253,8 @@ class DeploymentFlowMetricsTest {
     void rebuildsOpenFlowGaugesFromPersistentStateAndResetsClosedSeries() {
         when(flowRepository.findOpenFlowsForMetrics())
                 .thenReturn(List.of(
-                        new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", FlowType.RETRY),
-                        new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", FlowType.RETRY)))
+                        new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", "PROD", FlowType.RETRY),
+                        new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", "PROD", FlowType.RETRY)))
                 .thenReturn(List.of());
 
         metrics.refreshOpenFlowGauges();
@@ -247,7 +280,8 @@ class DeploymentFlowMetricsTest {
                 .thenReturn(List.of(new OpenFlowMetricValue("System", "component", FlowType.ROLLBACK, 0)));
         when(flowRepository.findOpenFlowsForMetrics()).thenReturn(List.of());
 
-        metrics.initializeOpenFlowGauges();
+        when(deploymentRepository.findStartedDeploymentMetricIdentities()).thenReturn(List.of());
+        metrics.initializeMetrics();
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "rollback")
@@ -259,11 +293,11 @@ class DeploymentFlowMetricsTest {
         UUID firstFlowId = UUID.randomUUID();
         UUID secondFlowId = UUID.randomUUID();
         FlowOpenMetricsChangedEvent opened =
-                new FlowOpenMetricsChangedEvent(firstFlowId, "System", "component", FlowType.NEW, true);
+                new FlowOpenMetricsChangedEvent(firstFlowId, "System", "component", "PROD", FlowType.NEW, true);
         FlowOpenMetricsChangedEvent secondOpened =
-                new FlowOpenMetricsChangedEvent(secondFlowId, "System", "component", FlowType.NEW, true);
+                new FlowOpenMetricsChangedEvent(secondFlowId, "System", "component", "PROD", FlowType.NEW, true);
         FlowOpenMetricsChangedEvent closed =
-                new FlowOpenMetricsChangedEvent(firstFlowId, "System", "component", FlowType.NEW, false);
+                new FlowOpenMetricsChangedEvent(firstFlowId, "System", "component", "PROD", FlowType.NEW, false);
 
         metrics.openFlowsChanged(opened);
         metrics.openFlowsChanged(secondOpened);
@@ -276,10 +310,41 @@ class DeploymentFlowMetricsTest {
     }
 
     @Test
+    void openedRollbackRegistersAllTerminalMeterBaselines() {
+        metrics.openFlowsChanged(new FlowOpenMetricsChangedEvent(
+                UUID.randomUUID(), "System", "component", "PROD", FlowType.ROLLBACK, true));
+
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_COUNTER).counters())
+                .extracting(counter -> counter.getId().getTag("state"), Counter::count)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("closed", 0.0),
+                        org.assertj.core.groups.Tuple.tuple("aborted", 0.0));
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
+                .tags("system", "System", "component", "component", "environment", "PROD",
+                        "deployment_type", "CODE")
+                .timer().count()).isZero();
+    }
+
+    @Test
+    void reconciliationRegistersRollbackRecoveryBaseline() {
+        when(flowRepository.findOpenFlowsForMetrics()).thenReturn(List.of(
+                new OpenFlowMetricIdentity(
+                        UUID.randomUUID(), "System", "component", "PROD", FlowType.ROLLBACK)));
+
+        metrics.refreshOpenFlowGauges();
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
+                .tags("system", "System", "component", "component", "environment", "PROD",
+                        "deployment_type", "CODE")
+                .timer().count()).isZero();
+    }
+
+    @Test
     void doesNotOverwriteLocalDeltaWithStaleReconciliationResult() {
         UUID flowId = UUID.randomUUID();
         FlowOpenMetricsChangedEvent opened =
-                new FlowOpenMetricsChangedEvent(flowId, "System", "component", FlowType.NEW, true);
+                new FlowOpenMetricsChangedEvent(flowId, "System", "component", "PROD", FlowType.NEW, true);
         when(flowRepository.findOpenFlowsForMetrics()).thenAnswer(invocation -> {
             metrics.openFlowsChanged(opened);
             return List.of();
@@ -296,21 +361,21 @@ class DeploymentFlowMetricsTest {
     void doesNotDoubleApplyEventsAlreadyIncludedInReconciliation() {
         UUID flowId = UUID.randomUUID();
         OpenFlowMetricIdentity openFlow =
-                new OpenFlowMetricIdentity(flowId, "System", "component", FlowType.NEW);
+                new OpenFlowMetricIdentity(flowId, "System", "component", "PROD", FlowType.NEW);
         when(flowRepository.findOpenFlowsForMetrics())
                 .thenReturn(List.of(openFlow))
                 .thenReturn(List.of());
 
         metrics.refreshOpenFlowGauges();
         metrics.openFlowsChanged(
-                new FlowOpenMetricsChangedEvent(flowId, "System", "component", FlowType.NEW, true));
+                new FlowOpenMetricsChangedEvent(flowId, "System", "component", "PROD", FlowType.NEW, true));
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "new")
                 .gauge().value()).isEqualTo(1);
 
         metrics.refreshOpenFlowGauges();
         metrics.openFlowsChanged(
-                new FlowOpenMetricsChangedEvent(flowId, "System", "component", FlowType.NEW, false));
+                new FlowOpenMetricsChangedEvent(flowId, "System", "component", "PROD", FlowType.NEW, false));
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "new")
                 .gauge().value()).isZero();
@@ -324,7 +389,7 @@ class DeploymentFlowMetricsTest {
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
         assertThat(output).contains("missing-end", "startedAt or endedAt is missing");
     }
 
@@ -358,9 +423,10 @@ class DeploymentFlowMetricsTest {
 
         metrics.flowReachedTerminalState(event);
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER).counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
+                .tag("state", "closed").counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer().count()).isZero();
         assertThat(output).contains("Not recording flow duration for " + event.flowId());
     }
 
@@ -370,10 +436,16 @@ class DeploymentFlowMetricsTest {
         ZonedDateTime bornAt = ZonedDateTime.parse("2026-09-14T10:00:00+02:00");
         metrics.flowReachedTerminalState(flowEvent(FlowType.ROLLBACK, state, bornAt, bornAt.plusMinutes(1)));
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
+        if (state == FlowState.ABORTED) {
+            assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION).timer().count()).isZero();
+        } else {
+            assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        }
         if (state == FlowState.OPEN) {
+            assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer()).isNull();
             assertThat(meterRegistry.getMeters()).isEmpty();
+        } else {
+            assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION).timer().count()).isZero();
         }
     }
 
@@ -384,7 +456,7 @@ class DeploymentFlowMetricsTest {
         metrics.flowReachedTerminalState(event);
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER).counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.FLOW_DURATION).timer()).isNull();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_DURATION).timer().count()).isZero();
         assertThat(output).contains(event.flowId().toString(), "startedAt or endedAt is missing");
     }
 
@@ -405,7 +477,8 @@ class DeploymentFlowMetricsTest {
 
     @Test
     void failedReconciliationRetainsLastGaugeAndNextRefreshRecovers() {
-        OpenFlowMetricIdentity flow = new OpenFlowMetricIdentity(UUID.randomUUID(), "System", "component", FlowType.NEW);
+        OpenFlowMetricIdentity flow = new OpenFlowMetricIdentity(
+                UUID.randomUUID(), "System", "component", "PROD", FlowType.NEW);
         when(flowRepository.findOpenFlowsForMetrics())
                 .thenReturn(List.of(flow))
                 .thenThrow(new DataAccessResourceFailureException("database unavailable"))

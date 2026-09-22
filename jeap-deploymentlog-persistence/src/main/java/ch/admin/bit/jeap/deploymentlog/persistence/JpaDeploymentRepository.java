@@ -2,6 +2,8 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -143,6 +145,19 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
             (page.id is null or deployment.lastModified > page.deploymentStateTimestamp or deployment.pageGenerationRequestId is not null)
             """)
     long countDeploymentsWithMissingOrOutdatedGeneratedPages(@Param("from") ZonedDateTime from);
+
+    @Query("""
+            select distinct new ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity(
+                system.name, component.name, environment.name, deploymentType)
+            from Deployment deployment
+            join deployment.componentVersion componentVersion
+            join componentVersion.component component
+            join component.system system
+            join deployment.environment environment
+            join deployment.deploymentTypes deploymentType
+            where deployment.state = :state
+            """)
+    List<DeploymentMetricIdentity> findMetricIdentitiesByState(@Param("state") DeploymentState state);
 
     @Query("""
             select d from Deployment d \

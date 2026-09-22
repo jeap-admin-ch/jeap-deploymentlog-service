@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.api.ConfluenceCustomRestClient;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.Test;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
@@ -25,14 +26,17 @@ class ConfluenceAdapterRetryTest {
     private ConfluenceClient confluenceClientMock;
     @MockitoBean
     private LockProvider lockProviderMock;
-    @MockitoBean
-    private MeterRegistry meterRegistryMock;
     private final ConfluencePage pageMock = mock(ConfluencePage.class);
     @Autowired
     private ConfluenceAdapter confluenceAdapter;
 
     @TestConfiguration
     static class TestConfig {
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
 
         @Bean
         ConfluenceAdapter confluenceAdapterForTest(ConfluenceClient confluenceClient) {

@@ -117,7 +117,7 @@ class DeploymentServiceTest {
     void createDeployment_envExists_deploymentCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
@@ -137,7 +137,7 @@ class DeploymentServiceTest {
     void createDeployment_envNotExists_envCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.save(any(Environment.class))).thenReturn(new Environment("environment"));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         deploymentService.createDeployment("externalId", "1.2.3-4", ZonedDateTime.now(),
                 "test", "test", ZonedDateTime.now(), true,
@@ -156,7 +156,7 @@ class DeploymentServiceTest {
     void createDeployment_withoutTarget_deploymentCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         deploymentService.createDeployment(
                 "externalId", "1.2.3-4",
@@ -171,6 +171,32 @@ class DeploymentServiceTest {
         verify(componentRepository, never()).save(any(Component.class));
         verify(environmentRepository, never()).save(any(Environment.class));
 
+    }
+
+    @Test
+    void createDeployment_publishesMetricEventWithCanonicalEntityNames() {
+        System canonicalSystem = new System("Canonical-System");
+        Component canonicalComponent = new Component("Canonical-Component", canonicalSystem);
+        Environment canonicalEnvironment = new Environment("PROD");
+        when(systemService.retrieveOrCreateComponent("system-alias", "component"))
+                .thenReturn(canonicalComponent);
+        when(environmentRepository.findByName("prod")).thenReturn(Optional.of(canonicalEnvironment));
+        when(deploymentRepository.save(any(Deployment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        deploymentService.createDeployment(
+                "externalId", "1.2.3-4",
+                ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
+                true, "system-alias", "component", "prod", null,
+                null,
+                ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
+                "comment", "1.1.0", Set.of("PROJ-123"), null, Set.of(DeploymentType.CODE));
+
+        ArgumentCaptor<DeploymentStartedMetricEvent> eventCaptor =
+                ArgumentCaptor.forClass(DeploymentStartedMetricEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isEqualTo(new DeploymentStartedMetricEvent(
+                "Canonical-System", "Canonical-Component", "PROD", Set.of(DeploymentType.CODE)));
     }
 
     @Test
@@ -493,7 +519,7 @@ class DeploymentServiceTest {
     void createDeployment_newDeployment_sequenceIsNew() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         EnvironmentComponentVersionState snapshot = mock(EnvironmentComponentVersionState.class);
         ComponentVersion mockComponentVersion = mock(ComponentVersion.class);
         when(mockComponentVersion.getVersionName()).thenReturn("1.0.0");
@@ -517,7 +543,7 @@ class DeploymentServiceTest {
     void createDeployment_withDeploymentTypes_deploymentTypesSaved() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         EnvironmentComponentVersionState snapshot = mock(EnvironmentComponentVersionState.class);
         ComponentVersion mockComponentVersion = mock(ComponentVersion.class);
         when(mockComponentVersion.getVersionName()).thenReturn("1.0.0");
@@ -543,7 +569,7 @@ class DeploymentServiceTest {
     void createDeployment_repeatedDeployment_sequenceIsRepeated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         EnvironmentComponentVersionState snapshot = mock(EnvironmentComponentVersionState.class);
         ComponentVersion mockComponentVersion = mock(ComponentVersion.class);
         when(mockComponentVersion.getVersionName()).thenReturn("1.0.0");
@@ -567,7 +593,7 @@ class DeploymentServiceTest {
     void createDeployment_firstDeployment_sequenceIsFirst() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         deploymentService.createDeployment(
                 "externalId", "1.0.0",
@@ -586,7 +612,7 @@ class DeploymentServiceTest {
     void createUndeployment_deploymentExists_undeploymentCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
-        when(deploymentRepository.save(any(Deployment.class))).thenReturn(deploymentMock);
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         deploymentService.createUndeployment(getDeployment(),
                 "externalId", "system", "component", "test",

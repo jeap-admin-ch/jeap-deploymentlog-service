@@ -70,9 +70,10 @@ Prefix `jeap.deploymentlog.jira`. Unknown keys under this prefix fail the startu
 
 Prefix `jeap.deploymentlog.documentation-generator.config`.
 
-| Property                       | Default | Description                                                                                                          |
-|--------------------------------|---------|--------------------------------------------------------------------------------------------------------------------------|
-| `remedy-change-link-root-url`  | —       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
+| Property                       | Default                                 | Description                                                                                                          |
+|--------------------------------|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `template-path`                | `classpath:/template/documentation/`    | Spring resource prefix used to load the Thymeleaf documentation templates.                                              |
+| `remedy-change-link-root-url`  | —                                       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
 
 ## Deployment flows
 
@@ -104,10 +105,16 @@ or above the configured start environment.
 | Property | Default | Description |
 | --- | --- | --- |
 | `jeap.deploymentlog.metrics.flow-open-refresh-interval` | `PT30S` | Interval at which the persistent number of open flows is reconciled with the `flow_open` gauges. Spring Boot duration syntax is supported. |
+| `jeap.deploymentlog.metrics.deployment-baseline-refresh-interval` | `PT30S` | Interval at which running deployments are discovered on every service instance so their counter and timer series exist before the terminal update. Spring Boot duration syntax is supported. |
 
 Deployment and flow counters and timers are published on persisted terminal state transitions. The `flow_open` gauge
 is additionally rebuilt from persistent flow data at startup and on this interval. See
 [Operations](operations.md#metrics) for the metric names, labels and state rules.
+
+The library enables Prometheus created timestamps by default for counters and timers. Downstream applications can
+explicitly opt out with
+`management.prometheus.metrics.export.properties.io.prometheus.exporter.include_created_timestamps=false` or any
+native Prometheus client configuration source. Explicit downstream settings always take precedence.
 
 ## Docgen execution and scheduled jobs
 

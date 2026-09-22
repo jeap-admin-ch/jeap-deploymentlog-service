@@ -1,6 +1,9 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
@@ -47,14 +50,24 @@ public class DeploymentFlowMetrics {
     public static final String DEPLOYMENT_TYPE = "deployment_type";
 
     private final MeterRegistry meterRegistry;
+    private final DeploymentRepository deploymentRepository;
     private final FlowRepository flowRepository;
     private final Map<OpenFlowKey, AtomicLong> openFlowGauges = new ConcurrentHashMap<>();
     private final Map<OpenFlowKey, Set<UUID>> openFlowIds = new HashMap<>();
     private long localGaugeRevision;
 
-    public DeploymentFlowMetrics(MeterRegistry meterRegistry, FlowRepository flowRepository) {
+    public DeploymentFlowMetrics(MeterRegistry meterRegistry,
+                                 DeploymentRepository deploymentRepository,
+                                 FlowRepository flowRepository) {
         this.meterRegistry = meterRegistry;
+        this.deploymentRepository = deploymentRepository;
         this.flowRepository = flowRepository;
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void deploymentStarted(DeploymentStartedMetricEvent event) {
+        event.deploymentTypes().forEach(deploymentType -> registerDeploymentMeters(
+                new DeploymentMetricIdentity(event.system(), event.component(), event.environment(), deploymentType)));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -72,6 +85,9 @@ public class DeploymentFlowMetrics {
         java.util.Optional<Duration> duration =
                 validDuration(event.startedAt(), event.endedAt(), "deployment", event.externalId());
         event.deploymentTypes().stream().sorted().forEach(deploymentType -> {
+            DeploymentMetricIdentity identity = new DeploymentMetricIdentity(
+                    event.system(), event.component(), event.environment(), deploymentType);
+            registerDeploymentMeters(identity);
             Counter.builder(DEPLOYMENT_COUNTER)
                     .tags(SYSTEM, event.system(),
                             COMPONENT, event.component(),
@@ -97,6 +113,7 @@ public class DeploymentFlowMetrics {
             return;
         }
         String type = normalized(event.type());
+        registerFlowMeters(event.system(), event.component(), event.finalEnvironment(), event.type());
         Counter.builder(FLOW_COUNTER)
                 .tags(SYSTEM, event.system(),
                         COMPONENT, event.component(),
@@ -135,6 +152,7 @@ public class DeploymentFlowMetrics {
         OpenFlowKey key = new OpenFlowKey(event.system(), event.component(), event.type());
         Set<UUID> ids = openFlowIds.computeIfAbsent(key, ignored -> new HashSet<>());
         if (event.open()) {
+            registerFlowMeters(event.system(), event.component(), event.finalEnvironment(), event.type());
             ids.add(event.flowId());
         } else {
             ids.remove(event.flowId());
@@ -144,10 +162,16 @@ public class DeploymentFlowMetrics {
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    public void initializeOpenFlowGauges() {
+    public void initializeMetrics() {
+        refreshDeploymentMeterBaselines();
         flowRepository.countOpenFlowsBySystemComponentAndType().forEach(value ->
                 gauge(new OpenFlowKey(value.system(), value.component(), value.type())));
         refreshOpenFlowGauges();
+    }
+
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-baseline-refresh-interval:PT30S}")
+    public void refreshDeploymentMeterBaselines() {
+        deploymentRepository.findStartedDeploymentMetricIdentities().forEach(this::registerDeploymentMeters);
     }
 
     @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.flow-open-refresh-interval:PT30S}")
@@ -163,6 +187,7 @@ public class DeploymentFlowMetrics {
         Map<OpenFlowKey, Set<UUID>> currentOpenFlowIds = new HashMap<>();
         for (OpenFlowMetricIdentity value : flowRepository.findOpenFlowsForMetrics()) {
             OpenFlowKey key = new OpenFlowKey(value.system(), value.component(), value.type());
+            registerFlowMeters(value.system(), value.component(), value.finalEnvironment(), value.type());
             currentOpenFlowIds.computeIfAbsent(key, ignored -> new HashSet<>()).add(value.flowId());
         }
 
@@ -188,6 +213,51 @@ public class DeploymentFlowMetrics {
                     .register(meterRegistry);
             return value;
         });
+    }
+
+    private void registerDeploymentMeters(DeploymentMetricIdentity identity) {
+        for (String result : Set.of("success", "failed", "cancelled")) {
+            Counter.builder(DEPLOYMENT_COUNTER)
+                    .tags(SYSTEM, identity.system(),
+                            COMPONENT, identity.component(),
+                            ENVIRONMENT, identity.environment(),
+                            "result", result,
+                            DEPLOYMENT_TYPE, identity.deploymentType().name())
+                    .register(meterRegistry);
+        }
+        Timer.builder(DEPLOYMENT_DURATION)
+                .tags(SYSTEM, identity.system(),
+                        COMPONENT, identity.component(),
+                        ENVIRONMENT, identity.environment(),
+                        DEPLOYMENT_TYPE, identity.deploymentType().name())
+                .register(meterRegistry);
+    }
+
+    private void registerFlowMeters(String system, String component, String finalEnvironment, FlowType flowType) {
+        String type = normalized(flowType);
+        for (String state : Set.of("closed", "aborted")) {
+            Counter.builder(FLOW_COUNTER)
+                    .tags(SYSTEM, system,
+                            COMPONENT, component,
+                            "type", type,
+                            "state", state,
+                            DEPLOYMENT_TYPE, DeploymentType.CODE.name())
+                    .register(meterRegistry);
+        }
+        Timer.builder(FLOW_DURATION)
+                .tags(SYSTEM, system,
+                        COMPONENT, component,
+                        "type", type,
+                        DEPLOYMENT_TYPE, DeploymentType.CODE.name())
+                .register(meterRegistry);
+        if (flowType == FlowType.ROLLBACK) {
+            Timer.builder(FLOW_RECOVERY_DURATION)
+                    .tags(SYSTEM, system,
+                            COMPONENT, component,
+                            ENVIRONMENT, finalEnvironment,
+                            DEPLOYMENT_TYPE, DeploymentType.CODE.name())
+                    .register(meterRegistry);
+        }
     }
 
     private java.util.Optional<Duration> validDuration(ZonedDateTime startedAt,

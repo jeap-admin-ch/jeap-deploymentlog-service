@@ -77,7 +77,8 @@ public class FlowRepositoryImpl implements FlowRepository {
                         (UUID) row[0],
                         (String) row[1],
                         (String) row[2],
-                        (FlowType) row[3]))
+                        (String) row[3],
+                        (FlowType) row[4]))
                 .toList();
     }
 

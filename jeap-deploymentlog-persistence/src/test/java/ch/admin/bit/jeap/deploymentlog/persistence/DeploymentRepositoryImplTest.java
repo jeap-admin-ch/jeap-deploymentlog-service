@@ -255,6 +255,31 @@ class DeploymentRepositoryImplTest {
         assertThat(deploymentRepository.existsCodeDeploymentForComponent(mixed.getId())).isTrue();
     }
 
+    @Test
+    void findsDistinctMetricIdentitiesForStartedDeployments() {
+        Environment environment = environmentRepository.save(new Environment("METRICS"));
+        System system = systemRepository.save(new System("metric-system"));
+        Component startedComponent = componentRepository.save(new Component("started", system));
+        Component completedComponent = componentRepository.save(new Component("completed", system));
+        DeploymentTarget target = TestDataFactory.createDeploymentTarget();
+
+        Deployment started = TestDataFactory.createDeployment(
+                environment, startedComponent, ZonedDateTime.now(), target);
+        started.getDeploymentTypes().addAll(Set.of(DeploymentType.CODE, DeploymentType.CONFIG));
+        deploymentRepository.save(started);
+
+        Deployment completed = TestDataFactory.createDeployment(
+                environment, completedComponent, ZonedDateTime.now(), target);
+        completed.getDeploymentTypes().add(DeploymentType.CODE);
+        completed.success(ZonedDateTime.now().plusMinutes(1), "done");
+        deploymentRepository.save(completed);
+        entityManager.flush();
+
+        assertThat(deploymentRepository.findStartedDeploymentMetricIdentities()).containsExactlyInAnyOrder(
+                new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CODE),
+                new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CONFIG));
+    }
+
     private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,
                                            String issueKey, Set<DeploymentType> deploymentTypes) {
         ComponentVersion componentVersion = ComponentVersion.builder()

@@ -56,6 +56,8 @@ public interface DeploymentRepository {
 
     long countDeploymentsWithMissingOrOutdatedGeneratedPages(ZonedDateTime from);
 
+    List<DeploymentMetricIdentity> findStartedDeploymentMetricIdentities();
+
     Optional<Deployment> getLastDeploymentForComponent(Component component, Environment env);
 
     Optional<Deployment> getLastSuccessfulDeploymentForComponent(Component component, Environment env);

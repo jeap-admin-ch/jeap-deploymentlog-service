@@ -98,6 +98,7 @@ public class DeploymentService {
                             "Resolved final deployment environment no longer exists: " + finalDeploymentEnvironmentName));
             flowAssignmentService.assign(savedDeployment, finalDeploymentEnvironment);
         }
+        eventPublisher.publishEvent(DeploymentStartedMetricEvent.from(savedDeployment));
         return savedDeployment.getId();
     }
 

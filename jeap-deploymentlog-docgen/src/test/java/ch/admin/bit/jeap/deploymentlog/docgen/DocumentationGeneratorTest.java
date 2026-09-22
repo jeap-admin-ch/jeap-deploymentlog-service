@@ -35,6 +35,7 @@ import static org.mockito.Mockito.*;
 class DocumentationGeneratorTest {
 
     private static final String ROOT_PAGE_ID = "configuredRootPageId";
+    private static final String DEFAULT_TEMPLATE_PATH = "classpath:/template/documentation/";
     @Autowired
     ApplicationContext applicationContext;
 
@@ -341,10 +342,12 @@ class DocumentationGeneratorTest {
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
         DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
         props.setRootPageId(configuredRootPageId);
+        DocumentationGeneratorProperties documentationGeneratorProperties = defaultDocumentationGeneratorProperties();
         DocumentationGenerator generator = new DocumentationGenerator(
                 confluenceAdapterMock,
                 jiraAdapterMock,
-                new TemplateRenderer(generatorConfig.templateEngine(applicationContext),
+                new TemplateRenderer(generatorConfig.templateEngine(
+                        applicationContext, documentationGeneratorProperties),
                         new VersionFlowDiagramRenderer()),
                 props,
                 systemRepositoryMock,
@@ -592,7 +595,9 @@ class DocumentationGeneratorTest {
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
 
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
-        TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(applicationContext),
+        DocumentationGeneratorProperties documentationGeneratorProperties = defaultDocumentationGeneratorProperties();
+        TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(
+                applicationContext, documentationGeneratorProperties),
                 new VersionFlowDiagramRenderer());
         DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
         props.setRootPageId(ROOT_PAGE_ID);
@@ -616,5 +621,11 @@ class DocumentationGeneratorTest {
                 jiraProjectPageGeneratorMock,
                 jiraIssuePageRepositoryMock,
                 transactionRunnerMock);
+    }
+
+    private static DocumentationGeneratorProperties defaultDocumentationGeneratorProperties() {
+        DocumentationGeneratorProperties properties = new DocumentationGeneratorProperties();
+        properties.setTemplatePath(DEFAULT_TEMPLATE_PATH);
+        return properties;
     }
 }
