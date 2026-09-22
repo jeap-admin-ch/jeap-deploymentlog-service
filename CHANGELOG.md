@@ -9,9 +9,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Pre-register deployment and flow counter/timer series on every service instance. At startup, persisted historical
-  label combinations are restored as zero baselines; running deployments and open flows are additionally reconciled
-  while the service is running so `increase()` queries do not lose the first observation after a restart.
+- Persist terminal deployment metric events and expose their cumulative database totals from every service instance,
+  so deployment counts survive restarts, replica changes and deployment-data retention without depending on Prometheus
+  created-timestamp support. A periodic reconciliation covers writes from old instances during rolling upgrades, and
+  retained events restore the complete deployment meter family after data retention. Deployment and flow timer series
+  retain their zero-baseline reconciliation.
 - Treat an AWS JDBC Wrapper `FailoverSuccessSQLException` during deployment-page generation as a recovered connection
   interruption: keep the generation request pending for the repair job and log it at info level instead of reporting
   an application error.

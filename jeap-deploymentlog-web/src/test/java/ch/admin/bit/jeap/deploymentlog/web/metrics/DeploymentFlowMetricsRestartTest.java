@@ -33,9 +33,10 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         closed = createFixture(FlowType.ROLLBACK);
         open = createFixture(FlowType.RETRY);
         update(closed, DeploymentState.SUCCESS);
+        metrics.refreshDeploymentMetrics();
 
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tags("system", closed.system(), "result", "success").counter().count()).isEqualTo(1);
+                .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
         assertThat(openFlows(closed)).isZero();
         assertThat(openFlows(open)).isEqualTo(1);
     }
@@ -49,8 +50,11 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         assertThat(openFlows(open)).isEqualTo(1);
         update(closed, DeploymentState.SUCCESS);
 
-        // Historical label combinations are restored as zero baselines, but terminal observations are not replayed.
-        for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_COUNTER, DeploymentFlowMetrics.DEPLOYMENT_DURATION,
+        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
+
+        // Duration and flow observations remain process-local and are not replayed after a restart.
+        for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_DURATION,
                 DeploymentFlowMetrics.FLOW_COUNTER, DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
             assertThat(registry.find(name).tag("system", closed.system()).meters())
                     .isNotEmpty()

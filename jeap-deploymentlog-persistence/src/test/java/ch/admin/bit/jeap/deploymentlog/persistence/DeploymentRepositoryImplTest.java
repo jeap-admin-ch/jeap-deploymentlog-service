@@ -271,9 +271,12 @@ class DeploymentRepositoryImplTest {
         Deployment completed = TestDataFactory.createDeployment(
                 environment, completedComponent, ZonedDateTime.now(), target);
         completed.getDeploymentTypes().add(DeploymentType.CODE);
-        completed.success(ZonedDateTime.now().plusMinutes(1), "done");
+        ZonedDateTime completedAt = ZonedDateTime.now().plusMinutes(1);
+        completed.success(completedAt, "done");
         deploymentRepository.save(completed);
         entityManager.flush();
+        deploymentRepository.reconcileTerminalDeploymentMetrics();
+        deploymentRepository.reconcileTerminalDeploymentMetrics();
 
         assertThat(deploymentRepository.findStartedDeploymentMetricIdentities()).containsExactlyInAnyOrder(
                 new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CODE),
@@ -282,6 +285,9 @@ class DeploymentRepositoryImplTest {
                 new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CODE),
                 new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CONFIG),
                 new DeploymentMetricIdentity("metric-system", "completed", "METRICS", DeploymentType.CODE));
+        assertThat(deploymentRepository.findDeploymentMetricValues()).containsExactly(
+                new DeploymentMetricValue("metric-system", "completed", "METRICS", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1));
     }
 
     private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,

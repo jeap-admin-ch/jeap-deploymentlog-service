@@ -39,7 +39,7 @@ import java.util.UUID;
         "management.endpoints.web.exposure.include=health,prometheus",
         "management.endpoints.web.base-path=/actuator",
         "management.prometheus.metrics.export.enabled=true",
-        "jeap.deploymentlog.metrics.deployment-baseline-refresh-interval=PT24H",
+        "jeap.deploymentlog.metrics.deployment-refresh-interval=PT24H",
         "jeap.deploymentlog.metrics.flow-open-refresh-interval=PT24H"
 })
 @AutoConfigureMockMvc(addFilters = false)

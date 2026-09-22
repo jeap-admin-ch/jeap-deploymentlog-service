@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
@@ -13,10 +14,12 @@ import ch.admin.bit.jeap.deploymentlog.domain.FlowTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricIdentity;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -49,10 +52,14 @@ public class DeploymentFlowMetrics {
     public static final String COMPONENT = "component";
     public static final String ENVIRONMENT = "environment";
     public static final String DEPLOYMENT_TYPE = "deployment_type";
+    public static final String FAILED = "failed";
+    public static final String CANCELLED = "cancelled";
+    public static final String SUCCESS = "success";
 
     private final MeterRegistry meterRegistry;
     private final DeploymentRepository deploymentRepository;
     private final FlowRepository flowRepository;
+    private final Map<DeploymentCounterKey, AtomicLong> deploymentCounters = new ConcurrentHashMap<>();
     private final Map<OpenFlowKey, AtomicLong> openFlowGauges = new ConcurrentHashMap<>();
     private final Map<OpenFlowKey, Set<UUID>> openFlowIds = new HashMap<>();
     private long localGaugeRevision;
@@ -74,9 +81,9 @@ public class DeploymentFlowMetrics {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void deploymentReachedTerminalState(DeploymentTerminalMetricEvent event) {
         String result = switch (event.state()) {
-            case SUCCESS -> "success";
-            case FAILURE -> "failed";
-            case CANCELLED -> "cancelled";
+            case SUCCESS -> SUCCESS;
+            case FAILURE -> FAILED;
+            case CANCELLED -> CANCELLED;
             default -> null;
         };
         if (result == null) {
@@ -89,14 +96,6 @@ public class DeploymentFlowMetrics {
             DeploymentMetricIdentity identity = new DeploymentMetricIdentity(
                     event.system(), event.component(), event.environment(), deploymentType);
             registerDeploymentMeters(identity);
-            Counter.builder(DEPLOYMENT_COUNTER)
-                    .tags(SYSTEM, event.system(),
-                            COMPONENT, event.component(),
-                            ENVIRONMENT, event.environment(),
-                            "result", result,
-                            DEPLOYMENT_TYPE, deploymentType.name())
-                    .register(meterRegistry)
-                    .increment();
 
             duration.ifPresent(value -> Timer.builder(DEPLOYMENT_DURATION)
                     .tags(SYSTEM, event.system(),
@@ -165,15 +164,24 @@ public class DeploymentFlowMetrics {
     @EventListener(ApplicationReadyEvent.class)
     public void initializeMetrics() {
         deploymentRepository.findDeploymentMetricIdentities().forEach(this::registerDeploymentMeters);
+        refreshDeploymentMetricValues();
         flowRepository.findFlowMetricIdentities().forEach(this::registerFlowMeters);
         flowRepository.countOpenFlowsBySystemComponentAndType().forEach(value ->
                 gauge(new OpenFlowKey(value.system(), value.component(), value.type())));
         refreshOpenFlowGauges();
     }
 
-    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-baseline-refresh-interval:PT30S}")
-    public void refreshDeploymentMeterBaselines() {
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}")
+    public void refreshDeploymentMetrics() {
         deploymentRepository.findStartedDeploymentMetricIdentities().forEach(this::registerDeploymentMeters);
+        refreshDeploymentMetricValues();
+    }
+
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}")
+    @SchedulerLock(name = "reconcile-terminal-deployment-metrics", lockAtMostFor = "1m")
+    public void reconcileDeploymentMetrics() {
+        deploymentRepository.reconcileTerminalDeploymentMetrics();
+        refreshDeploymentMetricValues();
     }
 
     @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.flow-open-refresh-interval:PT30S}")
@@ -218,14 +226,8 @@ public class DeploymentFlowMetrics {
     }
 
     private void registerDeploymentMeters(DeploymentMetricIdentity identity) {
-        for (String result : Set.of("success", "failed", "cancelled")) {
-            Counter.builder(DEPLOYMENT_COUNTER)
-                    .tags(SYSTEM, identity.system(),
-                            COMPONENT, identity.component(),
-                            ENVIRONMENT, identity.environment(),
-                            "result", result,
-                            DEPLOYMENT_TYPE, identity.deploymentType().name())
-                    .register(meterRegistry);
+        for (String result : Set.of(SUCCESS, FAILED, CANCELLED)) {
+            deploymentCounter(identity, result);
         }
         Timer.builder(DEPLOYMENT_DURATION)
                 .tags(SYSTEM, identity.system(),
@@ -233,6 +235,40 @@ public class DeploymentFlowMetrics {
                         ENVIRONMENT, identity.environment(),
                         DEPLOYMENT_TYPE, identity.deploymentType().name())
                 .register(meterRegistry);
+    }
+
+    private void refreshDeploymentMetricValues() {
+        deploymentRepository.findDeploymentMetricValues().forEach(value -> {
+            DeploymentMetricIdentity identity = new DeploymentMetricIdentity(
+                    value.system(), value.component(), value.environment(), value.deploymentType());
+            registerDeploymentMeters(identity);
+            deploymentCounter(identity, result(value)).accumulateAndGet(value.value(), Math::max);
+        });
+    }
+
+    private AtomicLong deploymentCounter(DeploymentMetricIdentity identity, String result) {
+        DeploymentCounterKey key = new DeploymentCounterKey(
+                identity.system(), identity.component(), identity.environment(), identity.deploymentType(), result);
+        return deploymentCounters.computeIfAbsent(key, ignored -> {
+            AtomicLong value = new AtomicLong();
+            FunctionCounter.builder(DEPLOYMENT_COUNTER, value, AtomicLong::doubleValue)
+                    .tags(SYSTEM, key.system(),
+                            COMPONENT, key.component(),
+                            ENVIRONMENT, key.environment(),
+                            "result", key.result(),
+                            DEPLOYMENT_TYPE, key.deploymentType().name())
+                    .register(meterRegistry);
+            return value;
+        });
+    }
+
+    private static String result(DeploymentMetricValue value) {
+        return switch (value.state()) {
+            case SUCCESS -> SUCCESS;
+            case FAILURE -> FAILED;
+            case CANCELLED -> CANCELLED;
+            default -> throw new IllegalArgumentException("Expected a terminal deployment state");
+        };
     }
 
     private void registerFlowMeters(String system, String component, String finalEnvironment, FlowType flowType) {
@@ -287,5 +323,12 @@ public class DeploymentFlowMetrics {
     }
 
     private record OpenFlowKey(String system, String component, FlowType type) {
+    }
+
+    private record DeploymentCounterKey(String system,
+                                        String component,
+                                        String environment,
+                                        DeploymentType deploymentType,
+                                        String result) {
     }
 }

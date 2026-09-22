@@ -173,23 +173,50 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | `deploymentlog.docgen.jiraissuelink.error`   | counter | Incremented after all retries to create or update a stable Jira link to a DeploymentLog issue page failed. |
 | `deploymentlog_generate_deployment_page`     | timer   | Duration of generating the pages for one deployment.                                              |
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
-| `deployment_counter`                         | counter | Terminal deployments, tagged with `system`, `component`, `environment`, `deployment_type` (`CODE`, `CONFIG` or `INFRASTRUCTURE`) and `result` (`success`, `failed` or `cancelled`). |
+| `deployment_counter`                         | counter | Persistent cumulative number of terminal deployments, tagged with `system`, `component`, `environment`, `deployment_type` (`CODE`, `CONFIG` or `INFRASTRUCTURE`) and `result` (`success`, `failed` or `cancelled`). |
 | `deployment_duration_seconds`                | timer   | Duration of a terminal deployment from `started_at` to `ended_at`, tagged with `system`, `component`, `environment` and `deployment_type`. |
 | `flow_counter`                               | counter | Terminal flow transitions, tagged with `system`, `component`, `type`, `deployment_type="CODE"` and `state` (`closed` or `aborted`). |
 | `flow_open`                                  | gauge   | Current persistent number of open flows, tagged with `system`, `component`, `type` and `deployment_type="CODE"`. |
 | `flow_duration_seconds`                      | timer   | Duration in seconds from `Flow.born_at` to the successful deployment on the effective final environment, tagged with `system`, `component`, `type` and `deployment_type="CODE"`. |
 | `flow_recovery_duration_seconds`             | timer   | Recovery duration of successfully closed rollback flows, tagged with `system`, `component`, their effective final `environment` and `deployment_type="CODE"`. |
 
-Counters and duration values are emitted only for actual persisted state transitions, so retrying the same request
-does not count a terminal deployment or flow twice. A deployment duration is omitted and a warning is logged if
+Deployment counter events are stored transactionally with the first terminal state transition and retained independently
+of deployment data retention. Every replica periodically publishes the same cumulative database totals and never lowers
+an already published value if a temporarily stale database read occurs. A ShedLock-coordinated reconciliation also
+backfills terminal deployments written by an older application instance during a rolling upgrade. Flow counters
+and all duration values are emitted only for actual persisted state transitions, so retrying the same request does not
+count a terminal deployment or flow twice. A deployment duration is omitted and a warning is logged if
 `started_at` or `ended_at` is missing, or if `ended_at` precedes `started_at`. Flow durations are emitted only for
 successfully closed flows; open and aborted flows do not contribute a duration.
 
-Counter and timer series are registered with a zero baseline when a deployment starts. Before an instance becomes
-ready, it restores every persisted deployment and flow label combination as a zero baseline. Every replica also
-discovers running deployments and open flows every 30 seconds by default. This keeps the baseline independent of
-Prometheus server feature flags and preserves the first observation after rolling restarts for label combinations
-that are already known to the DeploymentLog database.
+The ordinary deployment and flow tables remain the source of truth for current state. They cannot by themselves back a
+cumulative historical Prometheus counter because data retention deletes completed deployments and flows. In contrast,
+`flow_open` is a current-state gauge and can therefore be reconstructed directly from the remaining open flow rows.
+
+Deployment counter and timer series are registered with a zero baseline when a deployment starts. Before an instance
+becomes ready, it restores every persisted deployment and flow label combination. Every replica also discovers running
+deployments and refreshes the persistent deployment totals every 30 seconds by default. The deployment refresh interval
+is configurable through `jeap.deploymentlog.metrics.deployment-refresh-interval`; the rolling-upgrade reconciliation
+uses the same interval.
+
+Because all replicas expose the same persistent deployment totals, PromQL must deduplicate replicas before calculating
+the increase over a dashboard range. For example:
+
+```promql
+sum(
+  increase(
+    (
+      max by (system, component, environment, deployment_type, result) (
+        deployment_counter_total{deployment_type="CODE", result="success"}
+      )
+    )[$__range:]
+  )
+)
+```
+
+This preserves counts across application restarts and data retention without requiring Prometheus created-timestamp
+support. The value can lag the database by up to one deployment refresh interval, and events at the exact boundary of
+the selected Grafana range remain subject to scrape timing.
 
 Deployments carrying multiple deployment types publish one metric series per type. Queries that aggregate across
 `deployment_type` can therefore count such a deployment more than once; dashboards intended to count deployment

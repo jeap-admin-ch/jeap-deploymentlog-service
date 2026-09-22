@@ -3,10 +3,14 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,6 +28,7 @@ import java.util.Set;
 public class DeploymentRepositoryImpl implements DeploymentRepository {
 
     private final JpaDeploymentRepository jpaDeploymentRepository;
+    private final EntityManager entityManager;
 
     @Override
     public boolean isPageGenerationRepairRequired(UUID deploymentId) {
@@ -156,6 +161,79 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Transactional(readOnly = true)
     public List<DeploymentMetricIdentity> findStartedDeploymentMetricIdentities() {
         return jpaDeploymentRepository.findMetricIdentitiesByState(DeploymentState.STARTED);
+    }
+
+    @Override
+    public void recordTerminalDeploymentMetric(DeploymentTerminalMetricEvent event) {
+        for (DeploymentType deploymentType : event.deploymentTypes()) {
+            entityManager.createNativeQuery("""
+                            insert into deployment_metric_event
+                                (deployment_id, deployment_type, system_name, component_name,
+                                 environment_name, deployment_state, ended_at)
+                            values (:deploymentId, :deploymentType, :system, :component,
+                                    :environment, :state, :endedAt)
+                            """)
+                    .setParameter("deploymentId", event.deploymentId())
+                    .setParameter("deploymentType", deploymentType.name())
+                    .setParameter("system", event.system())
+                    .setParameter("component", event.component())
+                    .setParameter("environment", event.environment())
+                    .setParameter("state", event.state().name())
+                    .setParameter("endedAt", event.endedAt())
+                    .executeUpdate();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void reconcileTerminalDeploymentMetrics() {
+        entityManager.createNativeQuery("""
+                        insert into deployment_metric_event
+                            (deployment_id, deployment_type, system_name, component_name,
+                             environment_name, deployment_state, ended_at)
+                        select deployment.id,
+                               deployment_type.type,
+                               system.name,
+                               component.name,
+                               environment.name,
+                               deployment.state,
+                               deployment.ended_at
+                        from deployment
+                        join deployment_types deployment_type on deployment_type.deployment_id = deployment.id
+                        join component_version on component_version.id = deployment.component_version_id
+                        join component on component.id = component_version.component_id
+                        join system on system.id = component.system_id
+                        join environment on environment.id = deployment.environment_id
+                        where deployment.state in ('SUCCESS', 'FAILURE', 'CANCELLED')
+                          and not exists (
+                              select 1
+                              from deployment_metric_event metric_event
+                              where metric_event.deployment_id = deployment.id
+                                and metric_event.deployment_type = deployment_type.type
+                          )
+                        """)
+                .executeUpdate();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeploymentMetricValue> findDeploymentMetricValues() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery("""
+                        select system_name, component_name, environment_name, deployment_type, deployment_state, count(*)
+                        from deployment_metric_event
+                        group by system_name, component_name, environment_name, deployment_type, deployment_state
+                        """)
+                .getResultList();
+        return rows.stream()
+                .map(row -> new DeploymentMetricValue(
+                        (String) row[0],
+                        (String) row[1],
+                        (String) row[2],
+                        DeploymentType.valueOf((String) row[3]),
+                        DeploymentState.valueOf((String) row[4]),
+                        ((Number) row[5]).longValue()))
+                .toList();
     }
 
     @Override

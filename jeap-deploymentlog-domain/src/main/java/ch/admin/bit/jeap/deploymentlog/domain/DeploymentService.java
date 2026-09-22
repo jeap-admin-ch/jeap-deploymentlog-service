@@ -185,7 +185,9 @@ public class DeploymentService {
         }
 
         if (firstTerminalProcessing) {
-            eventPublisher.publishEvent(DeploymentTerminalMetricEvent.from(deployment));
+            DeploymentTerminalMetricEvent metricEvent = DeploymentTerminalMetricEvent.from(deployment);
+            deploymentRepository.recordTerminalDeploymentMetric(metricEvent);
+            eventPublisher.publishEvent(metricEvent);
         }
 
         deployment.resumePageGeneration();

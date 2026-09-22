@@ -60,6 +60,12 @@ public interface DeploymentRepository {
 
     List<DeploymentMetricIdentity> findStartedDeploymentMetricIdentities();
 
+    void recordTerminalDeploymentMetric(DeploymentTerminalMetricEvent event);
+
+    void reconcileTerminalDeploymentMetrics();
+
+    List<DeploymentMetricValue> findDeploymentMetricValues();
+
     Optional<Deployment> getLastDeploymentForComponent(Component component, Environment env);
 
     Optional<Deployment> getLastSuccessfulDeploymentForComponent(Component component, Environment env);

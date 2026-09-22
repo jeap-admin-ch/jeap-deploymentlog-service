@@ -104,7 +104,7 @@ or above the configured start environment.
 | Property | Default | Description |
 | --- | --- | --- |
 | `jeap.deploymentlog.metrics.flow-open-refresh-interval` | `PT30S` | Interval at which the persistent number of open flows is reconciled with the `flow_open` gauges. Spring Boot duration syntax is supported. |
-| `jeap.deploymentlog.metrics.deployment-baseline-refresh-interval` | `PT30S` | Interval at which running deployments are discovered on every service instance so new counter and timer series exist before the terminal update. Persisted historical label combinations are registered once during startup. Spring Boot duration syntax is supported. |
+| `jeap.deploymentlog.metrics.deployment-refresh-interval` | `PT30S` | Interval at which every service instance refreshes persistent cumulative deployment counts from the database and discovers running deployments so new counter and timer series exist before the terminal update. Spring Boot duration syntax is supported. |
 
 Deployment and flow counters and timers are published on persisted terminal state transitions. The `flow_open` gauge
 is additionally rebuilt from persistent flow data at startup and on this interval. See

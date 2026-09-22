@@ -86,6 +86,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     void actuatorExportsAllSixMetricsWithExactLabelsAndSeconds() throws Exception {
         Fixture fixture = createFixture(FlowType.ROLLBACK);
         update(fixture, DeploymentState.SUCCESS);
+        metrics.refreshDeploymentMetrics();
 
         String scrape = mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -107,7 +108,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     @Test
     void actuatorExportsZeroBaselineBeforeDeploymentCompletes() throws Exception {
         Fixture fixture = createFixture(FlowType.NEW);
-        metrics.refreshDeploymentMeterBaselines();
+        metrics.refreshDeploymentMetrics();
 
         String scrape = mockMvc.perform(get("/actuator/prometheus")
                         .accept("text/plain"))
@@ -119,7 +120,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
 
     private void assertNoTerminalMeters(Fixture fixture) {
         assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tag("system", fixture.system()).counters()).allMatch(counter -> counter.count() == 0);
+                .tag("system", fixture.system()).functionCounters()).allMatch(counter -> counter.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
                 .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.FLOW_COUNTER)
@@ -131,6 +132,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     }
 
     private void assertRecordedOnce(Fixture fixture, DeploymentState state) {
+        metrics.refreshDeploymentMetrics();
         String result = switch (state) {
             case SUCCESS -> "success";
             case FAILURE -> "failed";
@@ -138,7 +140,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             default -> throw new IllegalArgumentException("Expected a terminal deployment state");
         };
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tags("system", fixture.system(),
-                "result", result, "deployment_type", "CODE").counter().count()).isEqualTo(1);
+                "result", result, "deployment_type", "CODE").functionCounter().count()).isEqualTo(1);
         var duration = registry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
                 .tags("system", fixture.system(), "deployment_type", "CODE").timer();
         assertThat(duration.count()).isEqualTo(1);

@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
@@ -15,6 +16,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.OpenFlowMetricIdentity;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
@@ -40,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -62,8 +65,8 @@ class DeploymentFlowMetricsTest {
         metrics.deploymentStarted(new DeploymentStartedMetricEvent(
                 "System", "component", "DEV", Set.of(DeploymentType.CODE)));
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counters())
-                .extracting(counter -> counter.getId().getTag("result"), Counter::count)
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounters())
+                .extracting(counter -> counter.getId().getTag("result"), FunctionCounter::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("success", 0.0),
                         org.assertj.core.groups.Tuple.tuple("failed", 0.0),
@@ -76,12 +79,45 @@ class DeploymentFlowMetricsTest {
         when(deploymentRepository.findStartedDeploymentMetricIdentities()).thenReturn(List.of(
                 new DeploymentMetricIdentity("System", "component", "REF", DeploymentType.CODE)));
 
-        metrics.refreshDeploymentMeterBaselines();
+        metrics.refreshDeploymentMetrics();
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
-                .counter().count()).isZero();
+                .functionCounter().count()).isZero();
+    }
+
+    @Test
+    void refreshNeverLowersAnAlreadyPublishedDeploymentCounter() {
+        DeploymentMetricValue current = deploymentMetricValue(
+                "System", "component", "REF", DeploymentType.CODE, DeploymentState.SUCCESS, 2);
+        DeploymentMetricValue stale = deploymentMetricValue(
+                "System", "component", "REF", DeploymentType.CODE, DeploymentState.SUCCESS, 1);
+        when(deploymentRepository.findDeploymentMetricValues())
+                .thenReturn(List.of(current), List.of(stale));
+
+        metrics.refreshDeploymentMetrics();
+        metrics.refreshDeploymentMetrics();
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "System", "component", "component", "environment", "REF",
+                        "deployment_type", "CODE", "result", "success")
+                .functionCounter().count()).isEqualTo(2);
+    }
+
+    @Test
+    void reconciliationBackfillsRollingUpgradeEventsBeforeRefreshingTheCounter() {
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "REF", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1)));
+
+        metrics.reconcileDeploymentMetrics();
+
+        verify(deploymentRepository).reconcileTerminalDeploymentMetrics();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "System", "component", "component", "environment", "REF",
+                        "deployment_type", "CODE", "result", "success")
+                .functionCounter().count()).isEqualTo(1);
     }
 
     @ParameterizedTest
@@ -91,11 +127,15 @@ class DeploymentFlowMetricsTest {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "Turnus", "turnus-scs", "PROD",
                 Set.of(deploymentType), DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("Turnus", "turnus-scs", "PROD", deploymentType,
+                        DeploymentState.SUCCESS, 1)));
+        metrics.refreshDeploymentMetrics();
 
         var counter = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD", "result", "success",
                         "deployment_type", deploymentType.name())
-                .counter();
+                .functionCounter();
         assertThat(counter.count()).isEqualTo(1);
         assertTags(counter, Map.of(
                 "system", "Turnus",
@@ -123,10 +163,17 @@ class DeploymentFlowMetricsTest {
                 UUID.randomUUID(), "external-id", "System", "component", "PROD",
                 Set.of(DeploymentType.CODE, DeploymentType.INFRASTRUCTURE),
                 DeploymentState.SUCCESS, startedAt, startedAt.plusSeconds(75)));
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "PROD", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1),
+                deploymentMetricValue("System", "component", "PROD", DeploymentType.INFRASTRUCTURE,
+                        DeploymentState.SUCCESS, 1)));
+        metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tag("result", "success").counters())
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tag("result", "success").functionCounters())
                 .extracting(counter -> counter.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
-                        Counter::count)
+                        FunctionCounter::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("CODE", 1.0),
                         org.assertj.core.groups.Tuple.tuple("INFRASTRUCTURE", 1.0));
@@ -144,9 +191,13 @@ class DeploymentFlowMetricsTest {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
                 Set.of(DeploymentType.CONFIG), DeploymentState.FAILURE, startedAt, startedAt.minusSeconds(1)));
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "DEV", DeploymentType.CONFIG,
+                        DeploymentState.FAILURE, 1)));
+        metrics.refreshDeploymentMetrics();
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tag("result", "failed").counter().count()).isEqualTo(1);
+                .tag("result", "failed").functionCounter().count()).isEqualTo(1);
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
@@ -156,9 +207,13 @@ class DeploymentFlowMetricsTest {
         metrics.deploymentReachedTerminalState(new DeploymentTerminalMetricEvent(
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
                 Set.of(DeploymentType.INFRASTRUCTURE), DeploymentState.CANCELLED, startedAt, startedAt.plusSeconds(30)));
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "DEV", DeploymentType.INFRASTRUCTURE,
+                        DeploymentState.CANCELLED, 1)));
+        metrics.refreshDeploymentMetrics();
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tag("result", "cancelled").counter().count()).isEqualTo(1);
+                .tag("result", "cancelled").functionCounter().count()).isEqualTo(1);
         Timer duration = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(30);
@@ -170,9 +225,13 @@ class DeploymentFlowMetricsTest {
                 UUID.randomUUID(), "external-id", "System", "component", "DEV",
                 Set.of(DeploymentType.CODE), DeploymentState.SUCCESS, null,
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00")));
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "DEV", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1)));
+        metrics.refreshDeploymentMetrics();
 
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tag("result", "success").counter().count()).isEqualTo(1);
+                .tag("result", "success").functionCounter().count()).isEqualTo(1);
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
@@ -305,13 +364,37 @@ class DeploymentFlowMetricsTest {
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
-                .counter().count()).isZero();
+                .functionCounter().count()).isZero();
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
                 .tags("system", "System", "component", "component", "type", "rollback",
                         "deployment_type", "CODE", "state", "closed")
                 .counter().count()).isZero();
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
                 .tags("system", "System", "component", "component", "environment", "PROD",
+                        "deployment_type", "CODE")
+                .timer().count()).isZero();
+    }
+
+    @Test
+    void retainedDeploymentMetricRestoresTheCompleteMeterFamily() {
+        when(deploymentRepository.findDeploymentMetricIdentities()).thenReturn(List.of());
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "REF", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 3)));
+        when(flowRepository.findFlowMetricIdentities()).thenReturn(List.of());
+        when(flowRepository.countOpenFlowsBySystemComponentAndType()).thenReturn(List.of());
+        when(flowRepository.findOpenFlowsForMetrics()).thenReturn(List.of());
+
+        metrics.initializeMetrics();
+
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounters())
+                .extracting(counter -> counter.getId().getTag("result"), FunctionCounter::count)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("success", 3.0),
+                        org.assertj.core.groups.Tuple.tuple("failed", 0.0),
+                        org.assertj.core.groups.Tuple.tuple("cancelled", 0.0));
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+                .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE")
                 .timer().count()).isZero();
     }
@@ -416,7 +499,7 @@ class DeploymentFlowMetricsTest {
                 DeploymentState.FAILURE,
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).counter().count()).isEqualTo(1);
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounter().count()).isZero();
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
         assertThat(output).contains("missing-end", "startedAt or endedAt is missing");
     }
@@ -525,6 +608,15 @@ class DeploymentFlowMetricsTest {
                                                ZonedDateTime bornAt, ZonedDateTime endedAt) {
         return new FlowTerminalMetricEvent(
                 UUID.randomUUID(), "System", "component", "PROD", type, state, bornAt, endedAt);
+    }
+
+    private DeploymentMetricValue deploymentMetricValue(String system,
+                                                        String component,
+                                                        String environment,
+                                                        DeploymentType deploymentType,
+                                                        DeploymentState state,
+                                                        long value) {
+        return new DeploymentMetricValue(system, component, environment, deploymentType, state, value);
     }
 
     private static void assertTags(io.micrometer.core.instrument.Meter meter, Map<String, String> expectedTags) {
