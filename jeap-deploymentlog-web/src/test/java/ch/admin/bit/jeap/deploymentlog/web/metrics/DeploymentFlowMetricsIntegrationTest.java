@@ -105,20 +105,16 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     }
 
     @Test
-    void actuatorExportsZeroBaselineAndCreatedTimestampBeforeDeploymentCompletes() throws Exception {
+    void actuatorExportsZeroBaselineBeforeDeploymentCompletes() throws Exception {
         Fixture fixture = createFixture(FlowType.NEW);
         metrics.refreshDeploymentMeterBaselines();
 
-        assertThat(prometheusProperties.getProperties())
-                .containsEntry("io.prometheus.exporter.include_created_timestamps", "true");
-
         String scrape = mockMvc.perform(get("/actuator/prometheus")
-                        .accept("application/openmetrics-text; version=1.0.0; charset=utf-8"))
+                        .accept("text/plain"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 
         assertThat(scrape)
-                .contains("deployment_counter_total{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",result=\"success\",system=\"" + fixture.system() + "\"} 0.0")
-                .contains("deployment_counter_created{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",result=\"success\",system=\"" + fixture.system() + "\"}");
+                .contains("deployment_counter_total{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",result=\"success\",system=\"" + fixture.system() + "\"} 0.0");
     }
 
     private void assertNoTerminalMeters(Fixture fixture) {

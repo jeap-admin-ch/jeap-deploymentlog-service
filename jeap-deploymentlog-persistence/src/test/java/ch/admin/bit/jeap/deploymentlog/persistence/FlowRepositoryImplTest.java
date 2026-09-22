@@ -8,6 +8,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.Flow;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowLifecycleService;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
@@ -159,6 +160,9 @@ class FlowRepositoryImplTest {
                 new OpenFlowMetricIdentity(firstOpen.getId(), "SYSTEM", "service", "PROD", FlowType.NEW),
                 new OpenFlowMetricIdentity(secondOpen.getId(), "SYSTEM", "service", "PROD", FlowType.NEW),
                 new OpenFlowMetricIdentity(aborting.getId(), "SYSTEM", "service", "PROD", FlowType.NEW));
+        assertThat(flowRepository.findFlowMetricIdentities()).containsExactlyInAnyOrder(
+                new FlowMetricIdentity("SYSTEM", "service", "PROD", FlowType.NEW),
+                new FlowMetricIdentity("SYSTEM", "service", "PROD", FlowType.ROLLBACK));
     }
 
     @Test
@@ -168,6 +172,7 @@ class FlowRepositoryImplTest {
 
         assertThat(flowRepository.countOpenFlowsBySystemComponentAndType()).isEmpty();
         assertThat(flowRepository.findOpenFlowsForMetrics()).isEmpty();
+        assertThat(flowRepository.findFlowMetricIdentities()).isEmpty();
     }
 
     @Test

@@ -6,6 +6,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowTerminalMetricEvent;
@@ -163,7 +164,8 @@ public class DeploymentFlowMetrics {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeMetrics() {
-        refreshDeploymentMeterBaselines();
+        deploymentRepository.findDeploymentMetricIdentities().forEach(this::registerDeploymentMeters);
+        flowRepository.findFlowMetricIdentities().forEach(this::registerFlowMeters);
         flowRepository.countOpenFlowsBySystemComponentAndType().forEach(value ->
                 gauge(new OpenFlowKey(value.system(), value.component(), value.type())));
         refreshOpenFlowGauges();
@@ -258,6 +260,10 @@ public class DeploymentFlowMetrics {
                             DEPLOYMENT_TYPE, DeploymentType.CODE.name())
                     .register(meterRegistry);
         }
+    }
+
+    private void registerFlowMeters(FlowMetricIdentity identity) {
+        registerFlowMeters(identity.system(), identity.component(), identity.finalEnvironment(), identity.type());
     }
 
     private java.util.Optional<Duration> validDuration(ZonedDateTime startedAt,

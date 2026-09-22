@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowTerminalMetricEvent;
@@ -276,6 +277,8 @@ class DeploymentFlowMetricsTest {
 
     @Test
     void registersZeroGaugeForKnownCombinationDuringStartupRefresh() {
+        when(deploymentRepository.findDeploymentMetricIdentities()).thenReturn(List.of());
+        when(flowRepository.findFlowMetricIdentities()).thenReturn(List.of());
         when(flowRepository.countOpenFlowsBySystemComponentAndType())
                 .thenReturn(List.of(new OpenFlowMetricValue("System", "component", FlowType.ROLLBACK, 0)));
         when(flowRepository.findOpenFlowsForMetrics()).thenReturn(List.of());
@@ -286,6 +289,31 @@ class DeploymentFlowMetricsTest {
         assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_OPEN)
                 .tags("system", "System", "component", "component", "type", "rollback")
                 .gauge().value()).isZero();
+    }
+
+    @Test
+    void startupRegistersHistoricalDeploymentAndFlowBaselines() {
+        when(deploymentRepository.findDeploymentMetricIdentities()).thenReturn(List.of(
+                new DeploymentMetricIdentity("System", "component", "REF", DeploymentType.CODE)));
+        when(flowRepository.findFlowMetricIdentities()).thenReturn(List.of(
+                new FlowMetricIdentity("System", "component", "PROD", FlowType.ROLLBACK)));
+        when(flowRepository.countOpenFlowsBySystemComponentAndType()).thenReturn(List.of());
+        when(flowRepository.findOpenFlowsForMetrics()).thenReturn(List.of());
+
+        metrics.initializeMetrics();
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "System", "component", "component", "environment", "REF",
+                        "deployment_type", "CODE", "result", "success")
+                .counter().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_COUNTER)
+                .tags("system", "System", "component", "component", "type", "rollback",
+                        "deployment_type", "CODE", "state", "closed")
+                .counter().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
+                .tags("system", "System", "component", "component", "environment", "PROD",
+                        "deployment_type", "CODE")
+                .timer().count()).isZero();
     }
 
     @Test

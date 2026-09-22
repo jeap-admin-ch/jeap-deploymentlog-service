@@ -23,7 +23,6 @@ import ch.admin.bit.jeap.deploymentlog.web.DeploymentLogApplication;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.micrometer.metrics.autoconfigure.export.prometheus.PrometheusProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -56,7 +55,6 @@ abstract class MetricsIntegrationTestBase {
     @Autowired protected PlatformTransactionManager transactionManager;
     @Autowired protected DeploymentFlowMetrics metrics;
     @Autowired protected PrometheusMeterRegistry registry;
-    @Autowired protected PrometheusProperties prometheusProperties;
     @Autowired protected MockMvc mockMvc;
     @MockitoBean private SchedulingService schedulingService;
 

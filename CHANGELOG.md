@@ -9,8 +9,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Pre-register deployment and flow counter/timer series across service instances and export Prometheus created
-  timestamps by default so arbitrary-range `increase()` queries retain the first event of a new series.
+- Pre-register deployment and flow counter/timer series on every service instance. At startup, persisted historical
+  label combinations are restored as zero baselines; running deployments and open flows are additionally reconciled
+  while the service is running so `increase()` queries do not lose the first observation after a restart.
 
 ## [16.4.0] - 2026-09-18
 

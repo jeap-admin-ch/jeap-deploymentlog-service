@@ -21,6 +21,8 @@ public interface FlowRepository {
 
     List<OpenFlowMetricValue> countOpenFlowsBySystemComponentAndType();
 
+    List<FlowMetricIdentity> findFlowMetricIdentities();
+
     List<OpenFlowMetricIdentity> findOpenFlowsForMetrics();
 
     Flow save(Flow flow);

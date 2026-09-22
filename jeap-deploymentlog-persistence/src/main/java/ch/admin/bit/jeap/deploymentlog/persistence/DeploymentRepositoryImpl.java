@@ -148,6 +148,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<DeploymentMetricIdentity> findDeploymentMetricIdentities() {
+        return jpaDeploymentRepository.findMetricIdentities();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<DeploymentMetricIdentity> findStartedDeploymentMetricIdentities() {
         return jpaDeploymentRepository.findMetricIdentitiesByState(DeploymentState.STARTED);
     }

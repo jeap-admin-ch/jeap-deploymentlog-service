@@ -67,4 +67,13 @@ interface JpaFlowRepository extends CrudRepository<Flow, UUID> {
             where flow.state = :state
             """)
     List<Object[]> findByStateForMetrics(@Param("state") FlowState state);
+
+    @Query("""
+            select distinct system.name, component.name, flow.finalDeploymentEnvironment.name, flow.type
+            from Flow flow
+            join flow.componentVersion componentVersion
+            join componentVersion.component component
+            join component.system system
+            """)
+    List<Object[]> findMetricIdentities();
 }

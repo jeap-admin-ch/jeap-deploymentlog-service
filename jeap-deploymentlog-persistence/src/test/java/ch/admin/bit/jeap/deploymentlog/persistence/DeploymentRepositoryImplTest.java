@@ -278,6 +278,10 @@ class DeploymentRepositoryImplTest {
         assertThat(deploymentRepository.findStartedDeploymentMetricIdentities()).containsExactlyInAnyOrder(
                 new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CODE),
                 new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CONFIG));
+        assertThat(deploymentRepository.findDeploymentMetricIdentities()).containsExactlyInAnyOrder(
+                new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CODE),
+                new DeploymentMetricIdentity("metric-system", "started", "METRICS", DeploymentType.CONFIG),
+                new DeploymentMetricIdentity("metric-system", "completed", "METRICS", DeploymentType.CODE));
     }
 
     private Deployment deploymentWithIssue(Environment environment, Component component, ZonedDateTime startedAt,

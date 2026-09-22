@@ -49,10 +49,16 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         assertThat(openFlows(open)).isEqualTo(1);
         update(closed, DeploymentState.SUCCESS);
 
-        // Counters/timers are process-local; replay must not create another observation in the new registry.
+        // Historical label combinations are restored as zero baselines, but terminal observations are not replayed.
         for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_COUNTER, DeploymentFlowMetrics.DEPLOYMENT_DURATION,
                 DeploymentFlowMetrics.FLOW_COUNTER, DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
-            assertThat(registry.find(name).tag("system", closed.system()).meters()).isEmpty();
+            assertThat(registry.find(name).tag("system", closed.system()).meters())
+                    .isNotEmpty()
+                    .allMatch(meter -> switch (meter) {
+                        case io.micrometer.core.instrument.Counter counter -> counter.count() == 0;
+                        case io.micrometer.core.instrument.Timer timer -> timer.count() == 0;
+                        default -> false;
+                    });
         }
         update(open, DeploymentState.SUCCESS);
         assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER)

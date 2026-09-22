@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.Flow;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
@@ -79,6 +80,17 @@ public class FlowRepositoryImpl implements FlowRepository {
                         (String) row[2],
                         (String) row[3],
                         (FlowType) row[4]))
+                .toList();
+    }
+
+    @Override
+    public List<FlowMetricIdentity> findFlowMetricIdentities() {
+        return jpaFlowRepository.findMetricIdentities().stream()
+                .map(row -> new FlowMetricIdentity(
+                        (String) row[0],
+                        (String) row[1],
+                        (String) row[2],
+                        (FlowType) row[3]))
                 .toList();
     }
 

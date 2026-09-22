@@ -160,6 +160,18 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
     List<DeploymentMetricIdentity> findMetricIdentitiesByState(@Param("state") DeploymentState state);
 
     @Query("""
+            select distinct new ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity(
+                system.name, component.name, environment.name, deploymentType)
+            from Deployment deployment
+            join deployment.componentVersion componentVersion
+            join componentVersion.component component
+            join component.system system
+            join deployment.environment environment
+            join deployment.deploymentTypes deploymentType
+            """)
+    List<DeploymentMetricIdentity> findMetricIdentities();
+
+    @Query("""
             select d from Deployment d \
             where d.componentVersion.component = :component \
             and d.environment = :env \
