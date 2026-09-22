@@ -25,6 +25,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncServiceTest.TestConfig;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -77,7 +79,16 @@ class DocgenAsyncServiceTest {
     @Autowired
     private DocgenTaskDispatcher taskDispatcher;
 
+    @Autowired
+    private SimpleMeterRegistry meterRegistry;
+
     private final SimpleLock simpleLockMock = mock(SimpleLock.class);
+
+    private static final class FailoverSuccessSQLException extends SQLException {
+        private FailoverSuccessSQLException() {
+            super("The active SQL connection has changed due to a connection failure", "08S02");
+        }
+    }
 
     @Test
     void explicitGenerationResumesRepairBeforeFailedRemoteAttempt() {
@@ -95,6 +106,24 @@ class DocgenAsyncServiceTest {
         order.verify(lockProvider).lock(any());
         order.verify(documentationGenerator).generateDeploymentPages(deploymentId);
         verify(deploymentService, never()).completePageGenerationRequest(any(), any());
+    }
+
+    @Test
+    void awsFailoverSuccessLeavesGenerationPendingWithoutReportingAnApplicationError() {
+        UUID deploymentId = UUID.randomUUID();
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        when(deploymentRepository.getPageGenerationRequestId(deploymentId)).thenReturn(Optional.of(UUID.randomUUID()));
+        when(documentationGenerator.generateDeploymentPages(deploymentId))
+                .thenThrow(new IllegalStateException("Persistence operation failed",
+                        new FailoverSuccessSQLException()));
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+
+        await().until(taskDispatcher::isIdle);
+        verify(deploymentService, never()).completePageGenerationRequest(any(), any());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count())
+                .isEqualTo(errorsBefore);
     }
 
     @Test

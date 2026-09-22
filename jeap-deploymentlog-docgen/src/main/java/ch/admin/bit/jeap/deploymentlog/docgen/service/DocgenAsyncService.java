@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.sql.SQLException;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -20,6 +21,8 @@ public class DocgenAsyncService {
 
     private static final String SYSTEM_NAME = "systemName";
     private static final String COMPONENT_NAME = "componentName";
+    private static final String FAILOVER_SUCCESS_EXCEPTION = "FailoverSuccessSQLException";
+    private static final String COMMUNICATION_LINK_CHANGED_SQL_STATE = "08S02";
     public static final String DEPLOYMENT_ID = "deploymentId";
 
     private final DocumentationGenerator documentationGenerator;
@@ -126,11 +129,33 @@ public class DocgenAsyncService {
                 deploymentService.completePageGenerationRequest(deploymentId, requestId);
             }
         } catch (Exception ex) {
+            if (isAwsFailoverSuccess(ex)) {
+                log.info("Database connection recovered while generating pages for deployment {}, " +
+                                "system {} and component {}; " +
+                                "leaving the page-generation request pending for the repair job",
+                        value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                        value(COMPONENT_NAME, componentName));
+                log.debug("Page generation interrupted by a recovered database connection", ex);
+                return;
+            }
             errorCounter.increment();
             log.warn("Failed to generate pages for deployment {}, system {} and component {}",
                     value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
                     value(COMPONENT_NAME, componentName), ex);
         }
+    }
+
+    private static boolean isAwsFailoverSuccess(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof SQLException sqlException
+                    && COMMUNICATION_LINK_CHANGED_SQL_STATE.equals(sqlException.getSQLState())
+                    && FAILOVER_SUCCESS_EXCEPTION.equals(sqlException.getClass().getSimpleName())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public void triggerMigrationForSystem(System system) {

@@ -12,6 +12,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pre-register deployment and flow counter/timer series on every service instance. At startup, persisted historical
   label combinations are restored as zero baselines; running deployments and open flows are additionally reconciled
   while the service is running so `increase()` queries do not lose the first observation after a restart.
+- Treat an AWS JDBC Wrapper `FailoverSuccessSQLException` during deployment-page generation as a recovered connection
+  interruption: keep the generation request pending for the repair job and log it at info level instead of reporting
+  an application error.
 
 ## [16.4.0] - 2026-09-18
 
