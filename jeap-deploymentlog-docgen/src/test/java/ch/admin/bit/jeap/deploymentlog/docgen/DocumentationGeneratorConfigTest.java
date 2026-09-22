@@ -3,24 +3,11 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.ApplicationContext;
-import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class DocumentationGeneratorConfigTest {
-
-    @Test
-    void usesConfiguredDocumentationTemplatePath() {
-        DocumentationGeneratorProperties properties = new DocumentationGeneratorProperties();
-        properties.setTemplatePath("classpath:/custom/documentation/");
-
-        SpringResourceTemplateResolver resolver = new DocumentationGeneratorConfig()
-                .templateResolver(mock(ApplicationContext.class), properties);
-
-        assertThat(resolver.getPrefix()).isEqualTo("classpath:/custom/documentation/");
-    }
 
     @Test
     void registersTimedBaselinesWithTheTagsUsedByTimedAspect() {

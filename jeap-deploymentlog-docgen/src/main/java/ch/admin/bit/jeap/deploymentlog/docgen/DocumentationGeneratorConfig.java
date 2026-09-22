@@ -11,12 +11,10 @@ import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceClient;
 import org.sahli.asciidoc.confluence.publisher.client.http.ConfluenceRestV1Client;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.PropertySource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -29,12 +27,13 @@ import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 
 @AutoConfiguration
-@EnableConfigurationProperties(DocumentationGeneratorProperties.class)
-@PropertySource("classpath:documentationGeneratorDefaultProperties.properties")
 @EnableScheduling
 @EnableSchedulerLock(defaultLockAtMostFor = "10m")
 @EnableRetry
 public class DocumentationGeneratorConfig {
+
+    @SuppressWarnings("java:S1075") // Internal classpath location of templates packaged with this library
+    private static final String CV_TEMPLATE_PATH = "/template/documentation/";
 
     @Bean
     ConfluenceClient confluenceClient(DocumentationGeneratorConfluenceProperties props) {
@@ -52,11 +51,10 @@ public class DocumentationGeneratorConfig {
     }
 
     @Bean
-    SpringResourceTemplateResolver templateResolver(ApplicationContext applicationContext,
-                                                      DocumentationGeneratorProperties properties) {
+    SpringResourceTemplateResolver templateResolver(ApplicationContext applicationContext) {
         SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
         templateResolver.setApplicationContext(applicationContext);
-        templateResolver.setPrefix(properties.getTemplatePath());
+        templateResolver.setPrefix("classpath:" + CV_TEMPLATE_PATH);
         templateResolver.setSuffix(".html");
         templateResolver.setCharacterEncoding(StandardCharsets.UTF_8.displayName());
         templateResolver.setTemplateMode(TemplateMode.HTML);
@@ -64,10 +62,9 @@ public class DocumentationGeneratorConfig {
     }
 
     @Bean
-    SpringTemplateEngine templateEngine(ApplicationContext applicationContext,
-                                        DocumentationGeneratorProperties properties) {
+    SpringTemplateEngine templateEngine(ApplicationContext applicationContext) {
         SpringTemplateEngine templateEngine = new SpringTemplateEngine();
-        templateEngine.setTemplateResolver(templateResolver(applicationContext, properties));
+        templateEngine.setTemplateResolver(templateResolver(applicationContext));
         templateEngine.setEnableSpringELCompiler(true);
         return templateEngine;
     }

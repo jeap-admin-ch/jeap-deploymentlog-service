@@ -70,10 +70,9 @@ Prefix `jeap.deploymentlog.jira`. Unknown keys under this prefix fail the startu
 
 Prefix `jeap.deploymentlog.documentation-generator.config`.
 
-| Property                       | Default                                 | Description                                                                                                          |
-|--------------------------------|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `template-path`                | `classpath:/template/documentation/`    | Spring resource prefix used to load the Thymeleaf documentation templates.                                              |
-| `remedy-change-link-root-url`  | —                                       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
+| Property                       | Default | Description                                                                                                          |
+|--------------------------------|---------|--------------------------------------------------------------------------------------------------------------------------|
+| `remedy-change-link-root-url`  | —       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
 
 ## Deployment flows
 

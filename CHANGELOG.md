@@ -11,8 +11,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Pre-register deployment and flow counter/timer series across service instances and export Prometheus created
   timestamps by default so arbitrary-range `increase()` queries retain the first event of a new series.
-- Make the documentation template resource prefix configurable through
-  `jeap.deploymentlog.documentation-generator.config.template-path`.
 
 ## [16.4.0] - 2026-09-18
 
