@@ -87,10 +87,8 @@ public class DocgenAsyncService {
                 }
             });
         } catch (Exception ex) {
-            errorCounter.increment();
-            log.warn("Failed to trigger page generation for deployment {}, system {} and component {}",
-                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
-                    value(COMPONENT_NAME, componentName), ex);
+            handleDeploymentPageGenerationFailure(deploymentId, systemName, componentName, ex,
+                    "Failed to trigger page generation");
         }
     }
 
@@ -129,25 +127,32 @@ public class DocgenAsyncService {
                 deploymentService.completePageGenerationRequest(deploymentId, requestId);
             }
         } catch (Exception ex) {
-            if (isAwsFailoverSuccess(ex)) {
-                log.info("Database connection recovered while generating pages for deployment {}, " +
-                                "system {} and component {}; " +
-                                "leaving the page-generation request pending for the repair job",
-                        value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
-                        value(COMPONENT_NAME, componentName));
-                log.debug("Page generation interrupted by a recovered database connection", ex);
-                return;
-            }
-            errorCounter.increment();
-            log.warn("Failed to generate pages for deployment {}, system {} and component {}",
-                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
-                    value(COMPONENT_NAME, componentName), ex);
+            handleDeploymentPageGenerationFailure(deploymentId, systemName, componentName, ex,
+                    "Failed to generate pages");
         }
     }
 
+    private void handleDeploymentPageGenerationFailure(UUID deploymentId, String systemName, String componentName,
+                                                       Exception ex, String failureMessage) {
+        if (isAwsFailoverSuccess(ex)) {
+            log.info("Database connection recovered while processing page generation for deployment {}, " +
+                            "system {} and component {}; " +
+                            "leaving the page-generation request pending for the repair job",
+                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                    value(COMPONENT_NAME, componentName));
+            log.debug("Page generation interrupted by a recovered database connection", ex);
+            return;
+        }
+        errorCounter.increment();
+        log.warn("{} for deployment {}, system {} and component {}", failureMessage,
+                value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                value(COMPONENT_NAME, componentName), ex);
+    }
+
     private static boolean isAwsFailoverSuccess(Throwable throwable) {
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         Throwable current = throwable;
-        while (current != null) {
+        while (current != null && visited.add(current)) {
             if (current instanceof SQLException sqlException
                     && COMMUNICATION_LINK_CHANGED_SQL_STATE.equals(sqlException.getSQLState())
                     && FAILOVER_SUCCESS_EXCEPTION.equals(sqlException.getClass().getSimpleName())) {

@@ -127,6 +127,23 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void awsFailoverWhilePreparingGenerationLeavesRequestPendingWithoutReportingAnApplicationError() {
+        UUID deploymentId = UUID.randomUUID();
+        when(deploymentRepository.getSystemNameForDeployment(deploymentId))
+                .thenThrow(new IllegalStateException("Persistence operation failed",
+                        new FailoverSuccessSQLException()));
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+
+        await().until(taskDispatcher::isIdle);
+        verify(documentationGenerator, never()).generateDeploymentPages(any());
+        verify(deploymentService, never()).completePageGenerationRequest(any(), any());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count())
+                .isEqualTo(errorsBefore);
+    }
+
+    @Test
     void successfulGenerationAcknowledgesCapturedRequest() {
         UUID deploymentId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();

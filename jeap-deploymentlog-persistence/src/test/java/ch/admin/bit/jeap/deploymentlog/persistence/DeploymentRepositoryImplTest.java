@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -287,6 +288,24 @@ class DeploymentRepositoryImplTest {
                 new DeploymentMetricIdentity("metric-system", "completed", "METRICS", DeploymentType.CODE));
         assertThat(deploymentRepository.findDeploymentMetricValues()).containsExactly(
                 new DeploymentMetricValue("metric-system", "completed", "METRICS", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1));
+    }
+
+    @Test
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
+    void recordsAllDeploymentTypesIdempotentlyInOneMetricEvent() {
+        DeploymentTerminalMetricEvent event = new DeploymentTerminalMetricEvent(
+                UUID.randomUUID(), "metric-event", "event-system", "event-component", "PROD",
+                Set.of(DeploymentType.CODE, DeploymentType.CONFIG), DeploymentState.SUCCESS,
+                ZonedDateTime.now().minusMinutes(1), ZonedDateTime.now());
+
+        deploymentRepository.recordTerminalDeploymentMetric(event);
+        deploymentRepository.recordTerminalDeploymentMetric(event);
+
+        assertThat(deploymentRepository.findDeploymentMetricValues()).contains(
+                new DeploymentMetricValue("event-system", "event-component", "PROD", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 1),
+                new DeploymentMetricValue("event-system", "event-component", "PROD", DeploymentType.CONFIG,
                         DeploymentState.SUCCESS, 1));
     }
 

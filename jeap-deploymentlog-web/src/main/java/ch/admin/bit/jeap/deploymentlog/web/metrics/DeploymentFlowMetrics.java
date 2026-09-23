@@ -5,6 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentStartedMetricEvent;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowOpenMetricsChangedEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.FlowMetricIdentity;
@@ -80,12 +81,7 @@ public class DeploymentFlowMetrics {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void deploymentReachedTerminalState(DeploymentTerminalMetricEvent event) {
-        String result = switch (event.state()) {
-            case SUCCESS -> SUCCESS;
-            case FAILURE -> FAILED;
-            case CANCELLED -> CANCELLED;
-            default -> null;
-        };
+        String result = terminalResult(event.state());
         if (result == null) {
             return;
         }
@@ -171,20 +167,22 @@ public class DeploymentFlowMetrics {
         refreshOpenFlowGauges();
     }
 
-    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}")
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}",
+            scheduler = DeploymentMetricsSchedulingConfiguration.METRICS_TASK_SCHEDULER)
     public void refreshDeploymentMetrics() {
         deploymentRepository.findStartedDeploymentMetricIdentities().forEach(this::registerDeploymentMeters);
         refreshDeploymentMetricValues();
     }
 
-    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}")
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.deployment-refresh-interval:PT30S}",
+            scheduler = DeploymentMetricsSchedulingConfiguration.METRICS_TASK_SCHEDULER)
     @SchedulerLock(name = "reconcile-terminal-deployment-metrics", lockAtMostFor = "1m")
     public void reconcileDeploymentMetrics() {
         deploymentRepository.reconcileTerminalDeploymentMetrics();
-        refreshDeploymentMetricValues();
     }
 
-    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.flow-open-refresh-interval:PT30S}")
+    @Scheduled(fixedDelayString = "${jeap.deploymentlog.metrics.flow-open-refresh-interval:PT30S}",
+            scheduler = DeploymentMetricsSchedulingConfiguration.METRICS_TASK_SCHEDULER)
     public void refreshOpenFlowGaugesOnSchedule() {
         refreshOpenFlowGauges();
     }
@@ -239,35 +237,40 @@ public class DeploymentFlowMetrics {
 
     private void refreshDeploymentMetricValues() {
         deploymentRepository.findDeploymentMetricValues().forEach(value -> {
+            String result = terminalResult(value.state());
+            if (result == null) {
+                log.warn("Ignoring deployment metric value with non-terminal state {} for {}/{}/{} ({})",
+                        value.state(), value.system(), value.component(), value.environment(), value.deploymentType());
+                return;
+            }
             DeploymentMetricIdentity identity = new DeploymentMetricIdentity(
                     value.system(), value.component(), value.environment(), value.deploymentType());
             registerDeploymentMeters(identity);
-            deploymentCounter(identity, result(value)).accumulateAndGet(value.value(), Math::max);
+            deploymentCounter(identity, result).accumulateAndGet(value.value(), Math::max);
         });
     }
 
     private AtomicLong deploymentCounter(DeploymentMetricIdentity identity, String result) {
-        DeploymentCounterKey key = new DeploymentCounterKey(
-                identity.system(), identity.component(), identity.environment(), identity.deploymentType(), result);
+        DeploymentCounterKey key = new DeploymentCounterKey(identity, result);
         return deploymentCounters.computeIfAbsent(key, ignored -> {
             AtomicLong value = new AtomicLong();
             FunctionCounter.builder(DEPLOYMENT_COUNTER, value, AtomicLong::doubleValue)
-                    .tags(SYSTEM, key.system(),
-                            COMPONENT, key.component(),
-                            ENVIRONMENT, key.environment(),
+                    .tags(SYSTEM, key.identity().system(),
+                            COMPONENT, key.identity().component(),
+                            ENVIRONMENT, key.identity().environment(),
                             "result", key.result(),
-                            DEPLOYMENT_TYPE, key.deploymentType().name())
+                            DEPLOYMENT_TYPE, key.identity().deploymentType().name())
                     .register(meterRegistry);
             return value;
         });
     }
 
-    private static String result(DeploymentMetricValue value) {
-        return switch (value.state()) {
+    private static String terminalResult(DeploymentState state) {
+        return switch (state) {
             case SUCCESS -> SUCCESS;
             case FAILURE -> FAILED;
             case CANCELLED -> CANCELLED;
-            default -> throw new IllegalArgumentException("Expected a terminal deployment state");
+            default -> null;
         };
     }
 
@@ -325,10 +328,6 @@ public class DeploymentFlowMetrics {
     private record OpenFlowKey(String system, String component, FlowType type) {
     }
 
-    private record DeploymentCounterKey(String system,
-                                        String component,
-                                        String environment,
-                                        DeploymentType deploymentType,
-                                        String result) {
+    private record DeploymentCounterKey(DeploymentMetricIdentity identity, String result) {
     }
 }

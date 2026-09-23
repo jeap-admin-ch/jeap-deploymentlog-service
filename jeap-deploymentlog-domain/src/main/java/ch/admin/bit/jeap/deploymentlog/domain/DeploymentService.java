@@ -186,7 +186,6 @@ public class DeploymentService {
 
         if (firstTerminalProcessing) {
             DeploymentTerminalMetricEvent metricEvent = DeploymentTerminalMetricEvent.from(deployment);
-            deploymentRepository.recordTerminalDeploymentMetric(metricEvent);
             eventPublisher.publishEvent(metricEvent);
         }
 

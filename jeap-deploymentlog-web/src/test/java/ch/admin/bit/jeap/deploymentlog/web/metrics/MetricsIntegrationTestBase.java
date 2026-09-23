@@ -78,6 +78,9 @@ abstract class MetricsIntegrationTestBase {
             flowRepository.save(Flow.start(type, deployment, environment));
             return new Fixture(deployment.getExternalId(), systemName, type);
         });
+        // The fixture is persisted directly rather than through DeploymentService, so explicitly run the
+        // reconciliation that represents the baseline registration performed for a real started deployment.
+        metrics.refreshDeploymentMetrics();
         metrics.refreshOpenFlowGauges();
         return fixture;
     }

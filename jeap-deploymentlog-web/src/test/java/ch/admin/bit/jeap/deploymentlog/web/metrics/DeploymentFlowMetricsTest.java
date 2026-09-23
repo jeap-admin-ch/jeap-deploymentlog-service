@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -94,7 +95,8 @@ class DeploymentFlowMetricsTest {
         DeploymentMetricValue stale = deploymentMetricValue(
                 "System", "component", "REF", DeploymentType.CODE, DeploymentState.SUCCESS, 1);
         when(deploymentRepository.findDeploymentMetricValues())
-                .thenReturn(List.of(current), List.of(stale));
+                .thenReturn(List.of(current))
+                .thenReturn(List.of(stale));
 
         metrics.refreshDeploymentMetrics();
         metrics.refreshDeploymentMetrics();
@@ -106,7 +108,7 @@ class DeploymentFlowMetricsTest {
     }
 
     @Test
-    void reconciliationBackfillsRollingUpgradeEventsBeforeRefreshingTheCounter() {
+    void reconciliationBackfillsRollingUpgradeEventsWithoutDuplicatingTheScheduledRefresh() {
         when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
                 deploymentMetricValue("System", "component", "REF", DeploymentType.CODE,
                         DeploymentState.SUCCESS, 1)));
@@ -114,10 +116,32 @@ class DeploymentFlowMetricsTest {
         metrics.reconcileDeploymentMetrics();
 
         verify(deploymentRepository).reconcileTerminalDeploymentMetrics();
+        verify(deploymentRepository, never()).findDeploymentMetricValues();
+
+        metrics.refreshDeploymentMetrics();
+
         assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isEqualTo(1);
+    }
+
+    @Test
+    void ignoresNonTerminalPersistentMetricValueWithoutBlockingValidValues() {
+        when(deploymentRepository.findDeploymentMetricValues()).thenReturn(List.of(
+                deploymentMetricValue("System", "component", "DEV", DeploymentType.CODE,
+                        DeploymentState.STARTED, 1),
+                deploymentMetricValue("System", "component", "REF", DeploymentType.CODE,
+                        DeploymentState.SUCCESS, 2)));
+
+        metrics.refreshDeploymentMetrics();
+
+        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", "System", "component", "component", "environment", "REF",
+                        "deployment_type", "CODE", "result", "success")
+                .functionCounter().count()).isEqualTo(2);
+        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tag("environment", "DEV").functionCounters()).isEmpty();
     }
 
     @ParameterizedTest

@@ -120,15 +120,20 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
 
     private void assertNoTerminalMeters(Fixture fixture) {
         assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
-                .tag("system", fixture.system()).functionCounters()).allMatch(counter -> counter.count() == 0);
+                .tag("system", fixture.system()).functionCounters())
+                .isNotEmpty().allMatch(counter -> counter.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
-                .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
+                .tag("system", fixture.system()).timers())
+                .isNotEmpty().allMatch(timer -> timer.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.FLOW_COUNTER)
-                .tag("system", fixture.system()).counters()).allMatch(counter -> counter.count() == 0);
+                .tag("system", fixture.system()).counters())
+                .isNotEmpty().allMatch(counter -> counter.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.FLOW_DURATION)
-                .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
+                .tag("system", fixture.system()).timers())
+                .isNotEmpty().allMatch(timer -> timer.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
-                .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
+                .tag("system", fixture.system()).timers())
+                .isNotEmpty().allMatch(timer -> timer.count() == 0);
     }
 
     private void assertRecordedOnce(Fixture fixture, DeploymentState state) {

@@ -313,6 +313,7 @@ class DeploymentServiceTest {
                 ZonedDateTime.now(), Map.of());
 
         verify(eventPublisher).publishEvent(any(DeploymentTerminalMetricEvent.class));
+        verify(deploymentRepository, never()).recordTerminalDeploymentMetric(any());
     }
 
     @Test
