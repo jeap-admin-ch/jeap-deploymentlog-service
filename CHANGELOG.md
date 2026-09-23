@@ -9,14 +9,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Persist terminal deployment metric events and expose their cumulative database totals from every service instance,
-  so deployment counts survive restarts, replica changes and deployment-data retention without depending on Prometheus
-  created-timestamp support. A periodic reconciliation covers writes from old instances during rolling upgrades, and
-  retained events restore the complete deployment meter family after data retention. Deployment and flow timer series
-  retain their zero-baseline reconciliation.
-- Treat an AWS JDBC Wrapper `FailoverSuccessSQLException` during deployment-page generation as a recovered connection
-  interruption: keep the generation request pending for the repair job and log it at info level instead of reporting
-  an application error.
+- Persist terminal deployment metric events after the deployment-state commit and expose their cumulative database
+  totals from every service instance, so a metric-write failure cannot roll back the deployment and counts survive
+  restarts, replica changes and deployment-data retention without depending on Prometheus created-timestamp support.
+  A periodic reconciliation covers missed writes and rolling upgrades, while retained events restore the complete
+  deployment meter family after data retention. Deployment and flow timer series retain their zero-baseline
+  reconciliation.
+- Treat an AWS JDBC Wrapper `FailoverSuccessSQLException` while preparing or running deployment-page generation as a
+  recovered connection interruption: keep the generation request pending for the repair job and log it at info level
+  instead of reporting an application error.
 
 ## [16.4.0] - 2026-09-18
 
