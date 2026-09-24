@@ -54,19 +54,8 @@ public class DeploymentController {
             return new ResponseEntity<>(HttpStatus.OK);
         }
 
-        String finalDeploymentEnvironmentName = null;
-        Set<DeploymentType> deploymentTypes = deploymentCreateDto.getDeploymentTypes();
-        boolean flowEnabled = flowStageProperties.isEnabled();
-        boolean isCodeDeployment = deploymentTypes != null && deploymentTypes.contains(DeploymentType.CODE);
-        boolean hasNoDeploymentTypes = deploymentTypes == null || deploymentTypes.isEmpty();
-        if (flowEnabled && isCodeDeployment) {
-            // Resolve before persisting so invalid target stages reject the complete request.
-            finalDeploymentEnvironmentName = flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
-                    deploymentCreateDto.getFinalDeploymentEnvironments()).getName();
-        } else if (flowEnabled && hasNoDeploymentTypes) {
-            log.warn("Deployment with externalId '{}' has no deploymentTypes and will be stored without flow tracking. " +
-                    "Add deployment type CODE to enable flow tracking", externalId);
-        }
+        java.util.List<String> finalDeploymentEnvironmentNames = deploymentCreateDto.getFinalDeploymentEnvironments();
+        validateStagingRequest(externalId, deploymentCreateDto);
 
         DeploymentCreateResultDto deploymentCreateResultDto = null;
 
@@ -92,7 +81,7 @@ public class DeploymentController {
             }
         }
 
-        UUID deploymentId = deploymentService.createDeployment(externalId,
+        UUID deploymentId = deploymentService.createDeploymentWithFinalEnvironments(externalId,
                 deploymentCreateDto.getComponentVersion().getVersionName(),
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
                 deploymentCreateDto.getComponentVersion().getVersionControlUrl(),
@@ -102,7 +91,7 @@ public class DeploymentController {
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),
                 deploymentCreateDto.getEnvironmentName(),
-                finalDeploymentEnvironmentName,
+                finalDeploymentEnvironmentNames,
                 deploymentCreateDto.getTarget(),
                 deploymentCreateDto.getStartedAt(),
                 deploymentCreateDto.getStartedBy(),
@@ -122,6 +111,23 @@ public class DeploymentController {
             return new ResponseEntity<>(HttpStatus.CREATED);
         } else {
             return ResponseEntity.status(HttpStatus.CREATED).body(deploymentCreateResultDto);
+        }
+    }
+
+    private void validateStagingRequest(String externalId, DeploymentCreateDto deploymentCreateDto) {
+        java.util.List<String> finalDeploymentEnvironmentNames = deploymentCreateDto.getFinalDeploymentEnvironments();
+        Set<DeploymentType> deploymentTypes = deploymentCreateDto.getDeploymentTypes();
+        boolean flowEnabled = flowStageProperties.isEnabled();
+        boolean isCodeDeployment = deploymentTypes != null && deploymentTypes.contains(DeploymentType.CODE);
+        boolean hasNoDeploymentTypes = deploymentTypes == null || deploymentTypes.isEmpty();
+        if ((flowEnabled && isCodeDeployment)
+                || (finalDeploymentEnvironmentNames != null && !finalDeploymentEnvironmentNames.isEmpty())) {
+            // Resolve before persisting so invalid target stages reject the complete request.
+            flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
+                    finalDeploymentEnvironmentNames);
+        } else if (flowEnabled && hasNoDeploymentTypes) {
+            log.warn("Deployment with externalId '{}' has no deploymentTypes and will be stored without flow tracking. " +
+                    "Add deployment type CODE to enable flow tracking", externalId);
         }
     }
 

@@ -48,7 +48,7 @@ startup.
 | `username`                            | —       | Technical user with write permission on the page tree.                                                          |
 | `password`                            | —       | Password of the technical user. Excluded from the configuration log output.                                     |
 | `deployment-history-max-show`         | `50`    | Number of deployments listed on a deployment history page and on a deployment history overview page.            |
-| `component-flow-max-show`              | `50`    | Maximum number of latest version flows rendered on each component page. Must be greater than zero; no flow data is deleted. |
+| `component-flow-max-show`              | `50`    | Maximum number of latest version histories rendered on each component page. Must be greater than zero; no deployment data is deleted. |
 | `change-view-activity-period`           | `P30D`  | Activity period for Jira project pages below `Changes`. An issue is active when a deployment was started in this period. Accepts Spring Boot duration values and must be greater than zero. |
 | `deployment-history-overview-max-time`| `P7D`   | Only deployments started within this duration appear on the deployment history overview pages.                  |
 | `retry-on-conflict-wait-duration`     | `PT10S` | How long to wait before re-reading the page and retrying an update that Confluence rejected as a conflict (HTTP 409). |
@@ -75,41 +75,29 @@ Prefix `jeap.deploymentlog.documentation-generator.config`.
 |--------------------------------|---------|--------------------------------------------------------------------------------------------------------------------------|
 | `remedy-change-link-root-url`  | —       | Prefix the `remedyChangeId` of a deployment is appended to, turning it into a link on the generated page. A missing trailing slash is added. If unset, the id is rendered without a link. |
 
-## Deployment flows
+## Deployment version history
 
-Prefix `jeap.deploymentlog.flow`.
-
-| Property                               | Default | Description |
-|----------------------------------------|---------|-------------|
-| `enabled`                              | `true`  | Enables creation and lifecycle processing of CODE deployment flows. When enabled, the flow stage configuration is validated at startup. |
-| `start-environment`                    | —       | Explicit start environment. If unset, exactly one persisted environment with `development=true` is required. |
-| `default-final-deployment-environment` | —       | Explicit default target environment. If unset, exactly one persisted environment with `productive=true` is required. |
-
-With flow processing enabled, both effective stages must resolve and at least one persisted environment must have
-`productive=true` when the application starts. An explicitly configured default final environment may be
-non-productive, but it does not replace this requirement: productive deployments trigger the abortion of older open
-flows. A blank or unknown explicit environment, no productive environment, no matching fallback environment, or
-multiple matching fallback environments aborts startup. Set `enabled=false` to run without flow creation and lifecycle
-processing; deployment recording remains available.
-
-CODE deployments on environments whose `staging_order` is lower than that of the resolved start environment are
-stored normally but are not assigned to a flow. This allows deployments on preliminary environments such as DEV to be
-excluded when flow tracking starts on a later stage such as REF.
-
-The migration introducing this behavior resets flow assignments collected by earlier versions while preserving all
-deployment records. Existing deployments are not replayed: new flows start with the next eligible CODE deployment on
-or above the configured start environment.
-
-## Deployment and flow metrics
+The configuration prefix remains `jeap.deploymentlog.flow` for compatibility.
 
 | Property | Default | Description |
 | --- | --- | --- |
-| `jeap.deploymentlog.metrics.flow-open-refresh-interval` | `PT30S` | Interval at which the persistent number of open flows is reconciled with the `flow_open` gauges. Spring Boot duration syntax is supported. |
-| `jeap.deploymentlog.metrics.deployment-refresh-interval` | `PT30S` | Interval at which every service instance refreshes persistent cumulative deployment counts from the database and discovers running deployments so new counter and timer series exist before the terminal update. Spring Boot duration syntax is supported. |
+| `enabled` | `true` | Enables classification and metrics for CODE deployments. |
+| `start-environment` | — | Start stage; defaults to the unique environment with `development=true`. |
+| `default-final-deployment-environment` | — | End stage; defaults to the unique environment with `productive=true`. |
 
-Deployment and flow counters and timers are published on persisted terminal state transitions. The `flow_open` gauge
-is additionally rebuilt from persistent flow data at startup and on this interval. See
-[Operations](operations.md#metrics) for the metric names, labels and state rules.
+Relevant stages are all environments between start and end inclusive, sorted by `stagingOrder`. Their orders must
+be distinct, and the start must not follow the end. Blank, unknown or ambiguous configuration fails startup.
+Deployments outside this range remain recorded without a staging type. Missing or empty request
+`finalDeploymentEnvironments` means no AutoStaging; it never defaults to the configured end stage.
+
+## Deployment and version metrics
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `jeap.deploymentlog.metrics.deployment-refresh-interval` | `PT30S` | Refreshes persistent deployment and version metric totals on every replica. Spring Boot duration syntax is supported. |
+
+The former `flow-open-refresh-interval` setting is obsolete. Version history has no open or terminal lifecycle.
+See [Operations](operations.md#metrics) for the replacement metrics and ratio formulas.
 
 ## Docgen execution and scheduled jobs
 
@@ -144,15 +132,15 @@ not set.
 | `jeap.deploymentlog.housekeeping.confluence-pages.enabled` | `true` | Enables only cleanup of old Confluence deployment pages. |
 | `jeap.deploymentlog.housekeeping.confluence-pages.min-age` | `7d` | Minimum page age before it may be removed. Must be positive. |
 | `jeap.deploymentlog.housekeeping.confluence-pages.keep-per-environment` | `200` | Number of deployment pages retained per system and non-productive environment regardless of age. |
-| `jeap.deploymentlog.housekeeping.data-retention.enabled` | `false` | Enables permanent deletion of expired deployment and terminal-flow data. |
+| `jeap.deploymentlog.housekeeping.data-retention.enabled` | `false` | Enables permanent deletion of expired deployment data. |
 | `jeap.deploymentlog.housekeeping.data-retention.duration` | none | Minimum retention duration. Required and positive when data retention is enabled. |
-| `jeap.deploymentlog.housekeeping.data-retention.batch-size` | `500` | Maximum number of standalone candidates (or terminal flows) selected in one run. |
-| `jeap.deploymentlog.housekeeping.component-pages.enabled` | `true` | Reconciles tracked component pages and removes pages whose component has no persisted flow. |
+| `jeap.deploymentlog.housekeeping.data-retention.batch-size` | `500` | Maximum number of deployment candidates selected in one run. |
+| `jeap.deploymentlog.housekeeping.component-pages.enabled` | `true` | Reconciles tracked component pages and removes pages whose component has no relevant CODE deployment. |
 | `jeap.deploymentlog.housekeeping.component-pages.batch-size` | `100` | Maximum number of obsolete tracked component pages reconciled in one run. Must be positive. |
 
 Data retention uses `Deployment.started_at`. It deletes `SUCCESS`, `FAILURE` and `CANCELLED` deployments, and protects
-`STARTED` deployments, deployments assigned to open flows, and deployments referenced as the current component version
-of a stage. Terminal flows are removed only as a whole. Data retention is deliberately disabled by default until an
+`STARTED` deployments and deployments referenced as the current component version
+of a stage. Each deployment is evaluated independently. Data retention is deliberately disabled by default until an
 operator configures the applicable retention duration.
 
 ## Database

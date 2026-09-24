@@ -98,7 +98,7 @@ class DeploymentRepositoryImplTest {
             Environment environment = environmentRepository.save(new Environment("ENV-" + i));
             System system = systemRepository.save(new System("SYS-" + i));
             Component component = componentRepository.save(new Component("component-" + i, system));
-            deploymentRepository.save(Deployment.builder()
+            Deployment saved = deploymentRepository.save(Deployment.builder()
                     .externalId("search-" + i).startedAt(startedAt.plusMinutes(i)).startedBy("pipeline")
                     .environment(environment).componentVersion(componentVersion(component, "1.2." + i))
                     .sequence(DeploymentSequence.NEW)
@@ -110,6 +110,7 @@ class DeploymentRepositoryImplTest {
                     .referenceIdentifiers(Set.of("ref-1"))
                     .deploymentTypes(Set.of(DeploymentType.CODE, DeploymentType.CONFIG))
                     .build());
+            saved.setFinalDeploymentEnvironments(i % 2 == 0 ? Set.of() : Set.of("ABN", "PROD"));
         }
         entityManager.flush();
         entityManager.clear();
@@ -123,8 +124,8 @@ class DeploymentRepositoryImplTest {
                     PageRequest.of(1, pageSize, Sort.by("startedAt")));
             assertThat(page.getTotalElements()).isEqualTo(18);
             assertThat(page.getContent()).hasSize(pageSize);
-            // One page query, one count and five collection queries, independent of page size.
-            assertThat(statistics.getPrepareStatementCount()).isEqualTo(7);
+            // One page query, one count and six collection queries, independent of page size.
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(8);
             entityManager.clear();
             for (int i = 0; i < pageSize; i++) {
                 Deployment deployment = page.getContent().get(i);
@@ -140,12 +141,14 @@ class DeploymentRepositoryImplTest {
                 assertThat(deployment.getDeploymentTypes()).containsExactlyInAnyOrder(DeploymentType.CODE, DeploymentType.CONFIG);
                 if (index % 2 == 0) {
                     assertThat(deployment.getChangelog()).isNull();
+                    assertThat(deployment.getFinalDeploymentEnvironments()).isEmpty();
                 } else {
+                    assertThat(deployment.getFinalDeploymentEnvironments()).containsExactlyInAnyOrder("ABN", "PROD");
                     assertThat(deployment.getChangelog().getComment()).isEqualTo("changes");
                     assertThat(deployment.getChangelog().getJiraIssueKeys()).containsExactlyInAnyOrder("JEAP-42", "OPS-7");
                 }
             }
-            assertThat(statistics.getPrepareStatementCount()).isEqualTo(7);
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(8);
         } finally {
             statistics.setStatisticsEnabled(previouslyEnabled);
         }

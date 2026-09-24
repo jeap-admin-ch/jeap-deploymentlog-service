@@ -124,7 +124,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
         }
         List<UUID> ids = deployments.stream().map(Deployment::getId).toList();
         // Fetch one collection per query to avoid a Cartesian product and preserve database pagination.
-        for (String collection : List.of("links", "properties", "referenceIdentifiers", "deploymentTypes")) {
+        for (String collection : List.of("links", "properties", "referenceIdentifiers", "deploymentTypes", "finalDeploymentEnvironments")) {
             entityManager.createQuery("select d from Deployment d left join fetch d." + collection
                             + " where d.id in :ids", Deployment.class)
                     .setParameter("ids", ids).getResultList();

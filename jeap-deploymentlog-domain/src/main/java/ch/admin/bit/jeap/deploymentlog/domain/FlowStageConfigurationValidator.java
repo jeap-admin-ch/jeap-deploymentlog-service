@@ -23,7 +23,7 @@ public class FlowStageConfigurationValidator implements ApplicationRunner {
 
         Environment startEnvironment = flowStageResolver.resolveStartEnvironment();
         Environment finalDeploymentEnvironment = flowStageResolver.resolveDefaultFinalDeploymentEnvironment();
-        flowStageResolver.validateProductiveEnvironmentExists();
+        flowStageResolver.relevantEnvironments();
         log.info("Validated deployment flow stages: start environment '{}', default final deployment environment '{}'",
                 startEnvironment.getName(), finalDeploymentEnvironment.getName());
     }

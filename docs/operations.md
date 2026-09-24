@@ -112,30 +112,33 @@ duration prevents application startup.
 Expired `SUCCESS`, `FAILURE` and `CANCELLED` deployments are eligible. The following data remains protected:
 
 - `STARTED` deployments,
-- every deployment assigned to an `OPEN` flow,
 - deployments referenced by the current component-version state of a stage,
 - component versions that are still referenced by another retained business record.
 
-A `CLOSED` or `ABORTED` flow is deleted only as a complete unit after all of its deployments are eligible. The cleanup
-also removes exclusively dependent details, unreferenced changelogs and unreferenced component versions. Systems,
+Deployments expire individually, including repeated deployments of the same version. The cleanup also removes
+exclusively dependent details, unreferenced changelogs and unreferenced component versions. Version metrics and classification only use retained deployments. Systems,
 components, environments and the generated Confluence structure are not deleted. `data-retention.batch-size` limits
 the amount selected for one run; later runs continue with the remaining data.
 
 Before database deletion, any remaining deployment detail page and its tracking record are removed. If page cleanup
-for one retention unit fails, that complete unit is retained. After successful deletion, the affected deployment
+for one deployment fails, that deployment is retained while other eligible deployments can still be deleted.
+After successful deletion, the affected deployment
 histories, stage overviews, component pages, Jira project pages and Jira issue pages are regenerated.
 
 #### Component-page reconciliation
 
-Component pages are retained only while their component has at least one currently persisted flow. Historical
-`CODE` deployments without a flow do not retain an otherwise empty component page.
+With `jeap.deploymentlog.flow.enabled=false`, version-page generation and component-page cleanup are skipped.
+Existing component pages are retained, and stage configuration is not resolved by these paths.
+
+Component pages are retained while their component has at least one retained CODE deployment (excluding undeployments)
+on a stage within the configured start-to-end range. Historical deployments qualify even without a staging type.
 After data retention, and also when data retention is disabled, housekeeping selects up to
 `component-pages.batch-size` obsolete tracking records in deterministic order. Each candidate is rechecked under the
 component system's documentation lock before its Confluence page is deleted.
 
 The candidate query and final conditional tracking deletion use short database transactions. The Confluence deletion
 runs between them without an open database transaction. If Confluence deletion fails, tracking is retained and a
-later housekeeping run retries it while continuing with other candidates. If a concurrent flow appears, the recheck
+later housekeeping run retries it while continuing with other candidates. If a concurrent relevant deployment appears, the recheck
 or final conditional deletion preserves the tracking as far as the HTTP/database boundary permits; normal
 component-page generation recreates a deleted page when required.
 
@@ -176,67 +179,58 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
 | `deployment_counter`                         | counter | Persistent cumulative number of terminal deployments, tagged with `system`, `component`, `environment`, `deployment_type` (`CODE`, `CONFIG` or `INFRASTRUCTURE`) and `result` (`success`, `failed` or `cancelled`). |
 | `deployment_duration_seconds`                | timer   | Duration of a terminal deployment from `started_at` to `ended_at`, tagged with `system`, `component`, `environment` and `deployment_type`. |
-| `flow_counter`                               | counter | Terminal flow transitions, tagged with `system`, `component`, `type`, `deployment_type="CODE"` and `state` (`closed` or `aborted`). |
-| `flow_open`                                  | gauge   | Current persistent number of open flows, tagged with `system`, `component`, `type` and `deployment_type="CODE"`. |
-| `flow_duration_seconds`                      | timer   | Duration in seconds from `Flow.born_at` to the successful deployment on the effective final environment, tagged with `system`, `component`, `type` and `deployment_type="CODE"`. |
-| `flow_recovery_duration_seconds`             | timer   | Recovery duration of successfully closed rollback flows, tagged with `system`, `component`, their effective final `environment` and `deployment_type="CODE"`. |
+| `version_start` | gauge | Distinct successful versions on the start stage. |
+| `version_end` | gauge | Distinct successful versions on the end stage. |
+| `version_staging_latency_seconds_sum` / `version_staging_latency_seconds_count` | gauges | Sum and number of first-success latencies among retained versions, measured between deployment start timestamps. |
+| `autostaging_enabled` | gauge | Latest non-ROLLBACK CODE deployment on the start stage: 1 if its explicit targets contain the end stage, 0 otherwise; NaN if no eligible deployment exists. |
 
-Deployment counter events are stored transactionally with the first terminal state transition and retained independently
-of deployment data retention. Every replica periodically publishes the same cumulative database totals and never lowers
-an already published value if a temporarily stale database read occurs. A ShedLock-coordinated reconciliation also
-backfills terminal deployments written by an older application instance during a rolling upgrade. Flow counters
-and all duration values are emitted only for actual persisted state transitions, so retrying the same request does not
-count a terminal deployment or flow twice. A deployment duration is omitted and a warning is logged if
-`started_at` or `ended_at` is missing, or if `ended_at` precedes `started_at`. Flow durations are emitted only for
-successfully closed flows; open and aborted flows do not contribute a duration.
+Only the configured start stage determines `autostaging_enabled`; REF is merely an example. An AD_HOC deployment
+on the end stage does not change this status, even if its explicit targets contain the end stage.
 
-The ordinary deployment and flow tables remain the source of truth for current state. They cannot by themselves back a
-cumulative historical Prometheus counter because data retention deletes completed deployments and flows. In contrast,
-`flow_open` is a current-state gauge and can therefore be reconstructed directly from the remaining open flow rows.
+The former `flow_counter`, `flow_open`, `flow_duration_seconds` and `flow_recovery_duration_seconds` are removed.
+Version metrics have `system`, `component`, `start_environment` and `end_environment` labels, with no version,
+flow type or flow state labels. Version identity is component plus version name, not a ComponentVersion database id.
+Repeated successful deployments never count the same version twice on a stage.
 
-Deployment counter and timer series are registered with a zero baseline when a deployment starts. Before an instance
-becomes ready, it restores every persisted deployment and flow label combination. Every replica also discovers running
-deployments and refreshes the persistent deployment totals every 30 seconds by default. The deployment refresh interval
-is configurable through `jeap.deploymentlog.metrics.deployment-refresh-interval`; the rolling-upgrade reconciliation
-uses the same interval.
+Deployment counters retain their existing persistence and reconciliation. Deployment duration observations are emitted
+after commit and are not replayed on restart. Version counts, latency totals and AutoStaging status are calculated
+directly from retained deployments on every replica. They are gauges because data retention can decrease them.
+First successful timestamps determine latency; versions missing a successful start or end, or with end before start,
+do not contribute a latency observation. These are the first successes among retained deployments, not the first
+successes in each dashboard window. Existing deployments are neither copied nor reclassified. Missing stored targets,
+including those of old deployments, mean no AutoStaging in the calculation.
 
-Because all replicas expose the same persistent deployment totals, PromQL must deduplicate replicas before calculating
-the increase over a dashboard range. For example:
+All replicas publish the same database totals, refreshed every 30 seconds by default. Deduplicate replicas with
+`max by (system, component, start_environment, end_environment)` before calculating changes over a time window.
+For example, Lost Version Ratio is:
 
 ```promql
-sum(
-  increase(
-    (
-      max by (system, component, environment, deployment_type, result) (
-        deployment_counter_total{deployment_type="CODE", result="success"}
-      )
-    )[$__range:]
-  )
-)
+1 -
+sum(delta((max by (system, component, start_environment, end_environment) (version_end))[$__range:]))
+/
+sum(delta((max by (system, component, start_environment, end_environment) (version_start))[$__range:]))
 ```
 
-This preserves counts across application restarts and data retention without requiring Prometheus created-timestamp
-support. The value can lag the database by up to one deployment refresh interval, and events at the exact boundary of
-the selected Grafana range remain subject to scrape timing.
+This is intentionally a throughput ratio, not a matched cohort: versions may start and finish in different windows,
+so short windows can yield negative values. A window with no starts has no defined ratio.
+AutoStaging is a per-component status, not a ratio. It reflects the latest start-stage CODE deployment by
+`started_at` (deployment id breaks timestamp ties), excluding ROLLBACK and undeployments. Its outcome is irrelevant:
+a failed attempt still expresses the requested automation. A RETRY can change the status. Without an eligible
+start-stage deployment the status is unknown (`NaN`), rather than disabled. Deduplicate replicas with:
 
-Deployments carrying multiple deployment types publish one metric series per type. Queries that aggregate across
-`deployment_type` can therefore count such a deployment more than once; dashboards intended to count deployment
-requests should retain or explicitly filter this label. Flow metrics always use `deployment_type="CODE"` because the
-flow lifecycle is defined only for code deployments.
+```promql
+max by (system, component, start_environment, end_environment) (autostaging_enabled)
+```
 
-`flow_open` is reconstructed from the database at startup, updated incrementally after local flow changes and reconciled
-periodically (every 30 seconds by default). Local updates do not query the complete flow history. The gauge therefore
-remains correct across application restarts and converges
-after changes made by another service instance or by housekeeping. Known label combinations that only have terminal
-flows remain present with value zero after a restart. Historical label combinations are discovered once during startup;
-periodic reconciliation queries only flows in state `OPEN` so that the state index can be used. The refresh interval is configurable through
-`jeap.deploymentlog.metrics.flow-open-refresh-interval`.
+This is inferred from the latest request, not a direct observation of pipeline configuration or proof of an
+automatically completed execution. No explicit targets means no AutoStaging.
 
-Micrometer's Prometheus naming convention may expose counters with a `_total` suffix, for example
-`deployment_counter_total`. Flow type, flow state and deployment result label values are normalized to lower case;
-`deployment_type` uses the uppercase domain values `CODE`, `CONFIG` and `INFRASTRUCTURE`. Deployment, component and
-environment UUIDs, deployment external ids and version names are deliberately not used as labels in order to avoid
-unbounded cardinality.
+Mean latency is the window delta of `version_staging_latency_seconds_sum` divided by the delta of
+`version_staging_latency_seconds_count`, also deduplicated across replicas. Scrape timing affects window boundaries. Retention or stage-configuration changes also affect these deltas;
+windows containing such changes do not represent pure arrival counts.
+
+Deployments carrying several `deploymentTypes` still publish one ordinary deployment metric series per type; select
+`deployment_type="CODE"` when comparing those metrics with the version metrics.
 
 A lag that stays above zero over several intervals means the repair job cannot keep up or keeps failing —
 check the log for docgen warnings and the availability of Confluence. A lag that spikes and recovers is

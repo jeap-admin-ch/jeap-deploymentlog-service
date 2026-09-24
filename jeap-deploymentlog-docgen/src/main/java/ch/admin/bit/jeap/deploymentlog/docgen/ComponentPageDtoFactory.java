@@ -9,9 +9,9 @@ import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
-import ch.admin.bit.jeap.deploymentlog.domain.Flow;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingHistoryEntry;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,15 +32,17 @@ class ComponentPageDtoFactory {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final FlowRepository flowRepository;
+    private final VersionDeploymentRepository versionDeploymentRepository;
     private final DeploymentPageRepository deploymentPageRepository;
     private final DocumentationGeneratorConfluenceProperties confluenceProperties;
     private final JiraWebClientProperties jiraProperties;
+    private final FlowStageResolver stageResolver;
 
     ComponentPageDto create(Component component) {
-        List<ComponentFlowDto> flows = flowRepository
-                .findLatestForComponent(component.getId(), confluenceProperties.getComponentFlowMaxShow()).stream()
-                .map(this::toDto)
+        List<StagingHistoryEntry> history = versionDeploymentRepository.history(component.getId());
+        List<ComponentFlowDto> flows = versionDeploymentRepository
+                .findLatestVersions(component.getId(), confluenceProperties.getComponentFlowMaxShow()).stream()
+                .map(deployments -> toDto(deployments, history))
                 .toList();
         return ComponentPageDto.builder()
                 .componentName(component.getName())
@@ -49,22 +51,17 @@ class ComponentPageDtoFactory {
                 .build();
     }
 
-    private ComponentFlowDto toDto(Flow flow) {
-        List<Deployment> deployments = flow.getDeployments();
+    private ComponentFlowDto toDto(List<Deployment> deployments, List<StagingHistoryEntry> history) {
+        Deployment first = deployments.getFirst();
         return ComponentFlowDto.builder()
-                .flowId(flow.getId().toString())
-                .version(flow.getComponentVersion().getVersionName())
-                .versionControlUrl(flow.getComponentVersion().getVersionControlUrl())
-                .bornAt(format(flow.getBornAt()))
-                .duration(successfulDuration(flow, deployments))
-                .type(flow.getType().name())
-                .state(flow.getState().name())
-                .targetStage(flow.getFinalDeploymentEnvironment().getName())
+                .version(first.getComponentVersion().getVersionName())
+                .versionControlUrl(first.getComponentVersion().getVersionControlUrl())
+                .bornAt(format(first.getStartedAt()))
+                .duration(successfulDuration(history, first.getComponentVersion().getVersionName()))
                 .deployments(deployments.stream()
                         .sorted(Comparator.comparing(Deployment::getStartedAt, Comparator.reverseOrder())
                                 .thenComparing(Deployment::getId))
-                        .map(this::toDeploymentDto)
-                        .toList())
+                        .map(this::toDeploymentDto).toList())
                 .jiraIssues(jiraIssues(deployments))
                 .build();
     }
@@ -78,6 +75,9 @@ class ComponentPageDtoFactory {
                 .startedAtInstant(deployment.getStartedAt().toInstant())
                 .stage(deployment.getEnvironment().getName())
                 .state(deployment.getState().name())
+                .type(deployment.getStagingType() == null ? null : deployment.getStagingType().name())
+                .stagingOrder(deployment.getEnvironment().getStagingOrder())
+                .finalDeploymentEnvironments(deployment.getFinalDeploymentEnvironments().stream().sorted().toList())
                 .pageUrl(pageUrl)
                 .build();
     }
@@ -117,28 +117,20 @@ class ComponentPageDtoFactory {
         return (jiraUrl.endsWith("/") ? jiraUrl : jiraUrl + "/") + "browse/" + issueKey;
     }
 
-    private String successfulDuration(Flow flow, List<Deployment> deployments) {
-        if (flow.getState() != FlowState.CLOSED) {
+    private String successfulDuration(List<StagingHistoryEntry> history, String version) {
+        ZonedDateTime start = firstSuccess(history, version, stageResolver.resolveStartEnvironment().getName());
+        ZonedDateTime end = firstSuccess(history, version, stageResolver.resolveDefaultFinalDeploymentEnvironment().getName());
+        if (start == null || end == null || end.isBefore(start)) {
             return null;
         }
-        return deployments.stream()
-                .filter(deployment -> deployment.getState() == DeploymentState.SUCCESS)
-                .filter(deployment -> Objects.equals(deployment.getEnvironment().getId(),
-                        flow.getFinalDeploymentEnvironment().getId()))
-                .map(Deployment::getEndedAt)
-                .filter(Objects::nonNull)
-                .min(Comparator.naturalOrder())
-                .map(endedAt -> formatDuration(flow, endedAt))
-                .orElse(null);
+        Duration duration = Duration.between(start, end);
+        return "%02d:%02d:%02d".formatted(duration.toHours(), duration.toMinutesPart(), duration.toSecondsPart());
     }
 
-    private String formatDuration(Flow flow, ZonedDateTime endedAt) {
-        Duration duration = Duration.between(flow.getBornAt(), endedAt);
-        if (duration.isNegative()) {
-            log.warn("Ignoring negative component flow duration for flow {}", flow.getId());
-            return null;
-        }
-        return "%02d:%02d:%02d".formatted(duration.toHours(), duration.toMinutesPart(), duration.toSecondsPart());
+    private ZonedDateTime firstSuccess(List<StagingHistoryEntry> history, String version, String environment) {
+        return history.stream().filter(d -> d.state() == DeploymentState.SUCCESS && !d.undeployment())
+                .filter(d -> d.version().equals(version) && d.environment().equals(environment))
+                .map(StagingHistoryEntry::startedAt).min(Comparator.naturalOrder()).orElse(null);
     }
 
     private String format(ZonedDateTime timestamp) {

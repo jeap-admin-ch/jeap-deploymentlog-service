@@ -32,9 +32,9 @@ public class DeploymentService {
     private final SystemRepository systemRepository;
     private final EnvironmentRepository environmentRepository;
     private final SystemService systemService;
+    private final ComponentRepository componentRepository;
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
-    private final FlowAssignmentService flowAssignmentService;
-    private final FlowLifecycleService flowLifecycleService;
+    private final DeploymentStagingService deploymentStagingService;
     private final ApplicationEventPublisher eventPublisher;
 
     @SuppressWarnings("java:S107")
@@ -49,6 +49,56 @@ public class DeploymentService {
                                  String componentName,
                                  String environmentName,
                                  String finalDeploymentEnvironmentName,
+                                 DeploymentTarget target,
+                                 ZonedDateTime startedAt,
+                                 String startedBy,
+                                 DeploymentUnit deploymentUnit,
+                                 Set<Link> links,
+                                 Map<String, String> properties,
+                                 Set<String> referenceIdentifiers,
+                                 String changelogComment,
+                                 String changelogComparedToVersion,
+                                 Set<String> changelogJiraIssueKeys,
+                                 String remedyChangeId,
+                                 Set<DeploymentType> deploymentTypes) {
+
+        return createDeploymentWithFinalEnvironments(externalId,
+                versionName,
+                taggedAt,
+                versionCtrlUrl,
+                commitRef,
+                committedAt,
+                publishedVersion,
+                systemName,
+                componentName,
+                environmentName,
+                finalDeploymentEnvironmentName == null ? List.of() : List.of(finalDeploymentEnvironmentName),
+                target,
+                startedAt,
+                startedBy,
+                deploymentUnit,
+                links,
+                properties,
+                referenceIdentifiers,
+                changelogComment,
+                changelogComparedToVersion,
+                changelogJiraIssueKeys,
+                remedyChangeId,
+                deploymentTypes);
+    }
+
+    @SuppressWarnings("java:S107")
+    public UUID createDeploymentWithFinalEnvironments(String externalId,
+                                 String versionName,
+                                 ZonedDateTime taggedAt,
+                                 String versionCtrlUrl,
+                                 String commitRef,
+                                 ZonedDateTime committedAt,
+                                 boolean publishedVersion,
+                                 String systemName,
+                                 String componentName,
+                                 String environmentName,
+                                 Collection<String> finalDeploymentEnvironmentNames,
                                  DeploymentTarget target,
                                  ZonedDateTime startedAt,
                                  String startedBy,
@@ -93,14 +143,7 @@ public class DeploymentService {
                 .build();
 
         Deployment savedDeployment = deploymentRepository.save(deployment);
-        if (finalDeploymentEnvironmentName != null) {
-            Environment finalDeploymentEnvironment = environment.getName().equals(finalDeploymentEnvironmentName)
-                    ? environment
-                    : environmentRepository.findByName(finalDeploymentEnvironmentName)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Resolved final deployment environment no longer exists: " + finalDeploymentEnvironmentName));
-            flowAssignmentService.assign(savedDeployment, finalDeploymentEnvironment);
-        }
+        deploymentStagingService.prepare(savedDeployment, finalDeploymentEnvironmentNames);
         eventPublisher.publishEvent(DeploymentStartedMetricEvent.from(savedDeployment));
         return savedDeployment.getId();
     }
@@ -184,7 +227,6 @@ public class DeploymentService {
         switch (state) {
             case SUCCESS -> {
                 deployment.success(endedAt, stateMessage);
-                flowLifecycleService.process(deployment);
                 if (deployment.getSequence() != DeploymentSequence.UNDEPLOYED) {
                     updateEnvironmentComponentVersionState(deployment);
                 }
@@ -237,6 +279,8 @@ public class DeploymentService {
     void updateEnvironmentComponentVersionState(Deployment deployment) {
         Set<DeploymentType> deploymentTypes = deployment.getDeploymentTypes();
         if (deploymentTypes == null || deploymentTypes.isEmpty() || deploymentTypes.contains(DeploymentType.CODE)) {
+            // Different deployment rows may update the same snapshot. Serialize even its first creation.
+            componentRepository.lockById(deployment.getComponentVersion().getComponent().getId());
             final Optional<EnvironmentComponentVersionState> snapshot = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
 
             if (snapshot.isPresent()) {

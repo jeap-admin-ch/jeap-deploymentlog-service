@@ -31,19 +31,9 @@ public class FlowStageResolver {
                 "default final deployment environment", "productive=true");
     }
 
-    public void validateProductiveEnvironmentExists() {
-        for (Environment environment : environmentRepository.findAll()) {
-            if (environment.isProductive()) {
-                return;
-            }
-        }
-        throw new InvalidFlowStageConfigurationException(
-                "Cannot process deployment flows: expected at least one environment with productive=true, found 0");
-    }
-
     public Environment resolveEffectiveFinalDeploymentEnvironment(Collection<String> requestedEnvironmentNames) {
         if (requestedEnvironmentNames == null || requestedEnvironmentNames.isEmpty()) {
-            return resolveDefaultFinalDeploymentEnvironment();
+            return null;
         }
 
         Set<String> normalizedNames = new LinkedHashSet<>();
@@ -79,6 +69,28 @@ public class FlowStageResolver {
                             highestEnvironments.stream().map(Environment::getName).sorted().toList()));
         }
         return highestEnvironments.getFirst();
+    }
+
+    public List<Environment> relevantEnvironments() {
+        Environment start = resolveStartEnvironment();
+        Environment end = resolveDefaultFinalDeploymentEnvironment();
+        if (start.getStagingOrder() > end.getStagingOrder()) {
+            throw new InvalidFlowStageConfigurationException("Start stage must not follow end stage");
+        }
+        List<Environment> stages = new ArrayList<>();
+        environmentRepository.findAll().forEach(stage -> {
+            if (stage.getStagingOrder() >= start.getStagingOrder()
+                    && stage.getStagingOrder() <= end.getStagingOrder()) {
+                stages.add(stage);
+            }
+        });
+        stages.sort(Comparator.comparingInt(Environment::getStagingOrder));
+        for (int i = 1; i < stages.size(); i++) {
+            if (stages.get(i - 1).getStagingOrder() == stages.get(i).getStagingOrder()) {
+                throw new InvalidFlowStageConfigurationException("Relevant stages must have distinct stagingOrder values");
+            }
+        }
+        return List.copyOf(stages);
     }
 
     private Environment resolveConfiguredOrFlagged(String configuredName,

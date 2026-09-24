@@ -1,7 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -29,33 +28,28 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
 
     @Test
     @Order(1)
-    void beforeRestartRecordsOneClosedAndOneOpenFlow() {
-        closed = createFixture(FlowType.ROLLBACK);
-        open = createFixture(FlowType.RETRY);
+    void beforeRestartRecordsOneSuccessfulAndOneRunningDeployment() {
+        closed = createFixture();
+        open = createFixture();
         update(closed, DeploymentState.SUCCESS);
         metrics.refreshDeploymentMetrics();
 
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
-        assertThat(openFlows(closed)).isZero();
-        assertThat(openFlows(open)).isEqualTo(1);
     }
 
     @Test
     @Order(2)
-    void afterRestartRebuildsGaugesAndDoesNotCountPersistedTerminalStateAgain() {
+    void afterRestartRestoresCountersAndDoesNotCountPersistedTerminalStateAgain() {
         // Do not call initialize manually: ApplicationReadyEvent must reconstruct these gauges.
         assertThat(closed).isNotNull();
-        assertThat(openFlows(closed)).isZero();
-        assertThat(openFlows(open)).isEqualTo(1);
         update(closed, DeploymentState.SUCCESS);
 
         assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
 
         // Duration and flow observations remain process-local and are not replayed after a restart.
-        for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_DURATION,
-                DeploymentFlowMetrics.FLOW_COUNTER, DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
+        for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_DURATION}) {
             assertThat(registry.find(name).tag("system", closed.system()).meters())
                     .isNotEmpty()
                     .allMatch(meter -> switch (meter) {
@@ -65,8 +59,8 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
                     });
         }
         update(open, DeploymentState.SUCCESS);
-        assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER)
-                .tags("system", open.system(), "state", "closed").counter().count()).isEqualTo(1);
-        assertThat(openFlows(open)).isZero();
+        metrics.refreshDeploymentMetrics();
+        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+                .tags("system", open.system(), "result", "success").functionCounter().count()).isEqualTo(1);
     }
 }

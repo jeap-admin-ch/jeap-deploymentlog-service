@@ -22,9 +22,11 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
             join Component component on component.id = page.componentId
             join component.system system
             where not exists (
-                select flow.id
-                from Flow flow
-                where flow.componentVersion.component.id = page.componentId
+                select deployment.id
+                from Deployment deployment
+                where deployment.componentVersion.component.id = page.componentId and deployment.environment.name in :stages
+                and ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE member of deployment.deploymentTypes
+                and deployment.sequence <> ch.admin.bit.jeap.deploymentlog.domain.DeploymentSequence.UNDEPLOYED
             )
             order by
                 case when page.cleanupAttemptedAt is null then 0 else 1 end,
@@ -32,7 +34,7 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
                 system.name,
                 page.componentId
             """)
-    List<ComponentPageCleanupCandidate> findCleanupCandidates(Pageable pageable);
+    List<ComponentPageCleanupCandidate> findCleanupCandidates(@Param("stages") List<String> stages, Pageable pageable);
 
     @Modifying
     @Query("""
@@ -40,23 +42,27 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
             set page.cleanupAttemptedAt = :attemptedAt
             where page.componentId = :componentId
             and not exists (
-                select flow.id
-                from Flow flow
-                where flow.componentVersion.component.id = :componentId
+                select deployment.id
+                from Deployment deployment
+                where deployment.componentVersion.component.id = :componentId and deployment.environment.name in :stages
+                and ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE member of deployment.deploymentTypes
+                and deployment.sequence <> ch.admin.bit.jeap.deploymentlog.domain.DeploymentSequence.UNDEPLOYED
             )
             """)
     int markCleanupAttemptedIfNoFlow(@Param("componentId") UUID componentId,
-                                     @Param("attemptedAt") ZonedDateTime attemptedAt);
+                                     @Param("attemptedAt") ZonedDateTime attemptedAt, @Param("stages") List<String> stages);
 
     @Modifying
     @Query("""
             delete from ComponentPage page
             where page.componentId = :componentId
             and not exists (
-                select flow.id
-                from Flow flow
-                where flow.componentVersion.component.id = :componentId
+                select deployment.id
+                from Deployment deployment
+                where deployment.componentVersion.component.id = :componentId and deployment.environment.name in :stages
+                and ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE member of deployment.deploymentTypes
+                and deployment.sequence <> ch.admin.bit.jeap.deploymentlog.domain.DeploymentSequence.UNDEPLOYED
             )
             """)
-    int deleteIfNoFlow(@Param("componentId") UUID componentId);
+    int deleteIfNoFlow(@Param("componentId") UUID componentId, @Param("stages") List<String> stages);
 }

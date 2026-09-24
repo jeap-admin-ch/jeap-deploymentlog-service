@@ -90,6 +90,18 @@ flowchart LR
   idempotent and repairable. Structural tracking also records the expected parent so existing pages can be moved
   without replacing their Confluence ids.
 
+## Version history
+
+There is no persisted Flow entity. Relevant CODE deployments are grouped by component and version name for component
+pages. Each deployment owns its `stagingType` and explicit `finalDeploymentEnvironments`; `ComponentVersion` rows
+remain per-deployment metadata. `DeploymentStagingService` serializes classification per component and checks stage
+history as of the deployment start timestamp. Only successful predecessors permit promotion as NEW.
+
+Classification, latency and version metrics query the retained deployments directly. No separate staging-history
+archive is maintained. V33 changes only the schema and does not copy or reclassify existing deployments.
+Stage relevance is derived from the configured stage range; AutoStaging is derived from explicit targets.
+Deleting deployments through retention also removes their contribution to these evaluations.
+
 ## Recording a deployment
 
 Recording a deployment is a two-step protocol, because the outcome is only known when the deployment has

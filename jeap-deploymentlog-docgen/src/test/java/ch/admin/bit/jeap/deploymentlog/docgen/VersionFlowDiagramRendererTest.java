@@ -218,6 +218,7 @@ class VersionFlowDiagramRendererTest {
                 .startedAt(instant)
                 .startedAtInstant(Instant.parse(instant))
                 .stage(stage)
+                .stagingOrder(stage.startsWith("custom") ? 100 : List.of("DEV", "INT", "TEST", "REF", "ABN", "PROD").indexOf(stage))
                 .state(state)
                 .build();
     }

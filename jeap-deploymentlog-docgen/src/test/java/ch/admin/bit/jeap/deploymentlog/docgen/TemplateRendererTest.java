@@ -65,18 +65,14 @@ class TemplateRendererTest {
     @Test
     void renderComponentPageEscapesDynamicContentAndKeepsAttemptsAndLinksReadable() {
         ComponentFlowDto flow = ComponentFlowDto.builder()
-                .flowId("flow-id")
                 .version("a-very-long-version<&>")
                 .versionControlUrl("https://git.example/version?a=1&b=2")
                 .bornAt("2026-08-01 10:00:00")
                 .duration(null)
-                .type("AD_HOC")
-                .state("ABORTED")
-                .targetStage("PROD<&>")
                 .deployments(List.of(
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:00:00")
                                 .startedAtInstant(Instant.parse("2026-08-01T08:00:00Z"))
-                                .stage("DEV").state("FAILURE").build(),
+                                .stage("DEV").state("FAILURE").type("AD_HOC").finalDeploymentEnvironments(List.of("PROD<&>")).build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:05:00")
                                 .startedAtInstant(Instant.parse("2026-08-01T08:05:00Z"))
                                 .stage("DEV").state("SUCCESS")
@@ -106,20 +102,20 @@ class TemplateRendererTest {
                         ">✓</text>", ">✕</text>", ">◷</text>", ">−</text>")
                 .contains("a-very-long-version&lt;&amp;&gt;")
                 .contains("PROD&lt;&amp;&gt;")
-                .contains("ABORTED", "AD_HOC", "page-123", "JEAP-1")
+                .contains("AD_HOC", "page-123", "JEAP-1").doesNotContain("ABORTED")
                 .doesNotContain("plantuml", "@startuml", "@enduml",
                         "a-very-long-version<&>", "@startdot", "@enddot", "digraph")
                 .doesNotContain("<script", "</script>", "JavaScript", "javascript", "document.",
                         "createElementNS", "JSON", "\"stages\":", "\"flows\":")
                 .contains("<ac:emoticon ac:name=\"cross\"/>", "<ac:emoticon ac:name=\"tick\"/>",
                         "<ac:emoticon ac:name=\"minus\"/>", "<ac:emoticon ac:name=\"question\"/>")
-                .contains("background-color: #ffebe6", "width: 31%")
+                .contains("background-color: #ffebe6")
                 .contains("<table class=\"wrapped\" style=\"width: 100%;\">")
                 .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=page-123\"")
                 .doesNotContain("<ac:image", "ri:attachment", ".png")
                 .doesNotContain("Bewertung", "ri:content-id", "<strong>ABORTED</strong>", "—",
                         ">STARTED<", ">CANCELLED<", "<thead>", "<th>Zeitpunkt</th>",
-                        "<th>Stage</th>", "<th>Status</th>", "<th>Detail</th>")
+                        "<th>Detail</th>")
                 .containsSubsequence(
                         "Diese Seite wurde automatisch generiert.",
                         "<ac:structured-macro ac:name=\"expand\">",

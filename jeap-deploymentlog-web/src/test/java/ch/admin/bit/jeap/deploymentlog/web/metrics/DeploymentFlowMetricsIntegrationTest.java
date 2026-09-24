@@ -1,8 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.web.metrics;
 
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -20,32 +18,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
 
     @Test
-    void recordsTerminalMetricsAndChangesGaugeOnlyAfterCommit() {
-        Fixture fixture = createFixture(FlowType.ROLLBACK);
+    void recordsTerminalMetricsOnlyAfterCommit() {
+        Fixture fixture = createFixture();
         transaction().executeWithoutResult(status -> {
             update(fixture, DeploymentState.SUCCESS);
             assertNoTerminalMeters(fixture);
-            assertThat(openFlows(fixture)).isEqualTo(1);
         });
 
         assertRecordedOnce(fixture, DeploymentState.SUCCESS);
-        assertThat(openFlows(fixture)).isZero();
     }
 
     @Test
-    void rollbackDiscardsAllMetricEventsAndRetryCountsOnce() {
-        Fixture fixture = createFixture(FlowType.ROLLBACK);
+    void outerRollbackDiscardsStatusAndMetricEventsAndRetryCountsOnce() {
+        Fixture fixture = createFixture();
         transaction().executeWithoutResult(status -> {
             update(fixture, DeploymentState.SUCCESS);
             status.setRollbackOnly();
         });
 
         assertNoTerminalMeters(fixture);
-        assertThat(openFlows(fixture)).isEqualTo(1);
         transaction().executeWithoutResult(status -> {
             var deployment = deploymentRepository.findByExternalId(fixture.externalId()).orElseThrow();
             assertThat(deployment.getState()).isEqualTo(DeploymentState.STARTED);
-            assertThat(flowRepository.findByDeploymentId(deployment.getId()).orElseThrow().getState()).isEqualTo(FlowState.OPEN);
         });
 
         update(fixture, DeploymentState.SUCCESS);
@@ -55,7 +49,7 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     @ParameterizedTest
     @EnumSource(value = DeploymentState.class, names = {"SUCCESS", "FAILURE", "CANCELLED"})
     void concurrentAndRepeatedStatusUpdatesCountOnce(DeploymentState state) throws Exception {
-        Fixture fixture = createFixture(FlowType.ROLLBACK);
+        Fixture fixture = createFixture();
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         var executor = Executors.newFixedThreadPool(2);
@@ -74,7 +68,6 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             update(fixture, state);
 
             assertRecordedOnce(fixture, state);
-            assertThat(openFlows(fixture)).isEqualTo(state == DeploymentState.SUCCESS ? 0 : 1);
         } finally {
             start.countDown();
             executor.shutdownNow();
@@ -83,8 +76,8 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     }
 
     @Test
-    void actuatorExportsAllSixMetricsWithExactLabelsAndSeconds() throws Exception {
-        Fixture fixture = createFixture(FlowType.ROLLBACK);
+    void actuatorExportsDeploymentMetricsWithExactLabelsAndSeconds() throws Exception {
+        Fixture fixture = createFixture();
         update(fixture, DeploymentState.SUCCESS);
         metrics.refreshDeploymentMetrics();
 
@@ -95,19 +88,13 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
                 .contains(
                         "deployment_counter_total{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",result=\"success\",system=\"" + system + "\"} 1.0",
                         "deployment_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 1",
-                        "deployment_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 90.0",
-                        "flow_counter_total{component=\"service\",deployment_type=\"CODE\",state=\"closed\",system=\"" + system + "\",type=\"rollback\"} 1.0",
-                        "flow_open{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 0.0",
-                        "flow_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 1",
-                        "flow_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",system=\"" + system + "\",type=\"rollback\"} 90.0",
-                        "flow_recovery_duration_seconds_count{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 1",
-                        "flow_recovery_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 90.0");
+                        "deployment_duration_seconds_sum{component=\"service\",deployment_type=\"CODE\",environment=\"DEV\",system=\"" + system + "\"} 90.0");
         assertThat(scrape).doesNotContain(fixture.externalId(), "flow_duration_minutes", "flow_duration_seconds_seconds");
     }
 
     @Test
     void actuatorExportsZeroBaselineBeforeDeploymentCompletes() throws Exception {
-        Fixture fixture = createFixture(FlowType.NEW);
+        Fixture fixture = createFixture();
         metrics.refreshDeploymentMetrics();
 
         String scrape = mockMvc.perform(get("/actuator/prometheus")
@@ -123,15 +110,6 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
                 .tag("system", fixture.system()).functionCounters())
                 .isNotEmpty().allMatch(counter -> counter.count() == 0);
         assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
-                .tag("system", fixture.system()).timers())
-                .isNotEmpty().allMatch(timer -> timer.count() == 0);
-        assertThat(registry.find(DeploymentFlowMetrics.FLOW_COUNTER)
-                .tag("system", fixture.system()).counters())
-                .isNotEmpty().allMatch(counter -> counter.count() == 0);
-        assertThat(registry.find(DeploymentFlowMetrics.FLOW_DURATION)
-                .tag("system", fixture.system()).timers())
-                .isNotEmpty().allMatch(timer -> timer.count() == 0);
-        assertThat(registry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
                 .tag("system", fixture.system()).timers())
                 .isNotEmpty().allMatch(timer -> timer.count() == 0);
     }
@@ -150,24 +128,6 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
                 .tags("system", fixture.system(), "deployment_type", "CODE").timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
-        if (state == DeploymentState.SUCCESS) {
-            assertThat(registry.get(DeploymentFlowMetrics.FLOW_COUNTER)
-                    .tags("system", fixture.system(), "deployment_type", "CODE", "state", "closed")
-                    .counter().count()).isEqualTo(1);
-            for (String name : new String[]{DeploymentFlowMetrics.FLOW_DURATION, DeploymentFlowMetrics.FLOW_RECOVERY_DURATION}) {
-                var timer = registry.get(name)
-                        .tags("system", fixture.system(), "deployment_type", "CODE").timer();
-                assertThat(timer.count()).isEqualTo(1);
-                assertThat(timer.totalTime(TimeUnit.SECONDS)).isEqualTo(90);
-            }
-        } else {
-            assertThat(registry.find(DeploymentFlowMetrics.FLOW_COUNTER)
-                    .tag("system", fixture.system()).counters()).allMatch(counter -> counter.count() == 0);
-            assertThat(registry.find(DeploymentFlowMetrics.FLOW_DURATION)
-                    .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
-            assertThat(registry.find(DeploymentFlowMetrics.FLOW_RECOVERY_DURATION)
-                    .tag("system", fixture.system()).timers()).allMatch(timer -> timer.count() == 0);
-        }
     }
 
     private static void await(CountDownLatch latch) {

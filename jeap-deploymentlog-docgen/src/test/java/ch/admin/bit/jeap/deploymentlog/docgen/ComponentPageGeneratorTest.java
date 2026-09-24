@@ -5,7 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class ComponentPageGeneratorTest {
     @Mock
     private ComponentRepository componentRepository;
     @Mock
-    private DeploymentRepository deploymentRepository;
+    private VersionDeploymentRepository versionDeploymentRepository;
 
     private ComponentPageGenerator generator;
     private Component component;
@@ -48,27 +48,27 @@ class ComponentPageGeneratorTest {
     void setUp() {
         component = new Component("my-component", new System("my-system"));
         generator = new ComponentPageGenerator(confluenceAdapter, templateRenderer, dtoFactory,
-                componentPageRepository, componentRepository, deploymentRepository);
-        lenient().when(deploymentRepository.existsCodeDeploymentForComponent(component.getId())).thenReturn(true);
+                componentPageRepository, componentRepository, versionDeploymentRepository);
+        lenient().when(versionDeploymentRepository.existsForComponent(component.getId())).thenReturn(true);
         lenient().when(dtoFactory.create(component)).thenReturn(ComponentPageDto.builder()
                 .componentName(component.getName()).flowMaxShow(50).flows(List.of()).build());
         lenient().when(templateRenderer.renderComponentPage(any())).thenReturn("content");
     }
 
     @Test
-    void skipsPageGenerationWhenComponentHasNoCodeDeployment() {
-        when(deploymentRepository.existsCodeDeploymentForComponent(component.getId())).thenReturn(false);
+    void skipsPageGenerationWhenComponentHasNoRelevantDeployment() {
+        when(versionDeploymentRepository.existsForComponent(component.getId())).thenReturn(false);
 
         assertThat(generator.generatePage("components-page", component)).isNull();
 
-        verifyNoInteractions(confluenceAdapter);
+        verifyNoInteractions(confluenceAdapter, dtoFactory, templateRenderer);
         verify(componentRepository, never()).lockById(any());
         verify(componentPageRepository, never()).save(any());
     }
 
     @Test
-    void generatesPageNormallyWhenCodeDeploymentAppearsLater() {
-        when(deploymentRepository.existsCodeDeploymentForComponent(component.getId())).thenReturn(false, true);
+    void generatesPageNormallyWhenRelevantDeploymentAppearsLater() {
+        when(versionDeploymentRepository.existsForComponent(component.getId())).thenReturn(false, true);
         when(componentPageRepository.findByComponentId(component.getId())).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("components-page", "my-component (my-system)"))
                 .thenReturn(Optional.empty());

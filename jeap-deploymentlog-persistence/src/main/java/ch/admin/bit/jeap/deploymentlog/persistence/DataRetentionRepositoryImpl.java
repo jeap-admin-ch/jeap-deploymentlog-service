@@ -8,9 +8,8 @@ import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRefreshTask;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionResult;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
-import ch.admin.bit.jeap.deploymentlog.domain.Flow;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowState;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -19,7 +18,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -33,10 +31,8 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
 
     private static final Set<DeploymentState> RETAINABLE_TERMINAL_STATES =
             Set.of(DeploymentState.SUCCESS, DeploymentState.FAILURE, DeploymentState.CANCELLED);
-    private static final Set<FlowState> TERMINAL_FLOW_STATES = Set.of(FlowState.CLOSED, FlowState.ABORTED);
     private static final ObjectMapper OBJECT_MAPPER = new JsonMapper();
     public static final String COMPONENT_VERSION_ID = "componentVersionId";
-    public static final String FLOW_IDS = "flowIds";
     public static final String DEPLOYMENT_IDS = "deploymentIds";
 
     private final EntityManager entityManager;
@@ -48,29 +44,6 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
             return List.of();
         }
 
-        List<DataRetentionCandidate> candidates = new ArrayList<>(findStandaloneCandidates(cutoff, limit));
-        if (candidates.size() < limit) {
-            List<UUID> flowIds = findTerminalFlowCandidates(cutoff, limit - candidates.size());
-            if (!flowIds.isEmpty()) {
-                candidates.addAll(entityManager.createQuery("""
-                                select deployment.id, deployment.flow.id, system.name
-                                from Deployment deployment
-                                join deployment.componentVersion componentVersion
-                                join componentVersion.component component
-                                join component.system system
-                                where deployment.flow.id in :flowIds
-                                order by deployment.startedAt, deployment.id
-                                """, Object[].class)
-                        .setParameter(FLOW_IDS, flowIds)
-                        .getResultList().stream()
-                        .map(row -> new DataRetentionCandidate((UUID) row[0], (UUID) row[1], (String) row[2]))
-                        .toList());
-            }
-        }
-        return candidates;
-    }
-
-    private List<DataRetentionCandidate> findStandaloneCandidates(ZonedDateTime cutoff, int limit) {
         return entityManager.createQuery("""
                         select deployment.id, system.name
                         from Deployment deployment
@@ -79,7 +52,6 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                         join component.system system
                         where deployment.startedAt < :cutoff
                         and deployment.state in :terminalStates
-                        and deployment.flow is null
                         and not exists (
                             select state.id from EnvironmentComponentVersionState state
                             where state.deployment = deployment
@@ -90,38 +62,8 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                 .setParameter("terminalStates", RETAINABLE_TERMINAL_STATES)
                 .setMaxResults(limit)
                 .getResultList().stream()
-                .map(row -> DataRetentionCandidate.standalone((UUID) row[0], (String) row[1]))
+                .map(row -> new DataRetentionCandidate((UUID) row[0], (String) row[1]))
                 .toList();
-    }
-
-    private List<UUID> findTerminalFlowCandidates(ZonedDateTime cutoff, int limit) {
-        return entityManager.createQuery("""
-                        select flow.id from Flow flow
-                        where flow.state in :terminalFlowStates
-                        and exists (
-                            select deployment.id from Deployment deployment where deployment.flow = flow
-                        )
-                        and not exists (
-                            select deployment.id from Deployment deployment
-                            where deployment.flow = flow
-                            and (deployment.startedAt >= :cutoff
-                                or deployment.state not in :terminalDeploymentStates
-                                or exists (
-                                    select state.id from EnvironmentComponentVersionState state
-                                    where state.deployment = deployment
-                                ))
-                        )
-                        and not exists (
-                            select referencingFlow.id from Flow referencingFlow
-                            where referencingFlow.abortedBy = flow
-                        )
-                        order by flow.bornAt, flow.id
-                        """, UUID.class)
-                .setParameter("cutoff", cutoff)
-                .setParameter("terminalFlowStates", TERMINAL_FLOW_STATES)
-                .setParameter("terminalDeploymentStates", RETAINABLE_TERMINAL_STATES)
-                .setMaxResults(limit)
-                .getResultList();
     }
 
     @Override
@@ -139,7 +81,6 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                         join fetch component.system system
                         join fetch deployment.environment environment
                         left join fetch deployment.changelog changelog
-                        left join fetch deployment.flow flow
                         where deployment.id in :deploymentIds
                         """, Deployment.class)
                 .setParameter(DEPLOYMENT_IDS, requestedIds)
@@ -152,30 +93,15 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                 .setParameter(DEPLOYMENT_IDS, requestedIds)
                 .getResultList());
 
-        List<Deployment> standaloneDeployments = requestedDeployments.stream()
-                .filter(deployment -> deployment.getFlow() == null)
+        List<Deployment> deletableDeployments = requestedDeployments.stream()
                 .filter(deployment -> isExpiredTerminalDeployment(deployment, cutoff, currentStateDeploymentIds))
                 .toList();
 
-        Set<UUID> requestedFlowIds = requestedDeployments.stream()
-                .map(Deployment::getFlow)
-                .filter(java.util.Objects::nonNull)
-                .map(Flow::getId)
-                .collect(java.util.stream.Collectors.toSet());
-        Set<UUID> deletableFlowIds = findStillDeletableFlowIds(
-                requestedFlowIds, requestedIds, cutoff, currentStateDeploymentIds);
-        List<Deployment> flowDeployments = requestedDeployments.stream()
-                .filter(deployment -> deployment.getFlow() != null)
-                .filter(deployment -> deletableFlowIds.contains(deployment.getFlow().getId()))
-                .toList();
-
-        List<Deployment> deletableDeployments = new ArrayList<>(standaloneDeployments);
-        deletableDeployments.addAll(flowDeployments);
         if (deletableDeployments.isEmpty()) {
             return DataRetentionResult.empty();
         }
 
-        DataRetentionResult result = snapshotResult(deletableDeployments, deletableFlowIds.size());
+        DataRetentionResult result = snapshotResult(deletableDeployments);
         Set<UUID> deletableDeploymentIds = deletableDeployments.stream()
                 .map(Deployment::getId)
                 .collect(java.util.stream.Collectors.toSet());
@@ -189,24 +115,8 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                 .map(Changelog::getId)
                 .collect(java.util.stream.Collectors.toSet());
 
-        if (!deletableFlowIds.isEmpty()) {
-            entityManager.createQuery("""
-                            update Deployment deployment set deployment.flow = null
-                            where deployment.id in :deploymentIds
-                            """)
-                    .setParameter(DEPLOYMENT_IDS, deletableDeploymentIds)
-                    .executeUpdate();
-            entityManager.clear();
-        }
-
         deletableDeploymentIds.stream()
                 .map(id -> entityManager.find(Deployment.class, id))
-                .filter(java.util.Objects::nonNull)
-                .forEach(entityManager::remove);
-        entityManager.flush();
-
-        deletableFlowIds.stream()
-                .map(id -> entityManager.find(Flow.class, id))
                 .filter(java.util.Objects::nonNull)
                 .forEach(entityManager::remove);
         entityManager.flush();
@@ -264,19 +174,19 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
         return OBJECT_MAPPER.readValue(payload, RefreshPayload.class).toResult();
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record RefreshPayload(Set<SystemEnvironmentPayload> systemEnvironments,
                                   Set<UUID> componentIds,
                                   Set<UUID> environmentIds,
                                   Set<String> jiraIssueKeys,
-                                  int deletedDeployments,
-                                  int deletedFlows) {
+                                  int deletedDeployments) {
 
         private static RefreshPayload from(DataRetentionResult result) {
             Set<SystemEnvironmentPayload> systemEnvironments = result.systemEnvironments().stream()
                     .map(SystemEnvironmentPayload::from)
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
             return new RefreshPayload(systemEnvironments, result.componentIds(), result.environmentIds(),
-                    result.jiraIssueKeys(), result.deletedDeployments(), result.deletedFlows());
+                    result.jiraIssueKeys(), result.deletedDeployments());
         }
 
         private DataRetentionResult toResult() {
@@ -284,7 +194,7 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                     .map(SystemEnvironmentPayload::toSystemEnv)
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
             return new DataRetentionResult(resultSystemEnvironments, componentIds, environmentIds, jiraIssueKeys,
-                    deletedDeployments, deletedFlows, Set.of());
+                    deletedDeployments, Set.of());
         }
     }
 
@@ -300,48 +210,15 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
         }
     }
 
-    private Set<UUID> findStillDeletableFlowIds(Set<UUID> flowIds,
-                                                 Set<UUID> requestedDeploymentIds,
-                                                 ZonedDateTime cutoff,
-                                                 Set<UUID> currentStateDeploymentIds) {
-        if (flowIds.isEmpty()) {
-            return Set.of();
-        }
-        List<Flow> flows = entityManager.createQuery("""
-                        select distinct flow from Flow flow
-                        left join fetch flow.deployments
-                        where flow.id in :flowIds
-                        """, Flow.class)
-                .setParameter(FLOW_IDS, flowIds)
-                .getResultList();
-        Set<UUID> referencedFlowIds = new HashSet<>(entityManager.createQuery("""
-                        select distinct flow.abortedBy.id from Flow flow
-                        where flow.abortedBy.id in :flowIds
-                        """, UUID.class)
-                .setParameter(FLOW_IDS, flowIds)
-                .getResultList());
-
-        return flows.stream()
-                .filter(flow -> TERMINAL_FLOW_STATES.contains(flow.getState()))
-                .filter(flow -> !referencedFlowIds.contains(flow.getId()))
-                .filter(flow -> !flow.getDeployments().isEmpty())
-                .filter(flow -> flow.getDeployments().stream().allMatch(deployment ->
-                        requestedDeploymentIds.contains(deployment.getId())
-                                && isExpiredTerminalDeployment(deployment, cutoff, currentStateDeploymentIds)))
-                .map(Flow::getId)
-                .collect(java.util.stream.Collectors.toSet());
-    }
-
     private boolean isExpiredTerminalDeployment(Deployment deployment,
                                                 ZonedDateTime cutoff,
                                                 Set<UUID> currentStateDeploymentIds) {
         return deployment.getStartedAt().isBefore(cutoff)
                 && RETAINABLE_TERMINAL_STATES.contains(deployment.getState())
-                && !currentStateDeploymentIds.contains(deployment.getId())
-                && (deployment.getFlow() == null || deployment.getFlow().getState() != FlowState.OPEN);
+                && !currentStateDeploymentIds.contains(deployment.getId());
     }
 
-    private DataRetentionResult snapshotResult(List<Deployment> deployments, int deletedFlows) {
+    private DataRetentionResult snapshotResult(List<Deployment> deployments) {
         Set<SystemEnv> systemEnvironments = new LinkedHashSet<>();
         Set<UUID> componentIds = new LinkedHashSet<>();
         Set<UUID> environmentIds = new LinkedHashSet<>();
@@ -358,7 +235,7 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
             }
         }
         return new DataRetentionResult(Set.copyOf(systemEnvironments), Set.copyOf(componentIds),
-                Set.copyOf(environmentIds), Set.copyOf(jiraIssueKeys), deployments.size(), deletedFlows,
+                Set.copyOf(environmentIds), Set.copyOf(jiraIssueKeys), deployments.size(),
                 deployments.stream().map(Deployment::getId).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }
 
@@ -380,16 +257,14 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
     }
 
     private void removeOrphanComponentVersions(Set<UUID> componentVersionIds) {
+        Set<UUID> legacyFlowVersions = findLegacyFlowVersions(componentVersionIds);
         for (UUID componentVersionId : componentVersionIds) {
+            if (legacyFlowVersions.contains(componentVersionId)) {
+                continue;
+            }
             Long references = entityManager.createQuery("""
                             select count(deployment) from Deployment deployment
                             where deployment.componentVersion.id = :componentVersionId
-                            """, Long.class)
-                    .setParameter(COMPONENT_VERSION_ID, componentVersionId)
-                    .getSingleResult();
-            references += entityManager.createQuery("""
-                            select count(flow) from Flow flow
-                            where flow.componentVersion.id = :componentVersionId
                             """, Long.class)
                     .setParameter(COMPONENT_VERSION_ID, componentVersionId)
                     .getSingleResult();
@@ -406,5 +281,22 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                 }
             }
         }
+    }
+
+    private Set<UUID> findLegacyFlowVersions(Set<UUID> componentVersionIds) {
+        // Recheck for every batch: a later rollout removes the legacy schema while this version is still running.
+        boolean legacySchemaPresent = !entityManager.createNativeQuery("""
+                        select table_name from information_schema.tables
+                        where table_schema = current_schema and lower(table_name) = 'flow'
+                        """, String.class).getResultList().isEmpty();
+        if (!legacySchemaPresent || componentVersionIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(entityManager.createNativeQuery("""
+                        select distinct component_version_id from flow
+                        where component_version_id in (:componentVersionIds)
+                        """, UUID.class)
+                .setParameter("componentVersionIds", componentVersionIds)
+                .getResultList());
     }
 }

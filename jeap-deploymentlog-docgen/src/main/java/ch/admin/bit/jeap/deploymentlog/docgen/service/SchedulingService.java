@@ -5,7 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
@@ -24,9 +24,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,7 +52,7 @@ public class SchedulingService {
     private final HousekeepingConfigProperties housekeepingConfig;
     private final DataRetentionRepository dataRetentionRepository;
     private final ComponentPageRepository componentPageRepository;
-    private final FlowRepository flowRepository;
+    private final VersionDeploymentRepository versionDeploymentRepository;
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
@@ -151,7 +149,7 @@ public class SchedulingService {
     }
 
     private void deleteComponentPageIfStillObsolete(ComponentPageCleanupCandidate candidate) {
-        if (flowRepository.existsForComponent(candidate.componentId())) {
+        if (versionDeploymentRepository.existsForComponent(candidate.componentId())) {
             log.info("Keeping component page {} because component {} now has a flow",
                     candidate.pageId(), candidate.componentId());
             return;
@@ -224,9 +222,6 @@ public class SchedulingService {
     }
 
     private void deleteRetentionCandidates(List<DataRetentionCandidate> candidates, ZonedDateTime cutoff) {
-        Map<UUID, List<DataRetentionCandidate>> candidatesByUnit = candidates.stream()
-                .collect(groupingBy(DataRetentionCandidate::retentionUnitId, LinkedHashMap::new,
-                        java.util.stream.Collectors.toList()));
         Set<UUID> allCandidateIds = candidates.stream().map(DataRetentionCandidate::deploymentId).collect(toSet());
         Map<UUID, DeploymentPage> pagesByDeploymentId = pageRepository
                 .findDeploymentPagesByDeploymentIds(allCandidateIds).stream()
@@ -234,18 +229,20 @@ public class SchedulingService {
         Set<UUID> approvedDeploymentIds = new HashSet<>();
         Set<UUID> deploymentsWithDeletedPages = new HashSet<>();
 
-        candidatesByUnit.values().forEach(unit -> {
-            List<UUID> unitDeploymentIds = unit.stream().map(DataRetentionCandidate::deploymentId).toList();
-            List<DeploymentPage> unitPages = unitDeploymentIds.stream()
-                    .map(pagesByDeploymentId::get)
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
-            PageCleanupResult cleanupResult = deleteRetentionUnitPages(unitPages);
-            deploymentsWithDeletedPages.addAll(cleanupResult.deletedPageDeploymentIds());
-            if (cleanupResult.successful()) {
-                approvedDeploymentIds.addAll(unitDeploymentIds);
+        for (DataRetentionCandidate candidate : candidates) {
+            DeploymentPage page = pagesByDeploymentId.get(candidate.deploymentId());
+            if (page == null) {
+                approvedDeploymentIds.add(candidate.deploymentId());
+            } else if (deleteConfluencePage(page)) {
+                deploymentsWithDeletedPages.add(candidate.deploymentId());
+                try {
+                    pageRepository.delete(page);
+                    approvedDeploymentIds.add(candidate.deploymentId());
+                } catch (RuntimeException ex) {
+                    log.error("Failed to delete deployment-page tracking; restoring its page", ex);
+                }
             }
-        });
+        }
 
         DataRetentionResult result;
         try {
@@ -258,8 +255,8 @@ public class SchedulingService {
         retainedDeploymentsWithDeletedPages.removeAll(result.deletedDeploymentIds());
         regenerateDeploymentPages(retainedDeploymentsWithDeletedPages);
         if (!result.isEmpty()) {
-            log.info("Data retention deleted {} deployments and {} flows before {}",
-                    result.deletedDeployments(), result.deletedFlows(), cutoff);
+            log.info("Data retention deleted {} deployments before {}",
+                    result.deletedDeployments(), cutoff);
         }
     }
 
@@ -270,23 +267,6 @@ public class SchedulingService {
         }
         docgenLocks.runIfLockAquiredBeforeTimeout(systemNames.get(index),
                 () -> runWithSystemLocks(systemNames, index + 1, task));
-    }
-
-    private PageCleanupResult deleteRetentionUnitPages(List<DeploymentPage> pages) {
-        List<UUID> deletedPageDeploymentIds = new ArrayList<>();
-        for (DeploymentPage page : pages) {
-            if (!deleteConfluencePage(page)) {
-                return new PageCleanupResult(false, Set.copyOf(deletedPageDeploymentIds));
-            }
-            deletedPageDeploymentIds.add(page.getDeploymentId());
-        }
-        try {
-            pages.forEach(pageRepository::delete);
-            return new PageCleanupResult(true, Set.copyOf(deletedPageDeploymentIds));
-        } catch (RuntimeException ex) {
-            log.error("Failed to delete deployment-page tracking for retention unit; restoring its pages", ex);
-            return new PageCleanupResult(false, Set.copyOf(deletedPageDeploymentIds));
-        }
     }
 
     private boolean deleteConfluencePage(DeploymentPage deploymentPage) {
@@ -303,9 +283,6 @@ public class SchedulingService {
 
     private void regenerateDeploymentPages(Set<UUID> deploymentIds) {
         deploymentIds.forEach(docgenAsyncService::triggerDocgenForDeployment);
-    }
-
-    private record PageCleanupResult(boolean successful, Set<UUID> deletedPageDeploymentIds) {
     }
 
     private void updateDeploymentListPages(Set<UUID> deploymentIds) {

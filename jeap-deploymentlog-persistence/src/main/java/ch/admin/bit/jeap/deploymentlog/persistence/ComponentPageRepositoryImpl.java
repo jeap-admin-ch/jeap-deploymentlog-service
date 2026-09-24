@@ -3,6 +3,9 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.Environment;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -19,6 +22,8 @@ import java.util.UUID;
 public class ComponentPageRepositoryImpl implements ComponentPageRepository {
 
     private final JpaComponentPageRepository repository;
+    private final FlowStageResolver stageResolver;
+    private final FlowStageProperties flowStageProperties;
 
     @Override
     public Optional<ComponentPage> findByComponentId(UUID componentId) {
@@ -38,18 +43,32 @@ public class ComponentPageRepositoryImpl implements ComponentPageRepository {
     @Override
     @Transactional(readOnly = true)
     public List<ComponentPageCleanupCandidate> findCleanupCandidates(int limit) {
-        return repository.findCleanupCandidates(PageRequest.of(0, limit));
+        if (!flowStageProperties.isEnabled()) {
+            return List.of();
+        }
+        return repository.findCleanupCandidates(relevantStageNames(), PageRequest.of(0, limit));
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int markCleanupAttemptedIfNoFlow(UUID componentId, ZonedDateTime attemptedAt) {
-        return repository.markCleanupAttemptedIfNoFlow(componentId, attemptedAt);
+        if (!flowStageProperties.isEnabled()) {
+            return 0;
+        }
+        return repository.markCleanupAttemptedIfNoFlow(componentId, attemptedAt, relevantStageNames());
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int deleteIfNoFlow(UUID componentId) {
-        return repository.deleteIfNoFlow(componentId);
+        if (!flowStageProperties.isEnabled()) {
+            return 0;
+        }
+        return repository.deleteIfNoFlow(componentId, relevantStageNames());
+    }
+
+    private List<String> relevantStageNames() {
+        return stageResolver.relevantEnvironments().stream()
+                .map(Environment::getName).toList();
     }
 }

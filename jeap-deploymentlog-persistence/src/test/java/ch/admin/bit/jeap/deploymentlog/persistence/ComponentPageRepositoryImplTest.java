@@ -10,13 +10,11 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.Flow;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -49,11 +47,22 @@ class ComponentPageRepositoryImplTest {
     @Autowired
     private DeploymentRepository deploymentRepository;
     @Autowired
-    private FlowRepository flowRepository;
-    @Autowired
     private EnvironmentRepository environmentRepository;
     @Autowired
     private EntityManager entityManager;
+    @Autowired
+    private ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository versions;
+
+    @BeforeEach
+    void stages() {
+        Environment start = new Environment("REF");
+        start.setDevelopment(true);
+        start.setStagingOrder(1);
+        environmentRepository.save(start);
+        Environment end = new Environment("PROD");
+        end.setStagingOrder(3);
+        environmentRepository.save(end);
+    }
 
     @Test
     void persistsTrackingByTechnicalComponentIdAndUpdatesItsLocation() {
@@ -108,6 +117,8 @@ class ComponentPageRepositoryImplTest {
         deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
         createFlow(withFlow);
         entityManager.flush();
+        assertThat(versions.existsForComponent(codeWithoutFlow.getId())).isFalse();
+        assertThat(versions.existsForComponent(withFlow.getId())).isTrue();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
@@ -154,6 +165,8 @@ class ComponentPageRepositoryImplTest {
         deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
         createFlow(withFlow);
         entityManager.flush();
+        assertThat(versions.existsForComponent(codeWithoutFlow.getId())).isFalse();
+        assertThat(versions.existsForComponent(withFlow.getId())).isTrue();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
@@ -215,6 +228,8 @@ class ComponentPageRepositoryImplTest {
         deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
         createFlow(withFlow);
         entityManager.flush();
+        assertThat(versions.existsForComponent(codeWithoutFlow.getId())).isFalse();
+        assertThat(versions.existsForComponent(withFlow.getId())).isTrue();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
@@ -247,7 +262,7 @@ class ComponentPageRepositoryImplTest {
 
     private void createFlow(Component component) {
         Deployment deployment = deploy(component, Set.of(DeploymentType.CODE));
-        flowRepository.save(Flow.start(FlowType.NEW, deployment, deployment.getEnvironment()));
+        deployment.getEnvironment().setStagingOrder(2);
     }
 
     private Component component(String componentName, String systemName) {

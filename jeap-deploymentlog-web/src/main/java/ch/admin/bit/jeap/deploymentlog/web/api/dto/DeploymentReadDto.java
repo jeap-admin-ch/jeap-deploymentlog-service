@@ -25,6 +25,8 @@ public class DeploymentReadDto {
     String stateMessage;
     DeploymentSequence sequence;
     Set<DeploymentType> deploymentTypes;
+    DeploymentStagingType stagingType;
+    Set<String> finalDeploymentEnvironments;
     String startedBy;
     DeploymentEnvironmentDto environment;
     DeploymentComponentVersionDto componentVersion;
@@ -45,6 +47,8 @@ public class DeploymentReadDto {
                 .sequence(deployment.getSequence())
                 .deploymentTypes(deployment.getDeploymentTypes() == null
                         ? Set.of() : Set.copyOf(deployment.getDeploymentTypes()))
+                .stagingType(deployment.getStagingType())
+                .finalDeploymentEnvironments(new TreeSet<>(deployment.getFinalDeploymentEnvironments()))
                 .startedBy(deployment.getStartedBy())
                 .environment(DeploymentEnvironmentDto.of(deployment.getEnvironment()))
                 .componentVersion(DeploymentComponentVersionDto.of(deployment.getComponentVersion()))

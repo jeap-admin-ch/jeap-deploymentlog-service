@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 @Component
 class VersionFlowDiagramRenderer {
 
-    private static final List<String> KNOWN_STAGES = List.of("DEV", "INT", "TEST", "REF", "ABN", "PROD");
     private static final List<String> FLOW_COLORS = List.of(
             "#0052cc", "#6554c0", "#00875a", "#ff8b00", "#de350b", "#00a3bf", "#403294", "#36b37e");
     private static final DateTimeFormatter MINUTE_FORMATTER =
@@ -131,7 +130,7 @@ class VersionFlowDiagramRenderer {
                 int y = TOP_MARGIN + (timestampCount - 1 - point.ordinal) * ORDINAL_SPACING;
                 points.add(new DiagramPoint(point.stage, point.deployment.getState(),
                         point.deployment.getStartedAt(), point.deployment.getPageUrl(),
-                        point.timestamp(), point.ordinal, point.lane, x, y, i == 0));
+                        point.timestamp(), point.ordinal, point.lane, x, y, i == 0, point.deployment.getType()));
             }
             if (!points.isEmpty()) {
                 paths.add(new FlowPath(flow.version(), FLOW_COLORS.get(flow.index() % FLOW_COLORS.size()),
@@ -151,24 +150,12 @@ class VersionFlowDiagramRenderer {
     }
 
     private List<String> orderedStages(List<ComponentFlowDto> flows) {
-        List<String> stages = flows.stream()
-                .filter(Objects::nonNull)
-                .map(ComponentFlowDto::getDeployments)
-                .filter(Objects::nonNull)
-                .flatMap(List::stream)
-                .filter(Objects::nonNull)
-                .map(ComponentFlowDeploymentDto::getStage)
-                .map(this::normalizeStage)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        List<String> orderedStages = KNOWN_STAGES.stream()
-                .filter(stages::contains)
-                .collect(Collectors.toCollection(ArrayList::new));
-        TreeSet<String> unknownStages = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        stages.stream().filter(stage -> !KNOWN_STAGES.contains(stage)).forEach(unknownStages::add);
-        orderedStages.addAll(unknownStages);
-        return orderedStages;
+        return flows.stream().filter(Objects::nonNull).map(ComponentFlowDto::getDeployments)
+                .filter(Objects::nonNull).flatMap(List::stream).filter(Objects::nonNull)
+                .filter(d -> normalizeStage(d.getStage()) != null)
+                .sorted(Comparator.comparingInt(ComponentFlowDeploymentDto::getStagingOrder)
+                        .thenComparing(ComponentFlowDeploymentDto::getStage))
+                .map(d -> normalizeStage(d.getStage())).filter(Objects::nonNull).distinct().toList();
     }
 
     private Map<String, List<StageRun>> identifyStageRuns(List<MutableFlow> flows) {
@@ -281,6 +268,9 @@ class VersionFlowDiagramRenderer {
         String tooltip = "%s | %s | %s | %s".formatted(
                 Objects.toString(flow.version(), ""), point.stage(),
                 Objects.toString(point.startedAt(), point.timestamp().toString()), state);
+        if (point.type() != null) {
+            tooltip += " | " + point.type();
+        }
         if (point.pageUrl() != null && !point.pageUrl().isBlank()) {
             svg.append("<a href=\"").append(xml(point.pageUrl())).append("\">");
         }
@@ -298,7 +288,7 @@ class VersionFlowDiagramRenderer {
             int labelWidth = Math.max(48, Math.min(280, version.length() * 7 + 14));
             svg.append("<rect x=\"").append(point.x() + 39).append(Y_ATTRIBUTE).append(point.y() - 13)
                     .append("\" width=\"").append(labelWidth).append("\" height=\"23\" rx=\"4\" ")
-                    .append("fill=\"#ffffff\" fill-opacity=\"0.94\" stroke=\"#a5adba\"/>")
+                    .append("fill=\"#ffffff\" fill-opacity=\"0.94\" stroke=\"").append(flow.color()).append("\"/>")
                     .append(TEXT_START).append(point.x() + 46).append(Y_ATTRIBUTE).append(point.y() + 3)
                     .append("\" fill=\"#172b4d\" font-size=\"11\" font-weight=\"bold\">")
                     .append(xml(abbreviateVersion(version))).append(TEXT_END);
@@ -360,7 +350,7 @@ class VersionFlowDiagramRenderer {
     }
 
     record DiagramPoint(String stage, String state, String startedAt, String pageUrl, Instant timestamp,
-                        int ordinal, int lane, int x, int y, boolean firstChronological) {
+                        int ordinal, int lane, int x, int y, boolean firstChronological, String type) {
     }
 
     private record MutableFlow(int index, String version, List<MutablePoint> points) {

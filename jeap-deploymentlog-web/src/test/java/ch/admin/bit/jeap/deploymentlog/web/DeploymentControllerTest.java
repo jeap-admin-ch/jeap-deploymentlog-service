@@ -110,7 +110,7 @@ class DeploymentControllerTest {
 
         verify(deploymentService, times(1)).findByExternalId(externalId);
 
-        verify(deploymentService, times(1)).createDeployment(
+        verify(deploymentService, times(1)).createDeploymentWithFinalEnvironments(
                 externalId,
                 deploymentCreateDto.getComponentVersion().getVersionName(),
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
@@ -121,7 +121,7 @@ class DeploymentControllerTest {
                 deploymentCreateDto.getComponentVersion().getSystemName(),
                 deploymentCreateDto.getComponentVersion().getComponentName(),
                 deploymentCreateDto.getEnvironmentName(),
-                "PROD",
+                deploymentCreateDto.getFinalDeploymentEnvironments(),
                 new DeploymentTarget(deploymentCreateDto.getTarget().getType(),
                      deploymentCreateDto.getTarget().getUrl(),
                      deploymentCreateDto.getTarget().getDetails()),
@@ -209,7 +209,7 @@ class DeploymentControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(flowStageResolver);
-        verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
+        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
     }
@@ -229,7 +229,7 @@ class DeploymentControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Unknown final deployment environment(s): UNKNOWN"));
 
-        verify(deploymentService, never()).createDeployment(any(), any(), any(), any(), any(), any(),
+        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
     }
@@ -481,7 +481,7 @@ class DeploymentControllerTest {
 
         verify(deploymentService, never()).findByExternalId(externalId);
 
-        verify(deploymentService, never()).createDeployment(
+        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -557,7 +557,7 @@ class DeploymentControllerTest {
 
         //then: a NOK check result blocks the deployment - no deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, never()).createDeployment(
+        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -590,7 +590,7 @@ class DeploymentControllerTest {
 
         //then: a WARNING check result does not block the deployment - the deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, times(1)).createDeployment(
+        verify(deploymentService, times(1)).createDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -615,7 +615,7 @@ class DeploymentControllerTest {
 
         //then
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, never()).createDeployment(
+        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 

@@ -26,6 +26,7 @@ class DeploymentControllerIT extends IntegrationTestBase {
     @SneakyThrows
     void searchDeployments_filtersPagesAndDoesNotExposeInternalIds() {
         DeploymentCreateDto dto = createDeploymentDto();
+        dto.getComponentVersion().setSystemName("ReadApiSystem");
         dto.setStartedAt(ZonedDateTime.parse("2007-12-03T10:15:30+01:00"));
         postDeployment(dto, "read-api-deployment");
         awaitUntilAsyncTasksCompleted();
@@ -36,7 +37,7 @@ class DeploymentControllerIT extends IntegrationTestBase {
                         .param("from", "2007-12-03T10:15:30+01:00")
                         .param("to", "2007-12-03T10:15:31+01:00")
                         .param("environment", "DEV")
-                        .param("system", "TestSystem")
+                        .param("system", "ReadApiSystem")
                         .param("component", "test")
                         .param("version", "1.2.3-4")
                         .param("jiraProject", "proj")
@@ -48,6 +49,8 @@ class DeploymentControllerIT extends IntegrationTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].externalId").value("read-api-deployment"))
+                .andExpect(jsonPath("$.content[0].stagingType").value("NEW"))
+                .andExpect(jsonPath("$.content[0].finalDeploymentEnvironments").isEmpty())
                 .andExpect(jsonPath("$.content[0].id").doesNotExist())
                 .andExpect(jsonPath("$.content[0].componentVersion.id").doesNotExist())
                 .andExpect(jsonPath("$.content[0].changelog.jiraIssueKeys[0]").value("PROJ-123"));

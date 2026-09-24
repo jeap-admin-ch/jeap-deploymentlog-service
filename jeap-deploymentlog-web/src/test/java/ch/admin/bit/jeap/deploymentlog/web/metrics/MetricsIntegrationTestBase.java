@@ -15,9 +15,6 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentUnit;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentUnitType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.Flow;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import ch.admin.bit.jeap.deploymentlog.web.DeploymentLogApplication;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
@@ -48,7 +45,7 @@ abstract class MetricsIntegrationTestBase {
 
     @Autowired protected DeploymentService deploymentService;
     @Autowired protected DeploymentRepository deploymentRepository;
-    @Autowired protected FlowRepository flowRepository;
+    @Autowired protected ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingService staging;
     @Autowired protected EnvironmentRepository environmentRepository;
     @Autowired protected SystemRepository systemRepository;
     @Autowired protected ComponentRepository componentRepository;
@@ -58,7 +55,7 @@ abstract class MetricsIntegrationTestBase {
     @Autowired protected MockMvc mockMvc;
     @MockitoBean private SchedulingService schedulingService;
 
-    protected Fixture createFixture(FlowType type) {
+    protected Fixture createFixture() {
         Fixture fixture = transaction().execute(status -> {
             String systemName = "metrics-" + UUID.randomUUID();
             var system = systemRepository.save(new ch.admin.bit.jeap.deploymentlog.domain.System(systemName));
@@ -75,13 +72,12 @@ abstract class MetricsIntegrationTestBase {
                     .startedAt(START).startedBy("test").sequence(DeploymentSequence.NEW)
                     .target(new DeploymentTarget("test", "https://target.example", "test"))
                     .deploymentTypes(Set.of(DeploymentType.CODE)).build());
-            flowRepository.save(Flow.start(type, deployment, environment));
-            return new Fixture(deployment.getExternalId(), systemName, type);
+            staging.prepare(deployment, java.util.List.of());
+            return new Fixture(deployment.getExternalId(), systemName);
         });
         // The fixture is persisted directly rather than through DeploymentService, so explicitly run the
         // reconciliation that represents the baseline registration performed for a real started deployment.
         metrics.refreshDeploymentMetrics();
-        metrics.refreshOpenFlowGauges();
         return fixture;
     }
 
@@ -97,10 +93,6 @@ abstract class MetricsIntegrationTestBase {
         }
     }
 
-    protected double openFlows(Fixture fixture) {
-        return registry.get(DeploymentFlowMetrics.FLOW_OPEN).tag("system", fixture.system()).gauge().value();
-    }
-
-    protected record Fixture(String externalId, String system, FlowType type) { }
+    protected record Fixture(String externalId, String system) { }
 
 }

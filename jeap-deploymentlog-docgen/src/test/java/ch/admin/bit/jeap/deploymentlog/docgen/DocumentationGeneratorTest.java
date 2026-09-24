@@ -145,7 +145,7 @@ class DocumentationGeneratorTest {
     void dataRetentionRefreshReportsDeferralWhenStructureIsBusy() {
         doReturn(Optional.empty()).when(documentationStructureLockMock).tryRunLocked(any());
         DataRetentionResult result = new DataRetentionResult(
-                Set.of(), Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID()));
+                Set.of(), Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID()));
 
         boolean completed = documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(result);
 

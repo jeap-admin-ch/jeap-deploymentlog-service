@@ -30,7 +30,7 @@ class FlowStageConfigurationValidatorTest {
 
         verify(flowStageResolver).resolveStartEnvironment();
         verify(flowStageResolver).resolveDefaultFinalDeploymentEnvironment();
-        verify(flowStageResolver).validateProductiveEnvironmentExists();
+        verify(flowStageResolver).relevantEnvironments();
     }
 
     @Test
@@ -48,19 +48,19 @@ class FlowStageConfigurationValidatorTest {
     }
 
     @Test
-    void abortsStartupWhenNoProductiveEnvironmentExists() {
+    void abortsStartupWhenRelevantStageOrderingIsAmbiguous() {
         FlowStageProperties properties = new FlowStageProperties();
         when(flowStageResolver.resolveStartEnvironment()).thenReturn(new Environment("DEV"));
         when(flowStageResolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(new Environment("REF"));
-        doThrow(new InvalidFlowStageConfigurationException("No productive environment"))
-                .when(flowStageResolver).validateProductiveEnvironmentExists();
+        doThrow(new InvalidFlowStageConfigurationException("Ambiguous stage order"))
+                .when(flowStageResolver).relevantEnvironments();
         FlowStageConfigurationValidator validator =
                 new FlowStageConfigurationValidator(properties, flowStageResolver);
         DefaultApplicationArguments arguments = new DefaultApplicationArguments();
 
         assertThatThrownBy(() -> validator.run(arguments))
                 .isInstanceOf(InvalidFlowStageConfigurationException.class)
-                .hasMessage("No productive environment");
+                .hasMessage("Ambiguous stage order");
     }
 
     @Test
@@ -73,6 +73,6 @@ class FlowStageConfigurationValidatorTest {
 
         verify(flowStageResolver, never()).resolveStartEnvironment();
         verify(flowStageResolver, never()).resolveDefaultFinalDeploymentEnvironment();
-        verify(flowStageResolver, never()).validateProductiveEnvironmentExists();
+        verify(flowStageResolver, never()).relevantEnvironments();
     }
 }

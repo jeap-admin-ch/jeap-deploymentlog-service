@@ -129,6 +129,14 @@ productive flag), `componentVersion` (including its internal id, parsed version 
 component with its system), `links` and `properties`. This existing response retains internal database ids for
 backwards compatibility. Returns `404` if the external deployment id is unknown.
 
+### Staging history fields
+
+Deployment creation accepts `finalDeploymentEnvironments`, a list of explicit AutoStaging targets. All supplied names
+are validated and retained on that deployment. Missing or empty means no AutoStaging; the configured end stage is
+not used as a request default. Deployment reads expose this list and `stagingType` (`NEW`, `RETRY`, `ROLLBACK`,
+`AD_HOC`). The latter is computed for new relevant CODE deployments; it is null for historical or irrelevant records.
+`deploymentTypes` continues to describe CODE, CONFIG and INFRASTRUCTURE changes independently.
+
 ### `GET /api/deployment-records` — search deployment records
 
 Roles `deploymentlog-read` or `deploymentlog-write`. The access check can be disabled specifically for the two

@@ -400,7 +400,7 @@ class DocgenAsyncServiceTest {
         DataRetentionResult result = new DataRetentionResult(
                 Set.of(new SystemEnv(UUID.randomUUID(), "system-b", UUID.randomUUID()),
                         new SystemEnv(UUID.randomUUID(), "system-a", UUID.randomUUID())),
-                Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID()));
+                Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID()));
         DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(result);
         when(documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(refreshTask.result())).thenReturn(true);
 
@@ -420,7 +420,7 @@ class DocgenAsyncServiceTest {
         when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
         DataRetentionResult result = new DataRetentionResult(
                 Set.of(new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID())),
-                Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID()));
+                Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID()));
         DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(result);
         doThrow(new IllegalStateException("Confluence unavailable"))
                 .when(documentationGenerator).updatePagesAfterDataRetentionIfStructureAvailable(any());
@@ -436,7 +436,7 @@ class DocgenAsyncServiceTest {
         when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
         DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(new DataRetentionResult(
                 Set.of(new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID())),
-                Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID())));
+                Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID())));
         when(documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(refreshTask.result())).thenReturn(false);
 
         docgenAsyncService.triggerUpdatesAfterDataRetention(refreshTask);
@@ -452,7 +452,7 @@ class DocgenAsyncServiceTest {
         when(lockProvider.lock(any())).thenReturn(Optional.empty());
         DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(new DataRetentionResult(
                 Set.of(new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID())),
-                Set.of(), Set.of(), Set.of(), 1, 0, Set.of(UUID.randomUUID())));
+                Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID())));
 
         docgenAsyncService.triggerUpdatesAfterDataRetention(refreshTask);
 

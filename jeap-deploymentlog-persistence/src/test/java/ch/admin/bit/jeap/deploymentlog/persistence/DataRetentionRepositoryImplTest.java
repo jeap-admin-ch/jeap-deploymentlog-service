@@ -17,9 +17,6 @@ import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionState;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionStateRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.Flow;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import jakarta.persistence.EntityManager;
@@ -42,8 +39,6 @@ class DataRetentionRepositoryImplTest {
 
     @Autowired
     private DataRetentionRepository dataRetentionRepository;
-    @Autowired
-    private FlowRepository flowRepository;
     @Autowired
     private SystemRepository systemRepository;
     @Autowired
@@ -86,40 +81,34 @@ class DataRetentionRepositoryImplTest {
     }
 
     @Test
-    void protectsOpenFlowAndRequiresEveryDeploymentOfTerminalFlowToExpire() {
-        Deployment openDeployment = terminalDeployment(cutoff.minusDays(5), "JEAP-1");
-        save(openDeployment);
-        flowRepository.save(Flow.start(FlowType.NEW, openDeployment, environment));
+    void expiresDeploymentsIndividuallyRegardlessOfOtherDeploymentsOfTheVersion() {
+        Deployment firstVersionDeployment = terminalDeployment(cutoff.minusDays(5), "JEAP-1");
+        save(firstVersionDeployment);
+        firstVersionDeployment.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.NEW);
 
-        Deployment oldInClosedFlow = terminalDeployment(cutoff.minusDays(4), "JEAP-2", "2.0.0");
-        Deployment recentInClosedFlow = terminalDeployment(cutoff.plusDays(1), "JEAP-2", "2.0.0");
-        save(oldInClosedFlow, recentInClosedFlow);
-        Flow mixedFlow = Flow.start(FlowType.NEW, oldInClosedFlow, environment);
-        mixedFlow.add(recentInClosedFlow);
-        mixedFlow.closeIfTargetReached(recentInClosedFlow);
-        flowRepository.save(mixedFlow);
+        Deployment oldDeployment = terminalDeployment(cutoff.minusDays(4), "JEAP-2", "2.0.0");
+        Deployment recentDeployment = terminalDeployment(cutoff.plusDays(1), "JEAP-2", "2.0.0");
+        save(oldDeployment, recentDeployment);
+        oldDeployment.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.NEW);
+        recentDeployment.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.RETRY);
         entityManager.flush();
 
-        assertThat(candidateIds()).isEmpty();
+        assertThat(candidateIds()).containsExactlyInAnyOrder(firstVersionDeployment.getId(), oldDeployment.getId());
     }
 
     @Test
-    void deletesCompleteTerminalFlowAndOrphanDetailsButKeepsStructure() {
+    void deletesExpiredDeploymentsAndOrphanDetailsButKeepsStructure() {
         Deployment first = terminalDeployment(cutoff.minusDays(5), "jeap-1", "1.0.0");
         first.cancelled(cutoff.minusDays(5).plusMinutes(2), null);
         Deployment second = terminalDeployment(cutoff.minusDays(4), "JEAP-1", "1.0.0");
         save(first, second);
-        Flow flow = Flow.start(FlowType.NEW, first, environment);
-        flow.add(second);
-        flow.closeIfTargetReached(second);
-        flowRepository.save(flow);
+        first.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.NEW);
+        second.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.RETRY);
         entityManager.flush();
 
         List<DataRetentionCandidate> candidates = dataRetentionRepository.findDeletionCandidates(cutoff, 500);
         assertThat(candidates).extracting(DataRetentionCandidate::deploymentId)
                 .containsExactlyInAnyOrder(first.getId(), second.getId());
-        assertThat(candidates).extracting(DataRetentionCandidate::retentionUnitId)
-                .containsOnly(flow.getId());
         assertThat(candidates).extracting(DataRetentionCandidate::systemName)
                 .containsOnly("test-system");
 
@@ -129,7 +118,6 @@ class DataRetentionRepositoryImplTest {
         entityManager.clear();
 
         assertThat(result.deletedDeployments()).isEqualTo(2);
-        assertThat(result.deletedFlows()).isEqualTo(1);
         assertThat(result.deletedDeploymentIds()).containsExactlyInAnyOrder(first.getId(), second.getId());
         assertThat(result.componentIds()).containsExactly(component.getId());
         assertThat(result.jiraIssueKeys()).containsExactlyInAnyOrder("jeap-1", "JEAP-1");
@@ -141,7 +129,6 @@ class DataRetentionRepositoryImplTest {
         assertThat(refreshTasks.getFirst().result().jiraIssueKeys())
                 .containsExactlyInAnyOrder("jeap-1", "JEAP-1");
         assertThat(count("Deployment")).isZero();
-        assertThat(count("Flow")).isZero();
         assertThat(count("ComponentVersion")).isZero();
         assertThat(count("Changelog")).isZero();
         assertThat(count("Component")).isEqualTo(1);
@@ -154,21 +141,37 @@ class DataRetentionRepositoryImplTest {
     }
 
     @Test
-    void rechecksCompleteFlowWhenOnlyPartOfCandidateSetIsApproved() {
+    void readsPendingRefreshTasksWrittenWithObsoleteFields() {
+        Deployment deployment = terminalDeployment(cutoff.minusDays(5), "JEAP-1");
+        save(deployment);
+        DataRetentionResult result = dataRetentionRepository.deleteCandidates(Set.of(deployment.getId()), cutoff);
+        String payload = (String) entityManager.createNativeQuery(
+                "select payload from data_retention_refresh_task", String.class).getSingleResult();
+        assertThat(payload).doesNotContain("deletedFlows");
+        entityManager.createNativeQuery("update data_retention_refresh_task set payload = :payload")
+                .setParameter("payload", "{\"deletedFlows\":3," + payload.substring(1))
+                .executeUpdate();
+
+        assertThat(dataRetentionRepository.findPendingRefreshTasks(10)).singleElement()
+                .satisfies(task -> {
+                    assertThat(task.result().deletedDeployments()).isEqualTo(result.deletedDeployments());
+                    assertThat(task.result().componentIds()).isEqualTo(result.componentIds());
+                });
+    }
+
+    @Test
+    void deletesOnlyRequestedDeploymentsOfTheVersion() {
         Deployment first = terminalDeployment(cutoff.minusDays(5), "JEAP-1", "1.0.0");
         Deployment second = terminalDeployment(cutoff.minusDays(4), "JEAP-1", "1.0.0");
         save(first, second);
-        Flow flow = Flow.start(FlowType.NEW, first, environment);
-        flow.add(second);
-        flow.closeIfTargetReached(second);
-        flowRepository.save(flow);
+        first.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.NEW);
+        second.classify(ch.admin.bit.jeap.deploymentlog.domain.DeploymentStagingType.RETRY);
         entityManager.flush();
 
         DataRetentionResult result = dataRetentionRepository.deleteCandidates(Set.of(first.getId()), cutoff);
 
-        assertThat(result.isEmpty()).isTrue();
-        assertThat(count("Deployment")).isEqualTo(2);
-        assertThat(count("Flow")).isEqualTo(1);
+        assertThat(result.deletedDeployments()).isEqualTo(1);
+        assertThat(count("Deployment")).isEqualTo(1);
     }
 
     private Set<UUID> candidateIds() {

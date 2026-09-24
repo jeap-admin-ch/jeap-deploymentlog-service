@@ -34,8 +34,7 @@ public class DeploymentCreateDto {
 
     @ArraySchema(schema = @Schema(example = "PROD"), arraySchema = @Schema(
             description = "Optional final environments of the current automated staging. The environment with the " +
-                    "highest configured stagingOrder is used. If omitted or empty, the configured default final " +
-                    "environment (or productive=true fallback) is used."))
+                    "highest configured stagingOrder is used. Omitted or empty means no automated staging."))
     List<String> finalDeploymentEnvironments;
 
     DeploymentUnit deploymentUnit;

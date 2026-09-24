@@ -44,17 +44,6 @@ class FlowStageResolverTest {
 
         assertThat(resolver.resolveStartEnvironment()).isSameAs(ref);
         assertThat(resolver.resolveDefaultFinalDeploymentEnvironment()).isSameAs(abn);
-        resolver.validateProductiveEnvironmentExists();
-    }
-
-    @Test
-    void rejectsConfigurationWithoutProductiveEnvironmentEvenWithExplicitFinalEnvironment() {
-        properties.setDefaultFinalDeploymentEnvironment("REF");
-        prod.setProductive(false);
-
-        assertThatThrownBy(resolver::validateProductiveEnvironmentExists)
-                .isInstanceOf(InvalidFlowStageConfigurationException.class)
-                .hasMessageContaining("at least one environment with productive=true");
     }
 
     @Test
@@ -95,9 +84,9 @@ class FlowStageResolverTest {
     }
 
     @Test
-    void emptyRequestUsesDefaultFinalEnvironment() {
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(List.of())).isSameAs(prod);
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(null)).isSameAs(prod);
+    void emptyRequestMeansNoAutoStaging() {
+        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(List.of())).isNull();
+        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(null)).isNull();
     }
 
     @Test

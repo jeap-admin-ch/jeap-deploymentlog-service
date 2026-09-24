@@ -60,9 +60,7 @@ class DeploymentServiceTest {
     @Mock
     private EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     @Mock
-    private FlowAssignmentService flowAssignmentService;
-    @Mock
-    private FlowLifecycleService flowLifecycleService;
+    private DeploymentStagingService deploymentStagingService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
@@ -228,9 +226,21 @@ class DeploymentServiceTest {
                 .findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never())
                 .save(any(EnvironmentComponentVersionState.class));
-        verify(flowLifecycleService).process(deployment);
         assertThat(deployment.getProperties())
                 .containsEntry("test-prop", "test-value");
+    }
+
+    @Test
+    void snapshotCreationLocksComponentBeforeLookupAndInsert() {
+        Deployment deployment = getDeploymentWithTypes(DeploymentType.CODE);
+        deployment.success(ZonedDateTime.now(), "done");
+        deploymentService.updateEnvironmentComponentVersionState(deployment);
+
+        var ordered = inOrder(componentRepository, environmentComponentVersionStateRepository);
+        ordered.verify(componentRepository).lockById(deployment.getComponentVersion().getComponent().getId());
+        ordered.verify(environmentComponentVersionStateRepository)
+                .findByEnvironmentAndComponent(deployment.getEnvironment(), deployment.getComponentVersion().getComponent());
+        ordered.verify(environmentComponentVersionStateRepository).save(any(EnvironmentComponentVersionState.class));
     }
 
     @Test
@@ -308,7 +318,6 @@ class DeploymentServiceTest {
 
         verify(environmentComponentVersionStateRepository, never()).findByEnvironmentAndComponent(any(Environment.class), any(Component.class));
         verify(environmentComponentVersionStateRepository, never()).save(any(EnvironmentComponentVersionState.class));
-        verify(flowLifecycleService, never()).process(any());
 
     }
 

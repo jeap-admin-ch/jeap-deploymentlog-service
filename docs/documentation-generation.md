@@ -85,18 +85,32 @@ the technical component UUID, not its title: the component UUID, Confluence page
 persisted together. This keeps the page id and Confluence history stable when a component changes systems. Moving a
 system between groups needs no component-page operation because the complete system subtree moves with it.
 
-The component page shows the latest flows ordered by `bornAt` descending and flow id descending as a deterministic
-tie-breaker. `component-flow-max-show` limits only this Confluence view; flow rows are never deleted. Each row contains
-the version, start time, stable flow type (`NEW`, `RETRY`, `ROLLBACK` or `AD_HOC`) and state, effective target stage,
-Jira issues and all deployment attempts in reverse chronological order with stage and state icons. `ABORTED` and `AD_HOC`
-rows are highlighted. Existing deployment pages are linked through a stable URL containing their persisted page id;
-a later regeneration adds links that were unavailable during an earlier partial run. Jira keys come exclusively from
-the persisted deployment changelogs, are deduplicated and sorted, and are turned into ordinary links using the
-configured Jira base URL. Rendering never performs a live Jira request.
+A version flow is a read-side grouping of CODE deployments by component and version name, not a persisted
+entity. Each version appears once in the table and once as a line in the diagram, with one nested row and one
+point per deployment. Versions are ordered by their latest deployment, then version name; `component-flow-max-show`
+limits the number of displayed versions without truncating their retained deployment history.
 
-Only a `CLOSED` flow shows its successful duration, measured from `bornAt` to the completion timestamp of the
-successful target-stage deployment. `OPEN` and `ABORTED` show no successful duration. Negative durations are treated
-as inconsistent data, logged and omitted.
+Each deployment has its own status and staging type (`NEW`, `RETRY`, `ROLLBACK`, `AD_HOC`), and retains its explicit
+`finalDeploymentEnvironments`. The existing `deploymentTypes` (`CODE`, `CONFIG`, `INFRASTRUCTURE`) remain a separate
+classification of what changed. AD_HOC deployment rows are highlighted. Relevant stages run from the configured
+start through the configured end stage, inclusive, in `stagingOrder` order. Diagram axes use that same order.
+
+- `RETRY`: the version is currently deployed on this stage, or earlier attempts on this stage never succeeded.
+- `ROLLBACK`: the version previously succeeded on this stage but is no longer deployed there.
+- `NEW`: the version has no earlier attempt on this stage and either this is the start stage or it previously
+  succeeded on the immediately preceding relevant stage.
+- `AD_HOC`: the first attempt on a higher relevant stage without a successful immediate predecessor.
+
+Successful predecessors must have completed before the new deployment starts. Failed or cancelled attempts do not
+count as deployed. Reaching the end stage does not close a version or prevent further attempts.
+
+Latency is the difference between the start timestamps of the first successful deployment on the start stage and
+the first successful deployment on the end stage. Missing or negative durations are omitted. Historical deployments
+are not reclassified: relevant CODE deployments remain visible, but their staging type remains blank.
+
+Deployment details use stable links containing the persisted Confluence page id. Jira keys come from all retained
+deployment changelogs, are deduplicated and sorted, and link to the configured Jira base URL. Rendering makes no
+live Jira request.
 
 ### Jira project pages
 
@@ -165,7 +179,7 @@ flowchart TD
 Generating the pages for one deployment first reconciles the structural pages, then walks the deployment path —
 the grouped or ungrouped system page, its `Deployments (<SystemName>)` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. The affected component page is then
-rendered from the committed flow and deployment state. Jira project pages referenced by that deployment are updated
+rendered from the committed deployment history. Jira project pages referenced by that deployment are updated
 under `Changes`. All ancestor pages are therefore refreshed with the same run,
 which is why recording a deployment also keeps the aggregated views current.
 

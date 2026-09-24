@@ -9,11 +9,10 @@ public record DataRetentionResult(
         Set<UUID> environmentIds,
         Set<String> jiraIssueKeys,
         int deletedDeployments,
-        int deletedFlows,
         Set<UUID> deletedDeploymentIds) {
 
     public static DataRetentionResult empty() {
-        return new DataRetentionResult(Set.of(), Set.of(), Set.of(), Set.of(), 0, 0, Set.of());
+        return new DataRetentionResult(Set.of(), Set.of(), Set.of(), Set.of(), 0, Set.of());
     }
 
     public boolean isEmpty() {

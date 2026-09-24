@@ -94,9 +94,21 @@ public class Deployment {
     @Enumerated(EnumType.STRING)
     private Set<DeploymentType> deploymentTypes = new HashSet<>();
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @ToString.Exclude
-    private Flow flow;
+    @Enumerated(EnumType.STRING)
+    private DeploymentStagingType stagingType;
+
+    @ElementCollection
+    @CollectionTable(name = "deployment_final_environments", joinColumns = @JoinColumn(name = "deployment_id"))
+    @Column(name = "environment_name")
+    private Set<String> finalDeploymentEnvironments = new HashSet<>();
+
+    public void classify(DeploymentStagingType stagingType) {
+        this.stagingType = stagingType;
+    }
+
+    public void setFinalDeploymentEnvironments(Collection<String> environmentNames) {
+        this.finalDeploymentEnvironments = new HashSet<>(environmentNames == null ? Set.of() : environmentNames);
+    }
 
     @Builder
     @SuppressWarnings("java:S107")
@@ -150,13 +162,6 @@ public class Deployment {
         this.lastModified = ZonedDateTime.now();
         this.state = DeploymentState.CANCELLED;
         this.stateMessage = StringUtils.abbreviate(stateMessage, 1000);
-    }
-
-    void assignTo(Flow flow) {
-        if (this.flow != null && this.flow != flow) {
-            throw new IllegalStateException("Deployment is already assigned to another flow");
-        }
-        this.flow = flow;
     }
 
     public void suppressPageGeneration() {

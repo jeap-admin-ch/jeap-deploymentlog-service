@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.8.0] - 2026-09-29
+
+### Changed
+
+- Widen the component page's deployment column, shorten the targets heading to "Staging-Ziele", and match SVG
+  deployment label borders to their version line colors.
+- Replace persisted version flows with deployment history grouped by component and version. Classify each new
+  relevant deployment independently as NEW, RETRY, ROLLBACK or AD_HOC; historical deployments are not reclassified.
+- Retain every explicit AutoStaging target per deployment. Missing or empty targets now mean no AutoStaging.
+  Derive AutoStaging status from the latest start-stage request, excluding rollbacks, independently of its outcome.
+- Replace flow lifecycle metrics with distinct successful start/end version counts, first-success staging latency
+  and per-component AutoStaging status, derived directly from retained deployments. Remove flow type/state from
+  component tables and expose deployment types and targets instead.
+- V33 adds deployment staging fields and targets while retaining the legacy flow schema; existing deployments are not reclassified.
+
 ## [16.7.0] - 2026-09-23
 
 ### Added
