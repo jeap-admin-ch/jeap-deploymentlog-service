@@ -61,6 +61,11 @@ public class FlowRepositoryImpl implements FlowRepository {
     }
 
     @Override
+    public boolean existsForComponent(UUID componentId) {
+        return jpaFlowRepository.existsByComponentVersionComponentId(componentId);
+    }
+
+    @Override
     public List<OpenFlowMetricValue> countOpenFlowsBySystemComponentAndType() {
         return jpaFlowRepository.countByStateGroupedBySystemComponentAndType(FlowState.OPEN).stream()
                 .map(row -> new OpenFlowMetricValue(

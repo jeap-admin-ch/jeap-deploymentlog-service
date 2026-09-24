@@ -19,6 +19,8 @@ public interface FlowRepository {
 
     List<Flow> findLatestForComponent(UUID componentId, int limit);
 
+    boolean existsForComponent(UUID componentId);
+
     List<OpenFlowMetricValue> countOpenFlowsBySystemComponentAndType();
 
     List<FlowMetricIdentity> findFlowMetricIdentities();

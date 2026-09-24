@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -20,7 +21,7 @@ import java.util.UUID;
 import java.util.Set;
 
 @Repository
-interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID> {
+interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID>, JpaSpecificationExecutor<Deployment> {
 
     @Query("""
             select count(d) > 0 from Deployment d left join DeploymentPage p on d.id = p.deploymentId

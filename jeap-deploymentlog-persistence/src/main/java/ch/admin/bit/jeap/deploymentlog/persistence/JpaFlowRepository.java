@@ -46,6 +46,8 @@ interface JpaFlowRepository extends CrudRepository<Flow, UUID> {
             """)
     List<Flow> findLatestForComponent(@Param("componentId") UUID componentId, Pageable pageable);
 
+    boolean existsByComponentVersionComponentId(UUID componentId);
+
     @Query("""
             select system.name, component.name, flow.type,
                    sum(case when flow.state = :state then 1 else 0 end)

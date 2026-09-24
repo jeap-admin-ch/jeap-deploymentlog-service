@@ -10,6 +10,9 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.Flow;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowType;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import jakarta.persistence.EntityManager;
@@ -45,6 +48,8 @@ class ComponentPageRepositoryImplTest {
     private SystemRepository systemRepository;
     @Autowired
     private DeploymentRepository deploymentRepository;
+    @Autowired
+    private FlowRepository flowRepository;
     @Autowired
     private EnvironmentRepository environmentRepository;
     @Autowired
@@ -91,31 +96,31 @@ class ComponentPageRepositoryImplTest {
                 "00000000-0000-0000-0000-000000000001", "tied-a", tiedSystem);
         Component tiedAttemptB = componentWithId(
                 "00000000-0000-0000-0000-000000000002", "tied-b", tiedSystem);
-        Component codeOnly = component("code-only", "epsilon-system");
-        Component codeAndConfig = component("code-and-config", "delta-system");
+        Component codeWithoutFlow = component("code-without-flow", "epsilon-system");
+        Component withFlow = component("with-flow", "delta-system");
         track(neverAttemptedBeta);
         track(neverAttemptedAlpha);
         track(oldestAttempt);
         track(tiedAttemptA);
         track(tiedAttemptB);
-        track(codeOnly);
-        track(codeAndConfig);
-        deploy(codeOnly, Set.of(DeploymentType.CODE));
-        deploy(codeAndConfig, Set.of(DeploymentType.CODE, DeploymentType.CONFIG));
+        track(codeWithoutFlow);
+        track(withFlow);
+        deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
+        createFlow(withFlow);
         entityManager.flush();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
         ZonedDateTime now = ZonedDateTime.now();
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
                 oldestAttempt.getId(), now.minusHours(2))).isEqualTo(1);
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
                 tiedAttemptA.getId(), now.minusHours(1))).isEqualTo(1);
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
                 tiedAttemptB.getId(), now.minusHours(1))).isEqualTo(1);
 
         List<ComponentPageCleanupCandidate> neverAttempted = List.of(
-                        candidate(neverAttemptedBeta), candidate(neverAttemptedAlpha))
+                        candidate(neverAttemptedBeta), candidate(neverAttemptedAlpha), candidate(codeWithoutFlow))
                 .stream()
                 .sorted(Comparator.comparing(ComponentPageCleanupCandidate::systemName)
                         .thenComparing(ComponentPageCleanupCandidate::componentId))
@@ -128,6 +133,7 @@ class ComponentPageRepositoryImplTest {
         List<ComponentPageCleanupCandidate> expected = List.of(
                 neverAttempted.get(0),
                 neverAttempted.get(1),
+                neverAttempted.get(2),
                 candidate(oldestAttempt),
                 tiedAttempts.get(0),
                 tiedAttempts.get(1));
@@ -138,36 +144,36 @@ class ComponentPageRepositoryImplTest {
 
     @Test
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
-    void atomicallyMarksCleanupAttemptOnlyWhileComponentHasNoCodeDeployment() {
+    void atomicallyMarksCleanupAttemptOnlyWhileComponentHasNoFlow() {
         Component withoutDeployment = component("without-deployment", "system-a");
-        Component configOnly = component("config-only", "system-b");
-        Component codeOnly = component("code-only", "system-c");
+        Component codeWithoutFlow = component("code-without-flow", "system-b");
+        Component withFlow = component("with-flow", "system-c");
         track(withoutDeployment);
-        track(configOnly);
-        track(codeOnly);
-        deploy(configOnly, Set.of(DeploymentType.CONFIG));
-        deploy(codeOnly, Set.of(DeploymentType.CODE));
+        track(codeWithoutFlow);
+        track(withFlow);
+        deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
+        createFlow(withFlow);
         entityManager.flush();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
         ZonedDateTime attemptedAt = ZonedDateTime.now().minusMinutes(5).truncatedTo(ChronoUnit.MICROS);
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
                 withoutDeployment.getId(), attemptedAt)).isEqualTo(1);
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
-                configOnly.getId(), attemptedAt)).isEqualTo(1);
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
-                codeOnly.getId(), attemptedAt)).isZero();
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
+                codeWithoutFlow.getId(), attemptedAt)).isEqualTo(1);
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
+                withFlow.getId(), attemptedAt)).isZero();
 
         assertThat(componentPageRepository.findByComponentId(withoutDeployment.getId()))
                 .get()
                 .satisfies(page -> assertThat(page.getCleanupAttemptedAt().toInstant())
                         .isEqualTo(attemptedAt.toInstant()));
-        assertThat(componentPageRepository.findByComponentId(configOnly.getId()))
+        assertThat(componentPageRepository.findByComponentId(codeWithoutFlow.getId()))
                 .get()
                 .satisfies(page -> assertThat(page.getCleanupAttemptedAt().toInstant())
                         .isEqualTo(attemptedAt.toInstant()));
-        assertThat(componentPageRepository.findByComponentId(codeOnly.getId()))
+        assertThat(componentPageRepository.findByComponentId(withFlow.getId()))
                 .get()
                 .extracting(ComponentPage::getCleanupAttemptedAt)
                 .isNull();
@@ -181,7 +187,7 @@ class ComponentPageRepositoryImplTest {
         entityManager.flush();
         TestTransaction.flagForCommit();
         TestTransaction.end();
-        assertThat(componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        assertThat(componentPageRepository.markCleanupAttemptedIfNoFlow(
                 component.getId(), ZonedDateTime.now().minusMinutes(5))).isEqualTo(1);
 
         ComponentPage trackedPage = componentPageRepository.findByComponentId(component.getId()).orElseThrow();
@@ -199,26 +205,26 @@ class ComponentPageRepositoryImplTest {
 
     @Test
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
-    void deletesTrackingWithoutCodeDeploymentButKeepsTrackingWithCodeDeployment() {
+    void deletesTrackingWithoutFlowButKeepsTrackingWithFlow() {
         Component withoutDeployment = component("without-deployment", "system-a");
-        Component configOnly = component("config-only", "system-b");
-        Component codeOnly = component("code-only", "system-c");
+        Component codeWithoutFlow = component("code-without-flow", "system-b");
+        Component withFlow = component("with-flow", "system-c");
         track(withoutDeployment);
-        track(configOnly);
-        track(codeOnly);
-        deploy(configOnly, Set.of(DeploymentType.CONFIG));
-        deploy(codeOnly, Set.of(DeploymentType.CODE));
+        track(codeWithoutFlow);
+        track(withFlow);
+        deploy(codeWithoutFlow, Set.of(DeploymentType.CODE));
+        createFlow(withFlow);
         entityManager.flush();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        assertThat(componentPageRepository.deleteIfNoCodeDeployment(withoutDeployment.getId())).isEqualTo(1);
-        assertThat(componentPageRepository.deleteIfNoCodeDeployment(configOnly.getId())).isEqualTo(1);
-        assertThat(componentPageRepository.deleteIfNoCodeDeployment(codeOnly.getId())).isZero();
+        assertThat(componentPageRepository.deleteIfNoFlow(withoutDeployment.getId())).isEqualTo(1);
+        assertThat(componentPageRepository.deleteIfNoFlow(codeWithoutFlow.getId())).isEqualTo(1);
+        assertThat(componentPageRepository.deleteIfNoFlow(withFlow.getId())).isZero();
 
         assertThat(componentPageRepository.findByComponentId(withoutDeployment.getId())).isEmpty();
-        assertThat(componentPageRepository.findByComponentId(configOnly.getId())).isEmpty();
-        assertThat(componentPageRepository.findByComponentId(codeOnly.getId())).isPresent();
+        assertThat(componentPageRepository.findByComponentId(codeWithoutFlow.getId())).isEmpty();
+        assertThat(componentPageRepository.findByComponentId(withFlow.getId())).isPresent();
     }
 
     private ComponentPageCleanupCandidate candidate(Component component) {
@@ -231,12 +237,17 @@ class ComponentPageRepositoryImplTest {
                 component.getId(), "page-" + component.getName(), "components"));
     }
 
-    private void deploy(Component component, Set<DeploymentType> types) {
+    private Deployment deploy(Component component, Set<DeploymentType> types) {
         Environment environment = environmentRepository.save(new Environment("env-" + component.getName()));
         Deployment deployment = TestDataFactory.createDeployment(
                 environment, component, ZonedDateTime.now(), TestDataFactory.createDeploymentTarget());
         deployment.getDeploymentTypes().addAll(types);
-        deploymentRepository.save(deployment);
+        return deploymentRepository.save(deployment);
+    }
+
+    private void createFlow(Component component) {
+        Deployment deployment = deploy(component, Set.of(DeploymentType.CODE));
+        flowRepository.save(Flow.start(FlowType.NEW, deployment, deployment.getEnvironment()));
     }
 
     private Component component(String componentName, String systemName) {

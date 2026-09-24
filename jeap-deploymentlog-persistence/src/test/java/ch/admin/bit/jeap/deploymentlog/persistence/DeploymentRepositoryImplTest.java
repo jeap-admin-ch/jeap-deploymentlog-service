@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -40,6 +42,65 @@ class DeploymentRepositoryImplTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Test
+    void search_combinesAllFiltersAndSupportsPaging() {
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-23T10:00:00+02:00");
+        Environment dev = environmentRepository.save(new Environment("DEV"));
+        Environment ref = environmentRepository.save(new Environment("REF"));
+        System system = systemRepository.save(new System("MY-SYSTEM"));
+        Component component = componentRepository.save(new Component("my-component", system));
+
+        Deployment matching = deploymentRepository.save(Deployment.builder()
+                .externalId("matching")
+                .startedAt(startedAt)
+                .startedBy("pipeline")
+                .environment(dev)
+                .componentVersion(componentVersion(component, "1.2.3"))
+                .changelog(Changelog.builder()
+                        .jiraIssueKeys(Set.of(" jeap-42 ", "OPS-7"))
+                        .build())
+                .sequence(DeploymentSequence.NEW)
+                .build());
+        deploymentRepository.save(Deployment.builder()
+                .externalId("wrong-environment")
+                .startedAt(startedAt)
+                .startedBy("pipeline")
+                .environment(ref)
+                .componentVersion(componentVersion(component, "1.2.3"))
+                .changelog(Changelog.builder().jiraIssueKeys(Set.of("JEAP-42", "OPS-7")).build())
+                .sequence(DeploymentSequence.NEW)
+                .build());
+
+        DeploymentSearchCriteria criteria = new DeploymentSearchCriteria(
+                startedAt, startedAt.plusSeconds(1), "DEV", "MY-SYSTEM", "my-component", "1.2.3",
+                "JEAP", "OPS-7");
+
+        var result = deploymentRepository.search(criteria,
+                PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "startedAt")));
+
+        assertThat(result.getTotalElements()).isOne();
+        assertThat(result.getContent()).containsExactly(matching);
+        var unfilteredPage = deploymentRepository.search(new DeploymentSearchCriteria(
+                null, null, null, null, null, null, null, null), PageRequest.of(0, 1));
+        assertThat(unfilteredPage.getTotalElements()).isEqualTo(2);
+        assertThat(unfilteredPage.getContent()).hasSize(1);
+    }
+
+    private static ComponentVersion componentVersion(Component component, String version) {
+        return ComponentVersion.builder()
+                .commitRef("abc123")
+                .committedAt(ZonedDateTime.parse("2026-09-23T09:00:00+02:00"))
+                .versionControlUrl("https://git.example/repository")
+                .component(component)
+                .versionName(version)
+                .deploymentUnit(DeploymentUnit.builder()
+                        .artifactRepositoryUrl("https://repo.example")
+                        .type(DeploymentUnitType.DOCKER_IMAGE)
+                        .coordinates("example/image:" + version)
+                        .build())
+                .build();
+    }
 
     @Test
     void findByExternalId_deploymentFound() {

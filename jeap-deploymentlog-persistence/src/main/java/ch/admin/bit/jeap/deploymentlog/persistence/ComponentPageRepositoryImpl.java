@@ -43,13 +43,13 @@ public class ComponentPageRepositoryImpl implements ComponentPageRepository {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int markCleanupAttemptedIfNoCodeDeployment(UUID componentId, ZonedDateTime attemptedAt) {
-        return repository.markCleanupAttemptedIfNoCodeDeployment(componentId, attemptedAt);
+    public int markCleanupAttemptedIfNoFlow(UUID componentId, ZonedDateTime attemptedAt) {
+        return repository.markCleanupAttemptedIfNoFlow(componentId, attemptedAt);
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int deleteIfNoCodeDeployment(UUID componentId) {
-        return repository.deleteIfNoCodeDeployment(componentId);
+    public int deleteIfNoFlow(UUID componentId) {
+        return repository.deleteIfNoFlow(componentId);
     }
 }

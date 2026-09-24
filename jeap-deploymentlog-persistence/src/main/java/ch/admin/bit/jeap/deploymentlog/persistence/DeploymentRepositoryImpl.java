@@ -1,24 +1,36 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
+import ch.admin.bit.jeap.deploymentlog.domain.Changelog;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricIdentity;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentMetricValue;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentSearchCriteria;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentTerminalMetricEvent;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.SetJoin;
+import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -29,6 +41,8 @@ import java.util.stream.IntStream;
 @org.springframework.stereotype.Component
 @RequiredArgsConstructor
 public class DeploymentRepositoryImpl implements DeploymentRepository {
+
+    private static final String NAME = "name";
 
     private final JpaDeploymentRepository jpaDeploymentRepository;
     private final EntityManager entityManager;
@@ -91,6 +105,79 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     public Optional<Deployment> findByExternalIdForUpdate(String externalId) {
         return jpaDeploymentRepository.findByExternalIdForUpdate(externalId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Deployment> search(DeploymentSearchCriteria criteria, Pageable pageable) {
+        return jpaDeploymentRepository.findAll(searchSpecification(criteria), pageable);
+    }
+
+    private static Specification<Deployment> searchSpecification(DeploymentSearchCriteria criteria) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            addTimePredicates(criteria, root, cb, predicates);
+            addDeploymentPredicates(criteria, root, cb, predicates);
+            addJiraPredicates(criteria, root, query, cb, predicates);
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private static void addTimePredicates(DeploymentSearchCriteria criteria, Root<Deployment> root,
+                                          CriteriaBuilder cb, List<Predicate> predicates) {
+        if (criteria.from() != null) {
+            predicates.add(cb.greaterThanOrEqualTo(root.get("startedAt"), criteria.from()));
+        }
+        if (criteria.to() != null) {
+            predicates.add(cb.lessThan(root.get("startedAt"), criteria.to()));
+        }
+    }
+
+    private static void addDeploymentPredicates(DeploymentSearchCriteria criteria, Root<Deployment> root,
+                                                CriteriaBuilder cb, List<Predicate> predicates) {
+        if (criteria.environment() != null) {
+            predicates.add(cb.equal(root.join("environment", JoinType.INNER).get(NAME), criteria.environment()));
+        }
+        Join<Deployment, ?> componentVersion = root.join("componentVersion", JoinType.INNER);
+        Join<?, ?> component = componentVersion.join("component", JoinType.INNER);
+        if (criteria.system() != null) {
+            predicates.add(cb.equal(component.join("system", JoinType.INNER).get(NAME), criteria.system()));
+        }
+        if (criteria.component() != null) {
+            predicates.add(cb.equal(component.get(NAME), criteria.component()));
+        }
+        if (criteria.version() != null) {
+            predicates.add(cb.equal(componentVersion.get("versionName"), criteria.version()));
+        }
+    }
+
+    private static void addJiraPredicates(DeploymentSearchCriteria criteria, Root<Deployment> root,
+                                          CriteriaQuery<?> query, CriteriaBuilder cb, List<Predicate> predicates) {
+        if (criteria.jiraProject() != null) {
+            predicates.add(hasJiraKey(root, query, cb, criteria.jiraProject() + "-", false));
+        }
+        if (criteria.jiraIssue() != null) {
+            predicates.add(hasJiraKey(root, query, cb, criteria.jiraIssue(), true));
+        }
+    }
+
+    private static Predicate hasJiraKey(
+            Root<Deployment> deployment,
+            CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            String value,
+            boolean exact) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<Deployment> correlatedDeployment = subquery.correlate(deployment);
+        Join<Deployment, Changelog> changelog = correlatedDeployment.join("changelog", JoinType.INNER);
+        SetJoin<Changelog, String> issueKey = changelog.joinSet("jiraIssueKeys", JoinType.INNER);
+        var normalizedIssueKey = cb.upper(cb.trim(issueKey));
+        subquery.select(cb.literal(1));
+        Predicate issuePredicate = exact
+                ? cb.equal(normalizedIssueKey, value)
+                : cb.equal(cb.locate(normalizedIssueKey, value), 1);
+        subquery.where(issuePredicate);
+        return cb.exists(subquery);
     }
 
     @Override
@@ -176,24 +263,8 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
         if (requestedTypes.isEmpty()) {
             return;
         }
-        @SuppressWarnings("unchecked")
-        Set<String> existingTypes = Set.copyOf(entityManager.createNativeQuery("""
-                        select deployment_type
-                        from deployment_metric_event
-                        where deployment_id = :deploymentId
-                          and deployment_type in (:deploymentTypes)
-                        """)
-                .setParameter("deploymentId", event.deploymentId())
-                .setParameter("deploymentTypes", requestedTypes)
-                .getResultList());
-        List<String> deploymentTypes = requestedTypes.stream()
-                .filter(type -> !existingTypes.contains(type))
-                .toList();
-        if (deploymentTypes.isEmpty()) {
-            return;
-        }
 
-        String values = IntStream.range(0, deploymentTypes.size())
+        String values = IntStream.range(0, requestedTypes.size())
                 .mapToObj(index -> "(:deploymentId, :deploymentType" + index + ", :system, :component, " +
                         ":environment, :state, :endedAt)")
                 .collect(Collectors.joining(", "));
@@ -202,6 +273,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                             (deployment_id, deployment_type, system_name, component_name,
                              environment_name, deployment_state, ended_at)
                         values %s
+                        on conflict (deployment_id, deployment_type) do nothing
                         """.formatted(values))
                 .setParameter("deploymentId", event.deploymentId())
                 .setParameter("system", event.system())
@@ -209,8 +281,8 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                 .setParameter("environment", event.environment())
                 .setParameter("state", event.state().name())
                 .setParameter("endedAt", event.endedAt());
-        IntStream.range(0, deploymentTypes.size()).forEach(index ->
-                query.setParameter("deploymentType" + index, deploymentTypes.get(index)));
+        IntStream.range(0, requestedTypes.size()).forEach(index ->
+                query.setParameter("deploymentType" + index, requestedTypes.get(index)));
         query.executeUpdate();
     }
 
@@ -241,6 +313,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                               where metric_event.deployment_id = deployment.id
                                 and metric_event.deployment_type = deployment_type.type
                           )
+                        on conflict (deployment_id, deployment_type) do nothing
                         """)
                 .executeUpdate();
     }

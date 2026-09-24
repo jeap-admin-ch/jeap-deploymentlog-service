@@ -86,6 +86,18 @@ class FlowRepositoryImplTest {
     }
 
     @Test
+    void detectsWhetherComponentHasPersistedFlow() {
+        Component withoutFlow = componentRepository.save(new Component("without-flow", component.getSystem()));
+        Deployment deployment = deploymentRepository.save(deployment("1.0.0"));
+        flowRepository.save(Flow.start(FlowType.NEW, deployment, prod));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(flowRepository.existsForComponent(component.getId())).isTrue();
+        assertThat(flowRepository.existsForComponent(withoutFlow.getId())).isFalse();
+    }
+
+    @Test
     void componentCanBeLockedForCrossInstanceSerialization() {
         entityManager.flush();
         UUID componentId = component.getId();

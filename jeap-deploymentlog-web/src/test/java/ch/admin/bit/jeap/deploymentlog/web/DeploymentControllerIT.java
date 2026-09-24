@@ -17,9 +17,39 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD) // Isolate async tasks
 class DeploymentControllerIT extends IntegrationTestBase {
+
+    @Test
+    @SneakyThrows
+    void searchDeployments_filtersPagesAndDoesNotExposeInternalIds() {
+        postDeployment(createDeploymentDto(), "read-api-deployment");
+        awaitUntilAsyncTasksCompleted();
+
+        String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());
+        mockMvc.perform(get("/api/deployment-records")
+                        .header("Authorization", basicAuthHeader)
+                        .param("from", "2007-12-03T10:15:30+01:00")
+                        .param("to", "2007-12-03T10:15:31+01:00")
+                        .param("environment", "DEV")
+                        .param("system", "TestSystem")
+                        .param("component", "test")
+                        .param("version", "1.2.3-4")
+                        .param("jiraProject", "proj")
+                        .param("jiraIssue", "proj-123")
+                        .param("page", "0")
+                        .param("size", "1")
+                        .param("sort", "externalId,asc")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].externalId").value("read-api-deployment"))
+                .andExpect(jsonPath("$.content[0].id").doesNotExist())
+                .andExpect(jsonPath("$.content[0].componentVersion.id").doesNotExist())
+                .andExpect(jsonPath("$.content[0].changelog.jiraIssueKeys[0]").value("PROJ-123"));
+    }
 
     @Test
     @SneakyThrows

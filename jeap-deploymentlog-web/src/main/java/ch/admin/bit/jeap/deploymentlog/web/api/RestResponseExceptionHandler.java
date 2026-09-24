@@ -16,6 +16,12 @@ import java.nio.charset.StandardCharsets;
 @RestControllerAdvice
 public class RestResponseExceptionHandler {
 
+    @ExceptionHandler(InvalidDeploymentFilterException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidDeploymentFilterException(InvalidDeploymentFilterException ex) {
+        log.warn(ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_DEPLOYMENT_FILTER");
+    }
+
     @ExceptionHandler(SystemGroupNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleSystemGroupNotFoundException(SystemGroupNotFoundException ex) {
         log.warn("System group not found", ex);

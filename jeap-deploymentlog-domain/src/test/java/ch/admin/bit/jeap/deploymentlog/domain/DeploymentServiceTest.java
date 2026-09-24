@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
+import ch.admin.bit.jeap.db.tx.RetryOnAwsJdbcFailover;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentPageNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
@@ -11,6 +12,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -26,6 +28,16 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class DeploymentServiceTest {
+
+    @Test
+    void updateStateIsCompatibleWithAwsJdbcFailoverRetryAdvice() throws NoSuchMethodException {
+        var updateState = DeploymentService.class.getMethod("updateState", String.class, DeploymentState.class,
+                String.class, ZonedDateTime.class, Map.class);
+
+        assertThat(updateState.isAnnotationPresent(RetryOnAwsJdbcFailover.class)).isTrue();
+        assertThat(new AnnotationTransactionAttributeSource()
+                .getTransactionAttribute(updateState, DeploymentService.class)).isNotNull();
+    }
 
     @Mock
     private DeploymentRepository deploymentRepository;

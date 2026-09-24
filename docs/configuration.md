@@ -28,6 +28,7 @@ The `/api/**` endpoints are secured with HTTP basic authentication against two i
 | `jeap.deploymentlog.read-user.password`    | `{noop}secret`   | Password of the read user, in Spring Security password-encoder format. |
 | `jeap.deploymentlog.write-user.username`   | `write`          | Username of the user with the role `deploymentlog-write`. |
 | `jeap.deploymentlog.write-user.password`   | `{noop}secret`   | Password of the write user, in Spring Security password-encoder format. |
+| `jeap.deploymentlog.read-api.security-enabled` | `true`       | Require authentication with `deploymentlog-read` or `deploymentlog-write` for the `/api/deployment-records` collection and detail endpoints. Set to `false` only when an upstream access-control layer protects them. Existing `/api/deployment` endpoints remain protected. |
 
 The defaults exist so that the library's own tests run out of the box and **must** be overridden in every
 real deployment. Use an encoder prefix such as `{bcrypt}` for the passwords; `{noop}` stores them in clear
@@ -146,7 +147,7 @@ not set.
 | `jeap.deploymentlog.housekeeping.data-retention.enabled` | `false` | Enables permanent deletion of expired deployment and terminal-flow data. |
 | `jeap.deploymentlog.housekeeping.data-retention.duration` | none | Minimum retention duration. Required and positive when data retention is enabled. |
 | `jeap.deploymentlog.housekeeping.data-retention.batch-size` | `500` | Maximum number of standalone candidates (or terminal flows) selected in one run. |
-| `jeap.deploymentlog.housekeeping.component-pages.enabled` | `true` | Reconciles tracked component pages and removes pages whose component has no persisted `CODE` deployment. |
+| `jeap.deploymentlog.housekeeping.component-pages.enabled` | `true` | Reconciles tracked component pages and removes pages whose component has no persisted flow. |
 | `jeap.deploymentlog.housekeeping.component-pages.batch-size` | `100` | Maximum number of obsolete tracked component pages reconciled in one run. Must be positive. |
 
 Data retention uses `Deployment.started_at`. It deletes `SUCCESS`, `FAILURE` and `CANCELLED` deployments, and protects

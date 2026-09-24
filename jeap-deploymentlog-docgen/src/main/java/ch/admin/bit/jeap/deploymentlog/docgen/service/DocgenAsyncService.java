@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen.service;
 
+import ch.admin.bit.jeap.db.tx.AwsJdbcFailoverExceptionClassifier;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
@@ -8,7 +9,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.sql.SQLException;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,8 +21,6 @@ public class DocgenAsyncService {
 
     private static final String SYSTEM_NAME = "systemName";
     private static final String COMPONENT_NAME = "componentName";
-    private static final String FAILOVER_SUCCESS_EXCEPTION = "FailoverSuccessSQLException";
-    private static final String COMMUNICATION_LINK_CHANGED_SQL_STATE = "08S02";
     public static final String DEPLOYMENT_ID = "deploymentId";
 
     private final DocumentationGenerator documentationGenerator;
@@ -134,7 +132,7 @@ public class DocgenAsyncService {
 
     private void handleDeploymentPageGenerationFailure(UUID deploymentId, String systemName, String componentName,
                                                        Exception ex, String failureMessage) {
-        if (isAwsFailoverSuccess(ex)) {
+        if (AwsJdbcFailoverExceptionClassifier.isRetryable(ex)) {
             log.info("Database connection recovered while processing page generation for deployment {}, " +
                             "system {} and component {}; " +
                             "leaving the page-generation request pending for the repair job",
@@ -147,20 +145,6 @@ public class DocgenAsyncService {
         log.warn("{} for deployment {}, system {} and component {}", failureMessage,
                 value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
                 value(COMPONENT_NAME, componentName), ex);
-    }
-
-    private static boolean isAwsFailoverSuccess(Throwable throwable) {
-        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        Throwable current = throwable;
-        while (current != null && visited.add(current)) {
-            if (current instanceof SQLException sqlException
-                    && COMMUNICATION_LINK_CHANGED_SQL_STATE.equals(sqlException.getSQLState())
-                    && FAILOVER_SUCCESS_EXCEPTION.equals(sqlException.getClass().getSimpleName())) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     public void triggerMigrationForSystem(System system) {

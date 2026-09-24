@@ -22,11 +22,9 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
             join Component component on component.id = page.componentId
             join component.system system
             where not exists (
-                select deployment.id
-                from Deployment deployment
-                join deployment.deploymentTypes deploymentType
-                where deployment.componentVersion.component.id = page.componentId
-                and deploymentType = ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE
+                select flow.id
+                from Flow flow
+                where flow.componentVersion.component.id = page.componentId
             )
             order by
                 case when page.cleanupAttemptedAt is null then 0 else 1 end,
@@ -42,27 +40,23 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
             set page.cleanupAttemptedAt = :attemptedAt
             where page.componentId = :componentId
             and not exists (
-                select deployment.id
-                from Deployment deployment
-                join deployment.deploymentTypes deploymentType
-                where deployment.componentVersion.component.id = :componentId
-                and deploymentType = ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE
+                select flow.id
+                from Flow flow
+                where flow.componentVersion.component.id = :componentId
             )
             """)
-    int markCleanupAttemptedIfNoCodeDeployment(@Param("componentId") UUID componentId,
-                                               @Param("attemptedAt") ZonedDateTime attemptedAt);
+    int markCleanupAttemptedIfNoFlow(@Param("componentId") UUID componentId,
+                                     @Param("attemptedAt") ZonedDateTime attemptedAt);
 
     @Modifying
     @Query("""
             delete from ComponentPage page
             where page.componentId = :componentId
             and not exists (
-                select deployment.id
-                from Deployment deployment
-                join deployment.deploymentTypes deploymentType
-                where deployment.componentVersion.component.id = :componentId
-                and deploymentType = ch.admin.bit.jeap.deploymentlog.domain.DeploymentType.CODE
+                select flow.id
+                from Flow flow
+                where flow.componentVersion.component.id = :componentId
             )
             """)
-    int deleteIfNoCodeDeployment(@Param("componentId") UUID componentId);
+    int deleteIfNoFlow(@Param("componentId") UUID componentId);
 }

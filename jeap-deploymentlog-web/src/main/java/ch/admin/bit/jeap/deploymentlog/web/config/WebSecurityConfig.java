@@ -31,26 +31,33 @@ public class WebSecurityConfig {
     @Value("${jeap.deploymentlog.write-user.password}")
     private String writeUserPassword;
 
+    @Value("${jeap.deploymentlog.read-api.security-enabled:true}")
+    private boolean readApiSecurityEnabled;
+
     @Bean
     @Order(100)
         // same as on the deprecated WebSecurityConfigurerAdapter
-    SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) {
         http
                 .securityMatcher("/api/**", "/error")
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(management -> management.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(Customizer.withDefaults())
-                .authorizeHttpRequests(requests -> requests
-                        .requestMatchers(HttpMethod.GET, "/api/deployment-doc/**").permitAll()
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .anyRequest().hasAnyRole("deploymentlog-write", "deploymentlog-read"));
+                .authorizeHttpRequests(requests -> {
+                    requests.requestMatchers(HttpMethod.GET, "/api/deployment-doc/**").permitAll();
+                    if (!readApiSecurityEnabled) {
+                        requests.requestMatchers(HttpMethod.GET, "/api/deployment-records", "/api/deployment-records/**").permitAll();
+                    }
+                    requests.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                            .anyRequest().hasAnyRole("deploymentlog-write", "deploymentlog-read");
+                });
 
         http.authenticationManager(createApiAuthManager(http.getSharedObject(AuthenticationManagerBuilder.class)));
 
         return http.build();
     }
 
-    private AuthenticationManager createApiAuthManager(AuthenticationManagerBuilder auth) throws Exception {
+    private AuthenticationManager createApiAuthManager(AuthenticationManagerBuilder auth) {
         auth.inMemoryAuthentication()
                 .withUser(readUserUsername).password(readUserPassword).roles("deploymentlog-read").and()
                 .withUser(writeUserUsername).password(writeUserPassword).roles("deploymentlog-write");

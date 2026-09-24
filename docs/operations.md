@@ -127,15 +127,16 @@ histories, stage overviews, component pages, Jira project pages and Jira issue p
 
 #### Component-page reconciliation
 
-Component pages are retained only while their component has at least one currently persisted `CODE` deployment.
+Component pages are retained only while their component has at least one currently persisted flow. Historical
+`CODE` deployments without a flow do not retain an otherwise empty component page.
 After data retention, and also when data retention is disabled, housekeeping selects up to
 `component-pages.batch-size` obsolete tracking records in deterministic order. Each candidate is rechecked under the
 component system's documentation lock before its Confluence page is deleted.
 
 The candidate query and final conditional tracking deletion use short database transactions. The Confluence deletion
 runs between them without an open database transaction. If Confluence deletion fails, tracking is retained and a
-later housekeeping run retries it while continuing with other candidates. If a concurrent `CODE` deployment appears,
-the recheck or final conditional deletion preserves the tracking as far as the HTTP/database boundary permits; normal
+later housekeeping run retries it while continuing with other candidates. If a concurrent flow appears, the recheck
+or final conditional deletion preserves the tracking as far as the HTTP/database boundary permits; normal
 component-page generation recreates a deleted page when required.
 
 #### Retrying documentation refreshes

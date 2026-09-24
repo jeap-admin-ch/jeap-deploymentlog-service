@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.7.0] - 2026-09-23
+
+### Added
+
+- Add a read-only deployment-record resource under `/api/deployment-records`, with paginated search, AND-combined
+  time, environment, system, component, version and stored Jira filters, configurable `deploymentlog-read` access
+  protection, UUID-free complete deployment responses, validation errors and OpenAPI documentation. The established
+  `/api/deployment` resource remains unchanged.
+
+### Fixed
+
+- Retry deployment status updates once in a fresh transaction after the AWS JDBC Wrapper has successfully replaced a
+  failed connection (`FailoverSuccessSQLException`, SQL state `08S02`), using the shared jEAP transaction-starter
+  support. Page-generation failover detection now uses the same shared classifier.
+- Make terminal deployment-metric persistence atomic so concurrent event handling and scheduled reconciliation cannot
+  fail with duplicate-key errors for the same deployment and deployment type.
+- Reconcile tracked component pages against persisted flows so legacy `CODE` deployments without a flow no longer
+  retain empty component pages.
+
 ## [16.6.0] - 2026-09-27
 
 ### Dependencies

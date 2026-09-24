@@ -121,12 +121,50 @@ Returns `200 OK` with an empty body, `404` if the external id is unknown, and `4
 of the three accepted values (`STARTED` in particular cannot be set this way). On `SUCCESS` the environment
 state is advanced to this version, and the page generation is triggered again.
 
-### `GET /api/deployment/{id}` — read a deployment
+### `GET /api/deployment/{id}` — read a deployment (legacy resource)
 
 Roles `deploymentlog-read` or `deploymentlog-write`. Returns the deployment (`DeploymentDto`) with `id`,
 `externalId`, `startedAt`, `endedAt`, `state`, `startedBy`, `environment` (id, name, staging order,
-productive flag), `componentVersion` (including the parsed version number, the deployment unit and the
-component with its system), `links` and `properties`. `404` if unknown.
+productive flag), `componentVersion` (including its internal id, parsed version number, deployment unit and the
+component with its system), `links` and `properties`. This existing response retains internal database ids for
+backwards compatibility. Returns `404` if the external deployment id is unknown.
+
+### `GET /api/deployment-records` — search deployment records
+
+Roles `deploymentlog-read` or `deploymentlog-write`. The access check can be disabled specifically for the two
+deployment-record endpoints with `jeap.deploymentlog.read-api.security-enabled=false`; write endpoints and the legacy
+`GET /api/deployment/{id}` endpoint remain protected.
+
+The response is paged (`content`, zero-based `number`, `size`, `totalElements`, `totalPages`, `first`, `last`). Use
+`page` and `size` for paging and repeat `sort=property,direction` for multi-column sorting. The default is
+`startedAt,desc`. Supported sort properties are `externalId`, `startedAt`, `endedAt`, `state`, `sequence`,
+`environment`, `system`, `component`, `version` and `committedAt`. For stable pagination, `externalId,asc` is
+automatically appended as the final unique tie-breaker unless `externalId` is already part of the requested sort.
+
+All filters are optional and are combined with AND:
+
+| Filter | Meaning |
+|--------|---------|
+| `from` | Inclusive ISO-8601 lower bound for `startedAt`. |
+| `to` | Exclusive ISO-8601 upper bound for `startedAt`. |
+| `environment`, `system`, `component`, `version` | Exact, case-sensitive comparison. |
+| `jiraProject` | At least one stored issue belongs to this Jira project. |
+| `jiraIssue` | Exact stored Jira issue key. |
+
+Jira keys are trimmed and upper-cased. Jira filters query only stored changelog data and never contact Jira. Invalid,
+blank or repeated business filters, an invalid interval and unsupported sorting return `400` with error code
+`INVALID_DEPLOYMENT_FILTER`.
+
+### `GET /api/deployment-records/{id}` — read a deployment record
+
+Roles `deploymentlog-read` or `deploymentlog-write`, subject to the same optional read-API access setting. Returns the
+deployment addressed exclusively by its external id. The response contains its times, state and message, sequence,
+types, trigger, environment, component version (including system, component, version, commit metadata and deployment
+unit), target, links, properties, reference identifiers, changelog with normalized Jira issue keys and Remedy change
+id. Internal database ids are not exposed at any level. Returns `404` if the external id is unknown.
+
+This read-only resource is separate from the established `/api/deployment` resource and does not change its response
+contract.
 
 ### `GET /api/deployment-doc/{id}` — jump to the generated page
 

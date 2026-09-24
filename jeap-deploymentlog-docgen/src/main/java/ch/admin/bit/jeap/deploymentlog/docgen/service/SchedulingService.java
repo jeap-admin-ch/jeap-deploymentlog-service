@@ -5,7 +5,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
+import ch.admin.bit.jeap.deploymentlog.domain.FlowRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
@@ -54,7 +54,7 @@ public class SchedulingService {
     private final HousekeepingConfigProperties housekeepingConfig;
     private final DataRetentionRepository dataRetentionRepository;
     private final ComponentPageRepository componentPageRepository;
-    private final DeploymentRepository deploymentRepository;
+    private final FlowRepository flowRepository;
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
@@ -133,13 +133,13 @@ public class SchedulingService {
         List<ComponentPageCleanupCandidate> candidates = componentPageRepository.findCleanupCandidates(
                 housekeepingConfig.getComponentPages().getBatchSize());
         if (!candidates.isEmpty()) {
-            log.info("Reconciling {} tracked component pages without CODE deployments", candidates.size());
+            log.info("Reconciling {} tracked component pages without flows", candidates.size());
         }
         candidates.forEach(this::attemptComponentPageCleanup);
     }
 
     private void attemptComponentPageCleanup(ComponentPageCleanupCandidate candidate) {
-        int marked = componentPageRepository.markCleanupAttemptedIfNoCodeDeployment(
+        int marked = componentPageRepository.markCleanupAttemptedIfNoFlow(
                 candidate.componentId(), ZonedDateTime.now());
         if (marked == 0) {
             log.info("Skipping component page {} because component {} is no longer obsolete",
@@ -151,8 +151,8 @@ public class SchedulingService {
     }
 
     private void deleteComponentPageIfStillObsolete(ComponentPageCleanupCandidate candidate) {
-        if (deploymentRepository.existsCodeDeploymentForComponent(candidate.componentId())) {
-            log.info("Keeping component page {} because component {} now has a CODE deployment",
+        if (flowRepository.existsForComponent(candidate.componentId())) {
+            log.info("Keeping component page {} because component {} now has a flow",
                     candidate.pageId(), candidate.componentId());
             return;
         }
@@ -164,10 +164,10 @@ public class SchedulingService {
             return;
         }
 
-        int deleted = componentPageRepository.deleteIfNoCodeDeployment(candidate.componentId());
+        int deleted = componentPageRepository.deleteIfNoFlow(candidate.componentId());
         if (deleted == 0) {
             log.warn("Deleted Confluence component page {} but retained or no longer found tracking for component {}. "
-                            + "A concurrent CODE deployment may recreate the page through normal generation",
+                            + "A concurrent flow may recreate the page through normal generation",
                     candidate.pageId(), candidate.componentId());
         } else {
             log.info("Deleted obsolete component page {} and its tracking for component {}",

@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Interface to be implemented by a persistence provider to access @{@link Deployment}s
@@ -30,6 +32,8 @@ public interface DeploymentRepository {
     Optional<Deployment> findByExternalId(String externalId);
 
     Optional<Deployment> findByExternalIdForUpdate(String externalId);
+
+    Page<Deployment> search(DeploymentSearchCriteria criteria, Pageable pageable);
 
     List<Deployment> findAllDeploymentForSystemAndEnv(System system, Environment environment);
 

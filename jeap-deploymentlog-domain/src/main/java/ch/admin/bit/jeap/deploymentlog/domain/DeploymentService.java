@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
 import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
+import ch.admin.bit.jeap.db.tx.RetryOnAwsJdbcFailover;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentPageNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
@@ -9,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
@@ -155,15 +158,22 @@ public class DeploymentService {
 
     private Changelog createChangelog(String changelogComment, String changelogComparedToVersion, Set<String> changelogJiraIssueKeys) {
         if (changelogComment != null || changelogJiraIssueKeys != null) {
+            Set<String> normalizedJiraIssueKeys = changelogJiraIssueKeys == null ? Set.of() :
+                    changelogJiraIssueKeys.stream()
+                            .filter(Objects::nonNull)
+                            .map(String::trim)
+                            .map(key -> key.toUpperCase(Locale.ROOT))
+                            .collect(toSet());
             return Changelog.builder()
                     .comment(changelogComment)
-                    .jiraIssueKeys(changelogJiraIssueKeys)
+                    .jiraIssueKeys(normalizedJiraIssueKeys)
                     .comparedToVersion(changelogComparedToVersion)
                     .build();
         }
         return null;
     }
 
+    @RetryOnAwsJdbcFailover
     public UUID updateState(String externalId, DeploymentState state, String stateMessage, ZonedDateTime endedAt, Map<String, String> properties) throws DeploymentNotFoundException, InvalidDeploymentStateForUpdateException {
         final Deployment deployment = deploymentRepository.findByExternalIdForUpdate(externalId)
                 .orElseThrow(() -> new DeploymentNotFoundException(externalId));
@@ -203,6 +213,11 @@ public class DeploymentService {
     public Deployment getDeployment(String externalId) throws DeploymentNotFoundException {
         log.debug("Retrieve the deployment with externalId '{}'", externalId);
         return retrieveDeploymentByExternalId(externalId);
+    }
+
+    @TransactionalReadReplica
+    public Page<Deployment> searchDeployments(DeploymentSearchCriteria criteria, Pageable pageable) {
+        return deploymentRepository.search(criteria, pageable);
     }
 
     @TransactionalReadReplica

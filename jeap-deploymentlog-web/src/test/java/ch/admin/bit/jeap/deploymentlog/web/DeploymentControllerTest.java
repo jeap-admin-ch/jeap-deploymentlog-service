@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageRequestException;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentCheckService;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
+import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentReadController;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
 import ch.admin.bit.jeap.deploymentlog.web.config.WebSecurityConfig;
 import ch.admin.bit.jeap.security.resource.properties.ResourceServerProperties;
@@ -19,6 +20,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -41,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {DeploymentController.class})
+@WebMvcTest(controllers = {DeploymentController.class, DeploymentReadController.class})
 @Import({WebSecurityConfig.class, ResourceServerProperties.class})
 @AutoConfigureMockMvc
 class DeploymentControllerTest {
@@ -259,10 +262,98 @@ class DeploymentControllerTest {
                 .andDo(result -> java.lang.System.out.println(result.getResponse().getContentAsString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.externalId", is(deployment.getExternalId())))
+                .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.environment.name", is(deployment.getEnvironment().getName())))
+                .andExpect(jsonPath("$.environment.id").exists())
                 .andExpect(jsonPath("$.componentVersion.component.name", is(deployment.getComponentVersion().getComponent().getName())))
+                .andExpect(jsonPath("$.componentVersion.id").exists())
+                .andExpect(jsonPath("$.componentVersion.component.id").exists())
                 .andExpect(jsonPath("$.properties.key", is("value")));
 
+    }
+
+    @Test
+    void getDeploymentThroughReadApi_doesNotExposeInternalIds() throws Exception {
+        String externalId = "read-123";
+        ComponentVersion componentVersion = ComponentVersion.builder()
+                .versionName("test")
+                .versionControlUrl("test")
+                .committedAt(ZonedDateTime.now())
+                .commitRef("test")
+                .component(new Component("test", new System("test")))
+                .deploymentUnit(DeploymentUnit.builder().artifactRepositoryUrl("test")
+                        .type(DeploymentUnitType.DOCKER_IMAGE).coordinates("test").build())
+                .build();
+        Deployment deployment = Deployment.builder()
+                .startedAt(ZonedDateTime.now())
+                .startedBy("user")
+                .environment(new Environment("test"))
+                .componentVersion(componentVersion)
+                .externalId(externalId)
+                .sequence(DeploymentSequence.NEW)
+                .properties(Map.of())
+                .build();
+        when(deploymentService.getDeployment(externalId)).thenReturn(deployment);
+
+        mockMvc.perform(get("/api/deployment-records/{externalId}", externalId)
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.externalId", is(externalId)))
+                .andExpect(jsonPath("$.id").doesNotExist())
+                .andExpect(jsonPath("$.environment.id").doesNotExist())
+                .andExpect(jsonPath("$.componentVersion.id").doesNotExist())
+                .andExpect(jsonPath("$.componentVersion.component.id").doesNotExist());
+    }
+
+    @Test
+    void searchDeployments_rejectsInvalidAndRepeatedFilters() throws Exception {
+        mockMvc.perform(get("/api/deployment-records")
+                        .param("jiraIssue", "invalid")
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode", is("INVALID_DEPLOYMENT_FILTER")));
+
+        mockMvc.perform(get("/api/deployment-records")
+                        .param("system", "one", "two")
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode", is("INVALID_DEPLOYMENT_FILTER")));
+
+        verify(deploymentService, never()).searchDeployments(any(), any());
+    }
+
+    @Test
+    void searchDeployments_appendsExternalIdAsStableSortTieBreaker() throws Exception {
+        when(deploymentService.searchDeployments(any(), any())).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/deployment-records")
+                        .param("sort", "startedAt,desc")
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isOk());
+
+        verify(deploymentService).searchDeployments(any(), argThat(pageable -> {
+            assertThat(pageable.getSort().toList())
+                    .extracting(order -> order.getProperty() + ":" + order.getDirection())
+                    .containsExactly("startedAt:DESC", "externalId:ASC");
+            return true;
+        }));
+    }
+
+    @Test
+    void searchDeployments_doesNotDuplicateRequestedExternalIdSort() throws Exception {
+        when(deploymentService.searchDeployments(any(), any())).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/deployment-records")
+                        .param("sort", "startedAt,desc", "externalId,desc")
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isOk());
+
+        verify(deploymentService).searchDeployments(any(), argThat(pageable -> {
+            assertThat(pageable.getSort().toList())
+                    .extracting(order -> order.getProperty() + ":" + order.getDirection())
+                    .containsExactly("startedAt:DESC", "externalId:DESC");
+            return true;
+        }));
     }
 
     @Test
