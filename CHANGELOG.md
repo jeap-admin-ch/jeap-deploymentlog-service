@@ -19,7 +19,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failed connection (`FailoverSuccessSQLException`, SQL state `08S02`), using the shared jEAP transaction-starter
   support. Page-generation failover detection now uses the same shared classifier.
 - Make terminal deployment-metric persistence atomic so concurrent event handling and scheduled reconciliation cannot
-  fail with duplicate-key errors for the same deployment and deployment type.
+  fail with duplicate-key errors for the same deployment and deployment type. Use targetless `ON CONFLICT DO NOTHING`
+  for compatibility with PostgreSQL and H2 in PostgreSQL mode, and retain that mode in persistence slice tests.
 - Reconcile tracked component pages against persisted flows so legacy `CODE` deployments without a flow no longer
   retain empty component pages.
 

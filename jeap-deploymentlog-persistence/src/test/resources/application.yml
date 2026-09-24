@@ -1,4 +1,7 @@
 spring:
+  test:
+    database:
+      replace: none # Keep the configured H2 PostgreSQL compatibility mode in @DataJpaTest.
   datasource:
     url: "jdbc:h2:mem:${random.uuid};MODE=PostgreSQL"
   flyway:

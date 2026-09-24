@@ -273,7 +273,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                             (deployment_id, deployment_type, system_name, component_name,
                              environment_name, deployment_state, ended_at)
                         values %s
-                        on conflict (deployment_id, deployment_type) do nothing
+                        on conflict do nothing
                         """.formatted(values))
                 .setParameter("deploymentId", event.deploymentId())
                 .setParameter("system", event.system())
@@ -313,7 +313,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                               where metric_event.deployment_id = deployment.id
                                 and metric_event.deployment_type = deployment_type.type
                           )
-                        on conflict (deployment_id, deployment_type) do nothing
+                        on conflict do nothing
                         """)
                 .executeUpdate();
     }
