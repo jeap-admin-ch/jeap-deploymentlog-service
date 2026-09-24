@@ -10,6 +10,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Base64;
+import java.time.ZonedDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,7 +26,9 @@ class DeploymentControllerIT extends IntegrationTestBase {
     @Test
     @SneakyThrows
     void searchDeployments_filtersPagesAndDoesNotExposeInternalIds() {
-        postDeployment(createDeploymentDto(), "read-api-deployment");
+        DeploymentCreateDto dto = createDeploymentDto();
+        dto.setStartedAt(ZonedDateTime.parse("2007-12-03T10:15:30+01:00"));
+        postDeployment(dto, "read-api-deployment");
         awaitUntilAsyncTasksCompleted();
 
         String basicAuthHeader = "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes());

@@ -1,7 +1,7 @@
 spring:
   datasource:
     driver-class-name: org.h2.Driver
-    url: "jdbc:h2:mem:testdb"
+    url: "jdbc:h2:mem:testdb;MODE=PostgreSQL"
   flyway:
     init-sqls:
       - SET NON_KEYWORDS year
@@ -9,6 +9,8 @@ spring:
       - classpath:db/migration
       - classpath:db/testdata
   jpa:
+    database: h2
+    database-platform: org.hibernate.dialect.H2Dialect
     show-sql: true
 
 jeap:
