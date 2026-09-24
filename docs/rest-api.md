@@ -155,6 +155,11 @@ Jira keys are trimmed and upper-cased. Jira filters query only stored changelog 
 blank or repeated business filters, an invalid interval and unsupported sorting return `400` with error code
 `INVALID_DEPLOYMENT_FILTER`.
 
+Paging parameters must each be supplied at most once: `page` must be a non-negative 32-bit integer and `size`
+a positive 32-bit integer. Blank, non-numeric, fractional, overflowing or repeated values return `400` with
+`INVALID_DEPLOYMENT_FILTER`. Omitted parameters default to `page=0` and `size=20`; the configured Spring paging
+size limit still applies to valid sizes.
+
 ### `GET /api/deployment-records/{id}` — read a deployment record
 
 Roles `deploymentlog-read` or `deploymentlog-write`, subject to the same optional read-API access setting. Returns the

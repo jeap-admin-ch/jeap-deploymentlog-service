@@ -15,6 +15,9 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -322,6 +325,46 @@ class DeploymentControllerTest {
         verify(deploymentService, never()).searchDeployments(any(), any());
     }
 
+    @ParameterizedTest
+    @CsvSource({"page,-1", "page,abc", "page,''", "page,' '", "page,1.5", "page,2147483648",
+            "size,0", "size,-1", "size,abc", "size,''", "size,' '", "size,1.5", "size,2147483648"})
+    void searchDeployments_rejectsInvalidPaging(String parameter, String value) throws Exception {
+        mockMvc.perform(get("/api/deployment-records")
+                        .param(parameter, value)
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode", is("INVALID_DEPLOYMENT_FILTER")));
+
+        verify(deploymentService, never()).searchDeployments(any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"page", "size"})
+    void searchDeployments_rejectsRepeatedPaging(String parameter) throws Exception {
+        mockMvc.perform(get("/api/deployment-records")
+                        .param(parameter, "1", "2")
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode", is("INVALID_DEPLOYMENT_FILTER")));
+
+        verify(deploymentService, never()).searchDeployments(any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,1", "2,50"})
+    void searchDeployments_preservesValidPaging(int page, int size) throws Exception {
+        when(deploymentService.searchDeployments(any(), any())).thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/deployment-records")
+                        .param("page", Integer.toString(page))
+                        .param("size", Integer.toString(size))
+                        .with(httpBasic("read", "secret")))
+                .andExpect(status().isOk());
+
+        verify(deploymentService).searchDeployments(any(), argThat(pageable ->
+                pageable.getPageNumber() == page && pageable.getPageSize() == size));
+    }
+
     @Test
     void searchDeployments_appendsExternalIdAsStableSortTieBreaker() throws Exception {
         when(deploymentService.searchDeployments(any(), any())).thenReturn(Page.empty());
@@ -332,6 +375,8 @@ class DeploymentControllerTest {
                 .andExpect(status().isOk());
 
         verify(deploymentService).searchDeployments(any(), argThat(pageable -> {
+            assertThat(pageable.getPageNumber()).isZero();
+            assertThat(pageable.getPageSize()).isEqualTo(20);
             assertThat(pageable.getSort().toList())
                     .extracting(order -> order.getProperty() + ":" + order.getDirection())
                     .containsExactly("startedAt:DESC", "externalId:ASC");

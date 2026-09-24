@@ -16,6 +16,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Reject invalid or repeated `page` and `size` parameters on the deployment-record search with
+  `400 INVALID_DEPLOYMENT_FILTER` instead of silently using normalized paging values.
 - Retry deployment status updates once in a fresh transaction after the AWS JDBC Wrapper has successfully replaced a
   failed connection (`FailoverSuccessSQLException`, SQL state `08S02`), using the shared jEAP transaction-starter
   support. Page-generation failover detection now uses the same shared classifier.

@@ -89,9 +89,9 @@ public class DeploymentReadController {
     @ApiResponse(responseCode = "400", description = "Invalid or repeated filter, paging, or sort value")
     @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content)
     @ApiResponse(responseCode = "403", description = "Missing deploymentlog-read or deploymentlog-write role", content = @Content)
-    @Parameter(name = "page", in = ParameterIn.QUERY, description = "Zero-based page number",
+    @Parameter(name = "page", in = ParameterIn.QUERY, description = "Zero-based page number; must not be repeated",
             schema = @Schema(type = "integer", defaultValue = "0", minimum = "0"))
-    @Parameter(name = "size", in = ParameterIn.QUERY, description = "Number of deployments per page",
+    @Parameter(name = "size", in = ParameterIn.QUERY, description = "Number of deployments per page; must not be repeated",
             schema = @Schema(type = "integer", defaultValue = "20", minimum = "1"))
     @Parameter(name = "sort", in = ParameterIn.QUERY, description = "Sort property and direction. Supported: " +
             "externalId, startedAt, endedAt, state, sequence, environment, system, component, version, " +
@@ -122,6 +122,9 @@ public class DeploymentReadController {
             Pageable pageable,
             HttpServletRequest request) {
         rejectRepeatedFilters(request);
+        // Validate raw input because the Pageable resolver silently normalizes invalid values.
+        validatePagingParameter(request, "page", 0);
+        validatePagingParameter(request, "size", 1);
         ZonedDateTime parsedFrom = parseDate(FROM, from);
         ZonedDateTime parsedTo = parseDate(TO, to);
         if (parsedFrom != null && parsedTo != null && !parsedFrom.isBefore(parsedTo)) {
@@ -147,6 +150,25 @@ public class DeploymentReadController {
                 throw new InvalidDeploymentFilterException("Filter '%s' must not be repeated".formatted(filter));
             }
         });
+    }
+
+    private static void validatePagingParameter(HttpServletRequest request, String name, int minimum) {
+        String[] values = request.getParameterValues(name);
+        if (values == null) {
+            return;
+        }
+        if (values.length != 1) {
+            throw new InvalidDeploymentFilterException("Parameter '%s' must not be repeated".formatted(name));
+        }
+        try {
+            if (Integer.parseInt(values[0]) >= minimum) {
+                return;
+            }
+        } catch (NumberFormatException ex) {
+            // Blank, malformed and overflowing values are invalid, not requests for defaults.
+        }
+        throw new InvalidDeploymentFilterException(
+                "Parameter '%s' must be an integer between %d and %d".formatted(name, minimum, Integer.MAX_VALUE));
     }
 
     private static ZonedDateTime parseDate(String name, String value) {
