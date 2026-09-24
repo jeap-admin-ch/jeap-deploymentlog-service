@@ -7,7 +7,6 @@ import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Base64;
 import java.time.ZonedDateTime;
@@ -86,7 +85,6 @@ class DeploymentControllerIT extends IntegrationTestBase {
     }
 
     @Test
-    @Transactional
     @SneakyThrows
     void updateDeploymentState() {
         String externalId = "external-id-2";
@@ -112,7 +110,6 @@ class DeploymentControllerIT extends IntegrationTestBase {
     }
 
     @Test
-    @Transactional
     @SneakyThrows
     void updateDeploymentStateToCancelled() {
         String externalId = "external-id-cancelled";
