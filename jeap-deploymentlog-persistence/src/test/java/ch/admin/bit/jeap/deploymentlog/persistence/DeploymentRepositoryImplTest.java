@@ -5,6 +5,9 @@ import ch.admin.bit.jeap.deploymentlog.domain.*;
 import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.test.context.ContextConfiguration;
@@ -20,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 
-@DataJpaTest
+@DataJpaTest(properties = "spring.jpa.properties.hibernate.query.fail_on_pagination_over_collection_fetch=true")
 @ContextConfiguration(classes = PersistenceConfiguration.class)
 @Slf4j
 class DeploymentRepositoryImplTest {
@@ -85,6 +88,67 @@ class DeploymentRepositoryImplTest {
                 null, null, null, null, null, null, null, null), PageRequest.of(0, 1));
         assertThat(unfilteredPage.getTotalElements()).isEqualTo(2);
         assertThat(unfilteredPage.getContent()).hasSize(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 8})
+    void search_loadsCompletePageWithConstantQueryCount(int pageSize) {
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-09-23T10:00:00Z");
+        for (int i = 0; i < 18; i++) {
+            Environment environment = environmentRepository.save(new Environment("ENV-" + i));
+            System system = systemRepository.save(new System("SYS-" + i));
+            Component component = componentRepository.save(new Component("component-" + i, system));
+            deploymentRepository.save(Deployment.builder()
+                    .externalId("search-" + i).startedAt(startedAt.plusMinutes(i)).startedBy("pipeline")
+                    .environment(environment).componentVersion(componentVersion(component, "1.2." + i))
+                    .sequence(DeploymentSequence.NEW)
+                    .changelog(i % 2 == 0 ? null : Changelog.builder()
+                            .comment("changes").jiraIssueKeys(Set.of("JEAP-42", "OPS-7")).build())
+                    .links(Set.of(Link.builder().label("build").url("https://build.example").build(),
+                            Link.builder().label("source").url("https://git.example").build()))
+                    .properties(Map.of("one", "1", "two", "2"))
+                    .referenceIdentifiers(Set.of("ref-1"))
+                    .deploymentTypes(Set.of(DeploymentType.CODE, DeploymentType.CONFIG))
+                    .build());
+        }
+        entityManager.flush();
+        entityManager.clear();
+        var statistics = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        boolean previouslyEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            var page = deploymentRepository.search(new DeploymentSearchCriteria(
+                            null, null, null, null, null, null, null, null),
+                    PageRequest.of(1, pageSize, Sort.by("startedAt")));
+            assertThat(page.getTotalElements()).isEqualTo(18);
+            assertThat(page.getContent()).hasSize(pageSize);
+            // One page query, one count and five collection queries, independent of page size.
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(7);
+            entityManager.clear();
+            for (int i = 0; i < pageSize; i++) {
+                Deployment deployment = page.getContent().get(i);
+                int index = pageSize + i;
+                assertThat(deployment.getExternalId()).isEqualTo("search-" + index);
+                assertThat(deployment.getEnvironment().getName()).isEqualTo("ENV-" + index);
+                assertThat(deployment.getComponentVersion().getVersionName()).isEqualTo("1.2." + index);
+                assertThat(deployment.getComponentVersion().getComponent().getName()).isEqualTo("component-" + index);
+                assertThat(deployment.getComponentVersion().getComponent().getSystem().getName()).isEqualTo("SYS-" + index);
+                assertThat(deployment.getLinks()).hasSize(2);
+                assertThat(deployment.getProperties()).containsExactlyInAnyOrderEntriesOf(Map.of("one", "1", "two", "2"));
+                assertThat(deployment.getReferenceIdentifiers()).containsExactly("ref-1");
+                assertThat(deployment.getDeploymentTypes()).containsExactlyInAnyOrder(DeploymentType.CODE, DeploymentType.CONFIG);
+                if (index % 2 == 0) {
+                    assertThat(deployment.getChangelog()).isNull();
+                } else {
+                    assertThat(deployment.getChangelog().getComment()).isEqualTo("changes");
+                    assertThat(deployment.getChangelog().getJiraIssueKeys()).containsExactlyInAnyOrder("JEAP-42", "OPS-7");
+                }
+            }
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(7);
+        } finally {
+            statistics.setStatisticsEnabled(previouslyEnabled);
+        }
     }
 
     private static ComponentVersion componentVersion(Component component, String version) {

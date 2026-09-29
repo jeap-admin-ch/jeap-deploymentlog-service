@@ -43,6 +43,9 @@ import java.util.stream.IntStream;
 public class DeploymentRepositoryImpl implements DeploymentRepository {
 
     private static final String NAME = "name";
+    public static final String COMPONENT = "component";
+    public static final String ENVIRONMENT = "environment";
+    public static final String SYSTEM = "system";
 
     private final JpaDeploymentRepository jpaDeploymentRepository;
     private final EntityManager entityManager;
@@ -110,11 +113,40 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     @Transactional(readOnly = true)
     public Page<Deployment> search(DeploymentSearchCriteria criteria, Pageable pageable) {
-        return jpaDeploymentRepository.findAll(searchSpecification(criteria), pageable);
+        Page<Deployment> page = jpaDeploymentRepository.findAll(searchSpecification(criteria), pageable);
+        initializeSearchCollections(page.getContent());
+        return page;
+    }
+
+    private void initializeSearchCollections(List<Deployment> deployments) {
+        if (deployments.isEmpty()) {
+            return;
+        }
+        List<UUID> ids = deployments.stream().map(Deployment::getId).toList();
+        // Fetch one collection per query to avoid a Cartesian product and preserve database pagination.
+        for (String collection : List.of("links", "properties", "referenceIdentifiers", "deploymentTypes")) {
+            entityManager.createQuery("select d from Deployment d left join fetch d." + collection
+                            + " where d.id in :ids", Deployment.class)
+                    .setParameter("ids", ids).getResultList();
+        }
+        entityManager.createQuery("""
+                        select d from Deployment d
+                        left join fetch d.changelog c
+                        left join fetch c.jiraIssueKeys
+                        where d.id in :ids
+                        """, Deployment.class)
+                .setParameter("ids", ids).getResultList();
     }
 
     private static Specification<Deployment> searchSpecification(DeploymentSearchCriteria criteria) {
         return (root, query, cb) -> {
+            // Only to-one fetches belong in the paginated query; the count query needs no fetches.
+            if (Deployment.class.equals(query.getResultType())) {
+                root.fetch(ENVIRONMENT, JoinType.LEFT);
+                root.fetch("componentVersion", JoinType.LEFT)
+                        .fetch(COMPONENT, JoinType.LEFT).fetch(SYSTEM, JoinType.LEFT);
+                root.fetch("changelog", JoinType.LEFT);
+            }
             List<Predicate> predicates = new ArrayList<>();
             addTimePredicates(criteria, root, cb, predicates);
             addDeploymentPredicates(criteria, root, cb, predicates);
@@ -136,12 +168,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     private static void addDeploymentPredicates(DeploymentSearchCriteria criteria, Root<Deployment> root,
                                                 CriteriaBuilder cb, List<Predicate> predicates) {
         if (criteria.environment() != null) {
-            predicates.add(cb.equal(root.join("environment", JoinType.INNER).get(NAME), criteria.environment()));
+            predicates.add(cb.equal(root.join(ENVIRONMENT, JoinType.INNER).get(NAME), criteria.environment()));
         }
         Join<Deployment, ?> componentVersion = root.join("componentVersion", JoinType.INNER);
-        Join<?, ?> component = componentVersion.join("component", JoinType.INNER);
+        Join<?, ?> component = componentVersion.join(COMPONENT, JoinType.INNER);
         if (criteria.system() != null) {
-            predicates.add(cb.equal(component.join("system", JoinType.INNER).get(NAME), criteria.system()));
+            predicates.add(cb.equal(component.join(SYSTEM, JoinType.INNER).get(NAME), criteria.system()));
         }
         if (criteria.component() != null) {
             predicates.add(cb.equal(component.get(NAME), criteria.component()));
@@ -276,9 +308,9 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                         on conflict do nothing
                         """.formatted(values))
                 .setParameter("deploymentId", event.deploymentId())
-                .setParameter("system", event.system())
-                .setParameter("component", event.component())
-                .setParameter("environment", event.environment())
+                .setParameter(SYSTEM, event.system())
+                .setParameter(COMPONENT, event.component())
+                .setParameter(ENVIRONMENT, event.environment())
                 .setParameter("state", event.state().name())
                 .setParameter("endedAt", event.endedAt());
         IntStream.range(0, requestedTypes.size()).forEach(index ->
