@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
 import ch.admin.bit.jeap.deploymentlog.domain.*;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -18,7 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest(properties = "spring.datasource.generate-unique-name=true")
+@DataJpaTest(properties = {"spring.datasource.generate-unique-name=true", "spring.flyway.target=33"})
 @ContextConfiguration(classes = PersistenceConfiguration.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -30,6 +31,7 @@ class DataRetentionSchemaCompatibilityTest {
     @Autowired private SystemRepository systems;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private javax.sql.DataSource dataSource;
 
     @Test
     void retainsLegacyReferencedVersionsAndDetectsSchemaRemovalWithoutRestart() {
@@ -57,8 +59,7 @@ class DataRetentionSchemaCompatibilityTest {
         assertThat(retention.findPendingRefreshTasks(10)).hasSize(1);
 
         // Simulate release 2 on the same running repository instance, without an existence cache.
-        jdbc.execute("alter table deployment drop column flow_id");
-        jdbc.execute("drop table flow");
+        Flyway.configure().dataSource(dataSource).load().migrate();
         Deployment afterMigration = tx.execute(status -> createExpiredDeployment("after-migration", cutoff));
 
         assertThat(retention.deleteCandidates(Set.of(afterMigration.getId()), cutoff).deletedDeployments()).isEqualTo(1);

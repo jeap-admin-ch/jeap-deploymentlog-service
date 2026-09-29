@@ -37,7 +37,7 @@ class VersionHistoryMigrationTest {
                 """, deployment, version, environment, flow);
         jdbc.update("insert into deployment_types(deployment_id,type) values (?, 'CODE')", deployment);
 
-        Flyway.configure().dataSource(source).load().migrate();
+        Flyway.configure().dataSource(source).target("33").load().migrate();
 
         assertThat(jdbc.queryForObject("select staging_type from deployment where id = ?", String.class, deployment)).isNull();
         assertThat(jdbc.queryForObject("select count(*) from deployment_final_environments", Integer.class)).isZero();

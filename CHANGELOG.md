@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.9.0] - 2026-09-29
+
+### Removed
+
+- Remove the legacy `deployment.flow_id` column and `flow` table with V34 after the deployment-history rollout.
+  Retained deployments, staging types, explicit targets, component versions and current-stage snapshots remain unchanged.
+  V33 remains unchanged; no deployments are copied, deleted or reclassified.
+
+### Upgrade requirements
+
+- Deploy this release only after every instance and writing job runs at least 16.8.0. Rolling updates from 16.8.0
+  remain supported; rollback to versions before 16.8.0 is no longer supported after V34.
+- Pause data retention for the migration window and restore its configured setting after successful migration.
+  Legacy flow references were already protected in 16.8.0; retention need not remain disabled between releases.
+- Plan for the database locks required by the DDL and establish a recovery point before migration.
+  Record rollout checks and results in JEAP-7660.
+
 ## [16.8.0] - 2026-09-29
 
 ### Changed
