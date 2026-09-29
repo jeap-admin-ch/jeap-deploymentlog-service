@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @Setter
 @Component
 @ConfigurationProperties(prefix = "jeap.deploymentlog.flow", ignoreUnknownFields = false)
-public class FlowStageProperties {
+public class StagingProperties {
 
     private boolean enabled = true;
     private String startEnvironment;

@@ -6,7 +6,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingProperties;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
@@ -23,13 +23,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest(properties = "jeap.deploymentlog.flow.enabled=false")
 @ContextConfiguration(classes = PersistenceConfiguration.class)
-class DisabledFlowComponentPagesTest {
+class DisabledStagingComponentPagesTest {
     @Autowired private VersionDeploymentRepository versions;
     @Autowired private ComponentPageRepository pages;
     @Autowired private ComponentRepository components;
     @Autowired private SystemRepository systems;
     @Autowired private EnvironmentRepository environments;
-    @Autowired private FlowStageProperties properties;
+    @Autowired private StagingProperties properties;
     @Autowired private EntityManager entityManager;
 
     @ParameterizedTest
@@ -52,8 +52,8 @@ class DisabledFlowComponentPagesTest {
         assertThat(versions.findLatestVersions(component.getId(), 50)).isEmpty();
         assertThat(versions.existsForComponent(component.getId())).isFalse();
         assertThat(pages.findCleanupCandidates(50)).isEmpty();
-        assertThat(pages.markCleanupAttemptedIfNoFlow(component.getId(), ZonedDateTime.now())).isZero();
-        assertThat(pages.deleteIfNoFlow(component.getId())).isZero();
+        assertThat(pages.markCleanupAttemptedIfNoRelevantDeployment(component.getId(), ZonedDateTime.now())).isZero();
+        assertThat(pages.deleteIfNoRelevantDeployment(component.getId())).isZero();
         assertThat(pages.findByComponentId(component.getId())).get().satisfies(page -> {
             assertThat(page.getPageId()).isEqualTo("existing-page");
             assertThat(page.getCleanupAttemptedAt()).isNull();

@@ -4,7 +4,7 @@ import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraUnavailableException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageRequestException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidStagingRequestException;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentCheckService;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentController;
 import ch.admin.bit.jeap.deploymentlog.web.api.DeploymentReadController;
@@ -64,15 +64,13 @@ class DeploymentControllerTest {
     @MockitoBean
     private DocgenAsyncService docgenAsyncService;
     @MockitoBean
-    private FlowStageResolver flowStageResolver;
+    private StagingEnvironmentResolver stagingEnvironmentResolver;
     @MockitoBean
-    private FlowStageProperties flowStageProperties;
+    private StagingProperties stagingProperties;
 
     @BeforeEach
     void configureFinalEnvironment() {
-        when(flowStageProperties.isEnabled()).thenReturn(true);
-        when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(any()))
-                .thenReturn(new Environment("PROD"));
+        when(stagingProperties.isEnabled()).thenReturn(true);
     }
 
     @Test
@@ -151,11 +149,11 @@ class DeploymentControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated());
 
-        verify(flowStageResolver).resolveEffectiveFinalDeploymentEnvironment(List.of("ABN", "PROD"));
+        verify(stagingEnvironmentResolver).validateFinalDeploymentEnvironments(List.of("ABN", "PROD"));
     }
 
     @Test
-    void putNewDeployment_withoutDeploymentTypes_doesNotResolveFlowStage() throws Exception {
+    void putNewDeployment_withoutDeploymentTypes_doesNotValidateStagingTargets() throws Exception {
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
         deploymentCreateDto.setDeploymentTypes(null);
 
@@ -165,11 +163,11 @@ class DeploymentControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated());
 
-        verifyNoInteractions(flowStageResolver);
+        verifyNoInteractions(stagingEnvironmentResolver);
     }
 
     @Test
-    void putNewDeployment_withConfigType_doesNotResolveFlowStage() throws Exception {
+    void putNewDeployment_withConfigType_doesNotValidateStagingTargets() throws Exception {
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
         deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CONFIG));
 
@@ -179,12 +177,12 @@ class DeploymentControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated());
 
-        verifyNoInteractions(flowStageResolver);
+        verifyNoInteractions(stagingEnvironmentResolver);
     }
 
     @Test
-    void putNewCodeDeployment_whenFlowProcessingDisabled_doesNotResolveFlowStage() throws Exception {
-        when(flowStageProperties.isEnabled()).thenReturn(false);
+    void putNewCodeDeployment_whenStagingProcessingDisabled_doesNotValidateStagingTargets() throws Exception {
+        when(stagingProperties.isEnabled()).thenReturn(false);
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
         deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE));
 
@@ -194,7 +192,7 @@ class DeploymentControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isCreated());
 
-        verifyNoInteractions(flowStageResolver);
+        verifyNoInteractions(stagingEnvironmentResolver);
     }
 
     @Test
@@ -208,7 +206,7 @@ class DeploymentControllerTest {
                         .with(httpBasic("write", "secret")))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(flowStageResolver);
+        verifyNoInteractions(stagingEnvironmentResolver);
         verify(deploymentService, never()).createDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
@@ -219,8 +217,8 @@ class DeploymentControllerTest {
         DeploymentCreateDto deploymentCreateDto = getDeploymentCreateDto();
         deploymentCreateDto.setDeploymentTypes(Set.of(DeploymentType.CODE));
         deploymentCreateDto.setFinalDeploymentEnvironments(List.of("UNKNOWN"));
-        when(flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(List.of("UNKNOWN")))
-                .thenThrow(new InvalidFlowStageRequestException("Unknown final deployment environment(s): UNKNOWN"));
+        doThrow(new InvalidStagingRequestException("Unknown final deployment environment(s): UNKNOWN"))
+                .when(stagingEnvironmentResolver).validateFinalDeploymentEnvironments(List.of("UNKNOWN"));
 
         mockMvc.perform(put("/api/deployment/{externalId}", "unknown-target-stage")
                         .contentType(MediaType.APPLICATION_JSON)

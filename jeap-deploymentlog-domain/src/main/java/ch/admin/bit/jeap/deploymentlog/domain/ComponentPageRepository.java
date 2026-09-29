@@ -15,7 +15,7 @@ public interface ComponentPageRepository {
 
     List<ComponentPageCleanupCandidate> findCleanupCandidates(int limit);
 
-    int markCleanupAttemptedIfNoFlow(UUID componentId, ZonedDateTime attemptedAt);
+    int markCleanupAttemptedIfNoRelevantDeployment(UUID componentId, ZonedDateTime attemptedAt);
 
-    int deleteIfNoFlow(UUID componentId);
+    int deleteIfNoRelevantDeployment(UUID componentId);
 }

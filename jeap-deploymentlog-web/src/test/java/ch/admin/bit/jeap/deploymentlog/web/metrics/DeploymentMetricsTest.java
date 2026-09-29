@@ -32,16 +32,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(OutputCaptureExtension.class)
-class DeploymentFlowMetricsTest {
+class DeploymentMetricsTest {
 
     private final DeploymentRepository deploymentRepository = mock(DeploymentRepository.class);
     private SimpleMeterRegistry meterRegistry;
-    private DeploymentFlowMetrics metrics;
+    private DeploymentMetrics metrics;
 
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        metrics = new DeploymentFlowMetrics(meterRegistry, deploymentRepository);
+        metrics = new DeploymentMetrics(meterRegistry, deploymentRepository);
     }
 
     @Test
@@ -49,13 +49,13 @@ class DeploymentFlowMetricsTest {
         metrics.deploymentStarted(new DeploymentStartedMetricEvent(
                 "System", "component", "DEV", Set.of(DeploymentType.CODE)));
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounters())
+        assertThat(meterRegistry.find(DeploymentMetrics.DEPLOYMENT_COUNTER).functionCounters())
                 .extracting(counter -> counter.getId().getTag("result"), FunctionCounter::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("success", 0.0),
                         org.assertj.core.groups.Tuple.tuple("failed", 0.0),
                         org.assertj.core.groups.Tuple.tuple("cancelled", 0.0));
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
     @Test
@@ -65,7 +65,7 @@ class DeploymentFlowMetricsTest {
 
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isZero();
@@ -84,7 +84,7 @@ class DeploymentFlowMetricsTest {
         metrics.refreshDeploymentMetrics();
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isEqualTo(2);
@@ -103,7 +103,7 @@ class DeploymentFlowMetricsTest {
 
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isEqualTo(1);
@@ -119,11 +119,11 @@ class DeploymentFlowMetricsTest {
 
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isEqualTo(2);
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.find(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("environment", "DEV").functionCounters()).isEmpty();
     }
 
@@ -139,7 +139,7 @@ class DeploymentFlowMetricsTest {
                         DeploymentState.SUCCESS, 1)));
         metrics.refreshDeploymentMetrics();
 
-        var counter = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        var counter = meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD", "result", "success",
                         "deployment_type", deploymentType.name())
                 .functionCounter();
@@ -151,7 +151,7 @@ class DeploymentFlowMetricsTest {
                 "result", "success",
                 "deployment_type", deploymentType.name()));
 
-        Timer duration = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+        Timer duration = meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION)
                 .tags("system", "Turnus", "component", "turnus-scs", "environment", "PROD",
                         "deployment_type", deploymentType.name()).timer();
         assertThat(duration.count()).isEqualTo(1);
@@ -177,15 +177,15 @@ class DeploymentFlowMetricsTest {
                         DeploymentState.SUCCESS, 1)));
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.find(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "success").functionCounters())
-                .extracting(counter -> counter.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
+                .extracting(counter -> counter.getId().getTag(DeploymentMetrics.DEPLOYMENT_TYPE),
                         FunctionCounter::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("CODE", 1.0),
                         org.assertj.core.groups.Tuple.tuple("INFRASTRUCTURE", 1.0));
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timers())
-                .extracting(timer -> timer.getId().getTag(DeploymentFlowMetrics.DEPLOYMENT_TYPE),
+        assertThat(meterRegistry.find(DeploymentMetrics.DEPLOYMENT_DURATION).timers())
+                .extracting(timer -> timer.getId().getTag(DeploymentMetrics.DEPLOYMENT_TYPE),
                         Timer::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("CODE", 1L),
@@ -203,9 +203,9 @@ class DeploymentFlowMetricsTest {
                         DeploymentState.FAILURE, 1)));
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "failed").functionCounter().count()).isEqualTo(1);
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
     @Test
@@ -219,9 +219,9 @@ class DeploymentFlowMetricsTest {
                         DeploymentState.CANCELLED, 1)));
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "cancelled").functionCounter().count()).isEqualTo(1);
-        Timer duration = meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer();
+        Timer duration = meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION).timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(30);
     }
@@ -237,9 +237,9 @@ class DeploymentFlowMetricsTest {
                         DeploymentState.SUCCESS, 1)));
         metrics.refreshDeploymentMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("result", "success").functionCounter().count()).isEqualTo(1);
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
     }
 
     @Test
@@ -249,7 +249,7 @@ class DeploymentFlowMetricsTest {
 
         metrics.initializeMetrics();
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE", "result", "success")
                 .functionCounter().count()).isZero();
@@ -264,13 +264,13 @@ class DeploymentFlowMetricsTest {
 
         metrics.initializeMetrics();
 
-        assertThat(meterRegistry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounters())
+        assertThat(meterRegistry.find(DeploymentMetrics.DEPLOYMENT_COUNTER).functionCounters())
                 .extracting(counter -> counter.getId().getTag("result"), FunctionCounter::count)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("success", 3.0),
                         org.assertj.core.groups.Tuple.tuple("failed", 0.0),
                         org.assertj.core.groups.Tuple.tuple("cancelled", 0.0));
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION)
                 .tags("system", "System", "component", "component", "environment", "REF",
                         "deployment_type", "CODE")
                 .timer().count()).isZero();
@@ -283,8 +283,8 @@ class DeploymentFlowMetricsTest {
                 DeploymentState.FAILURE,
                 ZonedDateTime.parse("2026-09-14T10:00:00+02:00"), null));
 
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).functionCounter().count()).isZero();
-        assertThat(meterRegistry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_COUNTER).functionCounter().count()).isZero();
+        assertThat(meterRegistry.get(DeploymentMetrics.DEPLOYMENT_DURATION).timer().count()).isZero();
         assertThat(output).contains("missing-end", "startedAt or endedAt is missing");
     }
 

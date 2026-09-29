@@ -49,7 +49,7 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
                 and deployment.sequence <> ch.admin.bit.jeap.deploymentlog.domain.DeploymentSequence.UNDEPLOYED
             )
             """)
-    int markCleanupAttemptedIfNoFlow(@Param("componentId") UUID componentId,
+    int markCleanupAttemptedIfNoRelevantDeployment(@Param("componentId") UUID componentId,
                                      @Param("attemptedAt") ZonedDateTime attemptedAt, @Param("stages") List<String> stages);
 
     @Modifying
@@ -64,5 +64,5 @@ interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID>
                 and deployment.sequence <> ch.admin.bit.jeap.deploymentlog.domain.DeploymentSequence.UNDEPLOYED
             )
             """)
-    int deleteIfNoFlow(@Param("componentId") UUID componentId, @Param("stages") List<String> stages);
+    int deleteIfNoRelevantDeployment(@Param("componentId") UUID componentId, @Param("stages") List<String> stages);
 }

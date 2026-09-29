@@ -4,8 +4,8 @@ import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingProperties;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.DeploymentNotFoundException;
 import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidDeploymentStateForUpdateException;
 import ch.admin.bit.jeap.deploymentlog.web.api.dto.*;
@@ -33,8 +33,8 @@ public class DeploymentController {
     private final DeploymentService deploymentService;
     private final DocgenAsyncService docgenAsyncService;
     private final DeploymentCheckService deploymentCheckService;
-    private final FlowStageResolver flowStageResolver;
-    private final FlowStageProperties flowStageProperties;
+    private final StagingEnvironmentResolver stagingEnvironmentResolver;
+    private final StagingProperties stagingProperties;
 
     @PutMapping("/{id}")
     @Operation(summary = "Create a new deployment")
@@ -117,17 +117,17 @@ public class DeploymentController {
     private void validateStagingRequest(String externalId, DeploymentCreateDto deploymentCreateDto) {
         java.util.List<String> finalDeploymentEnvironmentNames = deploymentCreateDto.getFinalDeploymentEnvironments();
         Set<DeploymentType> deploymentTypes = deploymentCreateDto.getDeploymentTypes();
-        boolean flowEnabled = flowStageProperties.isEnabled();
+        boolean stagingEnabled = stagingProperties.isEnabled();
         boolean isCodeDeployment = deploymentTypes != null && deploymentTypes.contains(DeploymentType.CODE);
         boolean hasNoDeploymentTypes = deploymentTypes == null || deploymentTypes.isEmpty();
-        if ((flowEnabled && isCodeDeployment)
+        if ((stagingEnabled && isCodeDeployment)
                 || (finalDeploymentEnvironmentNames != null && !finalDeploymentEnvironmentNames.isEmpty())) {
             // Resolve before persisting so invalid target stages reject the complete request.
-            flowStageResolver.resolveEffectiveFinalDeploymentEnvironment(
+            stagingEnvironmentResolver.validateFinalDeploymentEnvironments(
                     finalDeploymentEnvironmentNames);
-        } else if (flowEnabled && hasNoDeploymentTypes) {
-            log.warn("Deployment with externalId '{}' has no deploymentTypes and will be stored without flow tracking. " +
-                    "Add deployment type CODE to enable flow tracking", externalId);
+        } else if (stagingEnabled && hasNoDeploymentTypes) {
+            log.warn("Deployment with externalId '{}' has no deploymentTypes and will be stored without staging classification. " +
+                    "Add deployment type CODE to enable staging classification", externalId);
         }
     }
 

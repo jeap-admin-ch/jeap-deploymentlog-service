@@ -18,8 +18,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class VersionStagingMetrics {
     private static final String METRIC_KEY_SEPARATOR = "\u0000";
     private final VersionDeploymentRepository repository;
-    private final FlowStageProperties properties;
-    private final FlowStageResolver resolver;
+    private final StagingProperties properties;
+    private final StagingEnvironmentResolver resolver;
     private final MeterRegistry registry;
     private final Map<String, Values> values = new ConcurrentHashMap<>();
 

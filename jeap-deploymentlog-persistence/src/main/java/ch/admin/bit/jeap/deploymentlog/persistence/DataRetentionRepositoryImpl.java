@@ -257,11 +257,7 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
     }
 
     private void removeOrphanComponentVersions(Set<UUID> componentVersionIds) {
-        Set<UUID> legacyFlowVersions = findLegacyFlowVersions(componentVersionIds);
         for (UUID componentVersionId : componentVersionIds) {
-            if (legacyFlowVersions.contains(componentVersionId)) {
-                continue;
-            }
             Long references = entityManager.createQuery("""
                             select count(deployment) from Deployment deployment
                             where deployment.componentVersion.id = :componentVersionId
@@ -281,22 +277,5 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
                 }
             }
         }
-    }
-
-    private Set<UUID> findLegacyFlowVersions(Set<UUID> componentVersionIds) {
-        // Recheck for every batch: a later rollout removes the legacy schema while this version is still running.
-        boolean legacySchemaPresent = !entityManager.createNativeQuery("""
-                        select table_name from information_schema.tables
-                        where table_schema = current_schema and lower(table_name) = 'flow'
-                        """, String.class).getResultList().isEmpty();
-        if (!legacySchemaPresent || componentVersionIds.isEmpty()) {
-            return Set.of();
-        }
-        return new HashSet<>(entityManager.createNativeQuery("""
-                        select distinct component_version_id from flow
-                        where component_version_id in (:componentVersionIds)
-                        """, UUID.class)
-                .setParameter("componentVersionIds", componentVersionIds)
-                .getResultList());
     }
 }

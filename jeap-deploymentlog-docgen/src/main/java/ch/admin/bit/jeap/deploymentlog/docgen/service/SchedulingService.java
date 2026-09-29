@@ -131,13 +131,13 @@ public class SchedulingService {
         List<ComponentPageCleanupCandidate> candidates = componentPageRepository.findCleanupCandidates(
                 housekeepingConfig.getComponentPages().getBatchSize());
         if (!candidates.isEmpty()) {
-            log.info("Reconciling {} tracked component pages without flows", candidates.size());
+            log.info("Reconciling {} tracked component pages without relevant deployments", candidates.size());
         }
         candidates.forEach(this::attemptComponentPageCleanup);
     }
 
     private void attemptComponentPageCleanup(ComponentPageCleanupCandidate candidate) {
-        int marked = componentPageRepository.markCleanupAttemptedIfNoFlow(
+        int marked = componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(
                 candidate.componentId(), ZonedDateTime.now());
         if (marked == 0) {
             log.info("Skipping component page {} because component {} is no longer obsolete",
@@ -150,7 +150,7 @@ public class SchedulingService {
 
     private void deleteComponentPageIfStillObsolete(ComponentPageCleanupCandidate candidate) {
         if (versionDeploymentRepository.existsForComponent(candidate.componentId())) {
-            log.info("Keeping component page {} because component {} now has a flow",
+            log.info("Keeping component page {} because component {} now has a relevant deployment",
                     candidate.pageId(), candidate.componentId());
             return;
         }
@@ -162,10 +162,10 @@ public class SchedulingService {
             return;
         }
 
-        int deleted = componentPageRepository.deleteIfNoFlow(candidate.componentId());
+        int deleted = componentPageRepository.deleteIfNoRelevantDeployment(candidate.componentId());
         if (deleted == 0) {
             log.warn("Deleted Confluence component page {} but retained or no longer found tracking for component {}. "
-                            + "A concurrent flow may recreate the page through normal generation",
+                            + "A concurrent deployment may recreate the page through normal generation",
                     candidate.pageId(), candidate.componentId());
         } else {
             log.info("Deleted obsolete component page {} and its tracking for component {}",

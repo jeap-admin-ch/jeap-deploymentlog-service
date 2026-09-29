@@ -34,7 +34,7 @@ class DataRetentionSchemaCompatibilityTest {
     @Autowired private javax.sql.DataSource dataSource;
 
     @Test
-    void retainsLegacyReferencedVersionsAndDetectsSchemaRemovalWithoutRestart() {
+    void removesExpiredLegacyDeploymentsAndOrphanVersionsAfterMigration() {
         var tx = new TransactionTemplate(transactionManager);
         ZonedDateTime cutoff = ZonedDateTime.now().minusDays(30);
         Deployment legacy = tx.execute(status -> createExpiredDeployment("legacy", cutoff));
@@ -47,19 +47,18 @@ class DataRetentionSchemaCompatibilityTest {
                 """, flowId, legacyVersionId, legacy.getEnvironment().getId());
         jdbc.update("update deployment set flow_id = ? where id = ?", flowId, legacy.getId());
 
+        Flyway.configure().dataSource(dataSource).load().migrate();
+
         var result = retention.deleteCandidates(Set.of(legacy.getId(), independent.getId()), cutoff);
 
         assertThat(result.deletedDeployments()).isEqualTo(2);
         assertThat(count("deployment", legacy.getId())).isZero();
         assertThat(count("deployment", independent.getId())).isZero();
-        assertThat(count("component_version", legacyVersionId)).isEqualTo(1);
+        assertThat(count("component_version", legacyVersionId)).isZero();
         assertThat(count("component_version", independent.getComponentVersion().getId())).isZero();
-        assertThat(count("flow", flowId)).isEqualTo(1);
         assertThat(retention.findDeletionCandidates(cutoff, 10)).isEmpty();
         assertThat(retention.findPendingRefreshTasks(10)).hasSize(1);
 
-        // Simulate release 2 on the same running repository instance, without an existence cache.
-        Flyway.configure().dataSource(dataSource).load().migrate();
         Deployment afterMigration = tx.execute(status -> createExpiredDeployment("after-migration", cutoff));
 
         assertThat(retention.deleteCandidates(Set.of(afterMigration.getId()), cutoff).deletedDeployments()).isEqualTo(1);

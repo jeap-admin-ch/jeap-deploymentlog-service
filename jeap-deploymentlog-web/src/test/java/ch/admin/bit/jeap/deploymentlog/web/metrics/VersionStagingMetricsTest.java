@@ -10,7 +10,7 @@ import static org.mockito.Mockito.*;
 class VersionStagingMetricsTest {
     @Test void readsDeploymentTotalsAcrossRegistryRestartWithoutFlowTypeOrStateLabels() {
         var repository = mock(VersionDeploymentRepository.class);
-        var resolver = mock(FlowStageResolver.class);
+        var resolver = mock(StagingEnvironmentResolver.class);
         when(resolver.resolveStartEnvironment()).thenReturn(new Environment("REF"));
         when(resolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(new Environment("PROD"));
         when(repository.metrics("REF", "PROD")).thenReturn(List.of(
@@ -18,7 +18,7 @@ class VersionStagingMetricsTest {
         for (int restart = 0; restart < 2; restart++) {
             var registry = new SimpleMeterRegistry();
             try {
-                var metrics = new VersionStagingMetrics(repository, new FlowStageProperties(), resolver, registry);
+                var metrics = new VersionStagingMetrics(repository, new StagingProperties(), resolver, registry);
                 metrics.initialize(); metrics.refresh();
                 assertThat(registry.get("version_start").gauge().value()).isEqualTo(5);
                 assertThat(registry.get("version_end").gauge().value()).isEqualTo(3);
@@ -36,7 +36,7 @@ class VersionStagingMetricsTest {
     }
     @Test void reflectsRetentionAndClearsTotalsWhenAllDeploymentsAreDeleted() {
         var repository = mock(VersionDeploymentRepository.class);
-        var resolver = mock(FlowStageResolver.class);
+        var resolver = mock(StagingEnvironmentResolver.class);
         when(resolver.resolveStartEnvironment()).thenReturn(new Environment("REF"));
         when(resolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(new Environment("PROD"));
         when(repository.metrics("REF", "PROD")).thenReturn(
@@ -44,7 +44,7 @@ class VersionStagingMetricsTest {
                 List.of(new StagingMetricValue("SYS", "service", 2, 1, false, 1, 60)), List.of());
         var registry = new SimpleMeterRegistry();
         try {
-            var metrics = new VersionStagingMetrics(repository, new FlowStageProperties(), resolver, registry);
+            var metrics = new VersionStagingMetrics(repository, new StagingProperties(), resolver, registry);
             metrics.initialize();
             metrics.refresh();
             assertThat(registry.get("version_start").gauge().value()).isEqualTo(2);

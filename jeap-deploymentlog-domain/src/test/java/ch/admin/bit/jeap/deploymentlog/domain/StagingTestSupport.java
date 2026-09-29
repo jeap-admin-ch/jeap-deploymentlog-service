@@ -9,8 +9,8 @@ import static org.mockito.Mockito.*;
 
 abstract class StagingTestSupport {
     final VersionDeploymentRepository repository = mock(VersionDeploymentRepository.class);
-    final FlowStageResolver resolver = mock(FlowStageResolver.class);
-    final FlowStageProperties properties = new FlowStageProperties();
+    final StagingEnvironmentResolver resolver = mock(StagingEnvironmentResolver.class);
+    final StagingProperties properties = new StagingProperties();
     final DeploymentStagingService service = new DeploymentStagingService(repository, properties, resolver);
     final Environment ref = new Environment("REF");
     final Environment abn = new Environment("ABN");
@@ -24,11 +24,7 @@ abstract class StagingTestSupport {
         abn.setStagingOrder(2);
         prod.setStagingOrder(3);
         when(resolver.relevantEnvironments()).thenReturn(List.of(ref, abn, prod));
-        when(resolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(prod);
-        when(resolver.resolveEffectiveFinalDeploymentEnvironment(any())).thenAnswer(invocation -> {
-            java.util.Collection<String> names = invocation.getArgument(0);
-            return names.contains("PROD") ? prod : names.contains("ABN") ? abn : null;
-        });
+
     }
 
     Deployment deployment(Environment environment) {

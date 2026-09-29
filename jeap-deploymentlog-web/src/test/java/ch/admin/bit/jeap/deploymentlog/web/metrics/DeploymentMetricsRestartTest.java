@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 // Intentionally two ordered phases: destroy the entire Spring context, retain only the database, then start again.
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
+class DeploymentMetricsRestartTest extends MetricsIntegrationTestBase {
     private static final String DATABASE = "metrics-restart-" + UUID.randomUUID();
     private static Fixture closed;
     private static Fixture open;
@@ -34,7 +34,7 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         update(closed, DeploymentState.SUCCESS);
         metrics.refreshDeploymentMetrics();
 
-        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(registry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
     }
 
@@ -45,11 +45,11 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         assertThat(closed).isNotNull();
         update(closed, DeploymentState.SUCCESS);
 
-        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(registry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", closed.system(), "result", "success").functionCounter().count()).isEqualTo(1);
 
         // Duration and flow observations remain process-local and are not replayed after a restart.
-        for (String name : new String[]{DeploymentFlowMetrics.DEPLOYMENT_DURATION}) {
+        for (String name : new String[]{DeploymentMetrics.DEPLOYMENT_DURATION}) {
             assertThat(registry.find(name).tag("system", closed.system()).meters())
                     .isNotEmpty()
                     .allMatch(meter -> switch (meter) {
@@ -60,7 +60,7 @@ class DeploymentFlowMetricsRestartTest extends MetricsIntegrationTestBase {
         }
         update(open, DeploymentState.SUCCESS);
         metrics.refreshDeploymentMetrics();
-        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(registry.get(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tags("system", open.system(), "result", "success").functionCounter().count()).isEqualTo(1);
     }
 }

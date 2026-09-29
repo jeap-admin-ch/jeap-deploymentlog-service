@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 @Slf4j
-public class DeploymentFlowMetrics {
+public class DeploymentMetrics {
 
     static final String DEPLOYMENT_COUNTER = "deployment_counter";
     static final String DEPLOYMENT_DURATION = "deployment_duration_seconds";
@@ -41,7 +41,7 @@ public class DeploymentFlowMetrics {
     private final MeterRegistry meterRegistry;
     private final DeploymentRepository deploymentRepository;
     private final Map<DeploymentCounterKey, AtomicLong> deploymentCounters = new ConcurrentHashMap<>();
-    public DeploymentFlowMetrics(MeterRegistry meterRegistry,
+    public DeploymentMetrics(MeterRegistry meterRegistry,
                                  DeploymentRepository deploymentRepository) {
         this.meterRegistry = meterRegistry;
         this.deploymentRepository = deploymentRepository;

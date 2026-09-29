@@ -14,8 +14,8 @@ import java.util.Locale;
 @Transactional
 public class DeploymentStagingService {
     private final VersionDeploymentRepository repository;
-    private final FlowStageProperties properties;
-    private final FlowStageResolver stageResolver;
+    private final StagingProperties properties;
+    private final StagingEnvironmentResolver stageResolver;
 
     public void prepare(Deployment deployment, Collection<String> finalEnvironments) {
         deployment.setFinalDeploymentEnvironments(finalEnvironments == null ? List.of() : finalEnvironments.stream()

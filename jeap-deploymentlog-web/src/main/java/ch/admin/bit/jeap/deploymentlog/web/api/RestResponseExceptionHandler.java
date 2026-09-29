@@ -47,8 +47,8 @@ public class RestResponseExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "Invalid system group name", "INVALID_SYSTEM_GROUP_NAME");
     }
 
-    @ExceptionHandler(InvalidFlowStageRequestException.class)
-    public ResponseEntity<String> handleInvalidFlowStageRequestException(InvalidFlowStageRequestException ex) {
+    @ExceptionHandler(InvalidStagingRequestException.class)
+    public ResponseEntity<String> handleInvalidStagingRequestException(InvalidStagingRequestException ex) {
         log.warn(ex.getMessage());
         return new ResponseEntity<>(ex.getMessage(), HttpStatus.BAD_REQUEST);
     }

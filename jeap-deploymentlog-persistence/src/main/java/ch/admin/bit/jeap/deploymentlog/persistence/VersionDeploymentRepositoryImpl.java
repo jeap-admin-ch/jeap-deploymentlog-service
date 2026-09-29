@@ -22,12 +22,12 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
     private final EntityManager entityManager;
     private final JpaComponentRepository componentRepository;
     private final JdbcTemplate jdbc;
-    private final FlowStageResolver stageResolver;
-    private final FlowStageProperties flowStageProperties;
+    private final StagingEnvironmentResolver stageResolver;
+    private final StagingProperties stagingProperties;
 
     @Override
     public List<List<Deployment>> findLatestVersions(UUID componentId, int limit) {
-        if (!flowStageProperties.isEnabled() || limit <= 0) {
+        if (!stagingProperties.isEnabled() || limit <= 0) {
             return List.of();
         }
         List<String> versions = entityManager.createQuery("""
@@ -60,7 +60,7 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
 
     @Override
     public boolean existsForComponent(UUID componentId) {
-        if (!flowStageProperties.isEnabled()) {
+        if (!stagingProperties.isEnabled()) {
             return false;
         }
         return !entityManager.createQuery("""

@@ -4,8 +4,8 @@ import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.Environment;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
@@ -22,8 +22,8 @@ import java.util.UUID;
 public class ComponentPageRepositoryImpl implements ComponentPageRepository {
 
     private final JpaComponentPageRepository repository;
-    private final FlowStageResolver stageResolver;
-    private final FlowStageProperties flowStageProperties;
+    private final StagingEnvironmentResolver stageResolver;
+    private final StagingProperties stagingProperties;
 
     @Override
     public Optional<ComponentPage> findByComponentId(UUID componentId) {
@@ -43,7 +43,7 @@ public class ComponentPageRepositoryImpl implements ComponentPageRepository {
     @Override
     @Transactional(readOnly = true)
     public List<ComponentPageCleanupCandidate> findCleanupCandidates(int limit) {
-        if (!flowStageProperties.isEnabled()) {
+        if (!stagingProperties.isEnabled()) {
             return List.of();
         }
         return repository.findCleanupCandidates(relevantStageNames(), PageRequest.of(0, limit));
@@ -51,20 +51,20 @@ public class ComponentPageRepositoryImpl implements ComponentPageRepository {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int markCleanupAttemptedIfNoFlow(UUID componentId, ZonedDateTime attemptedAt) {
-        if (!flowStageProperties.isEnabled()) {
+    public int markCleanupAttemptedIfNoRelevantDeployment(UUID componentId, ZonedDateTime attemptedAt) {
+        if (!stagingProperties.isEnabled()) {
             return 0;
         }
-        return repository.markCleanupAttemptedIfNoFlow(componentId, attemptedAt, relevantStageNames());
+        return repository.markCleanupAttemptedIfNoRelevantDeployment(componentId, attemptedAt, relevantStageNames());
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public int deleteIfNoFlow(UUID componentId) {
-        if (!flowStageProperties.isEnabled()) {
+    public int deleteIfNoRelevantDeployment(UUID componentId) {
+        if (!stagingProperties.isEnabled()) {
             return 0;
         }
-        return repository.deleteIfNoFlow(componentId, relevantStageNames());
+        return repository.deleteIfNoRelevantDeployment(componentId, relevantStageNames());
     }
 
     private List<String> relevantStageNames() {

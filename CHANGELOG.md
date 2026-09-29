@@ -13,6 +13,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Retained deployments, staging types, explicit targets, component versions and current-stage snapshots remain unchanged.
   V33 remains unchanged; no deployments are copied, deleted or reclassified.
 
+- Remove the release-1 legacy-flow retention guard, obsolete test settings and unused target selection.
+  Rename staging configuration classes, deployment metrics and page-cleanup methods to match deployment-history semantics.
+  Existing configuration property names remain supported.
+
 ### Upgrade requirements
 
 - Deploy this release only after every instance and writing job runs at least 16.8.0. Rolling updates from 16.8.0

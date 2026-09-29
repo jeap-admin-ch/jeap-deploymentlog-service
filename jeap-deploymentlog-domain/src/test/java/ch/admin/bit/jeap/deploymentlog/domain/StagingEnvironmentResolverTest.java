@@ -1,7 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
-import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageConfigurationException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageRequestException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidStagingConfigurationException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidStagingRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -13,11 +13,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class FlowStageResolverTest {
+class StagingEnvironmentResolverTest {
 
     private final EnvironmentRepository environmentRepository = mock(EnvironmentRepository.class);
-    private final FlowStageProperties properties = new FlowStageProperties();
-    private final FlowStageResolver resolver = new FlowStageResolver(environmentRepository, properties);
+    private final StagingProperties properties = new StagingProperties();
+    private final StagingEnvironmentResolver resolver = new StagingEnvironmentResolver(environmentRepository, properties);
 
     private Environment dev;
     private Environment ref;
@@ -57,12 +57,12 @@ class FlowStageResolverTest {
         dev.setDevelopment(false);
 
         assertThatThrownBy(resolver::resolveStartEnvironment)
-                .isInstanceOf(InvalidFlowStageConfigurationException.class)
+                .isInstanceOf(InvalidStagingConfigurationException.class)
                 .hasMessageContaining("exactly one");
 
         ref.setProductive(true);
         assertThatThrownBy(resolver::resolveDefaultFinalDeploymentEnvironment)
-                .isInstanceOf(InvalidFlowStageConfigurationException.class)
+                .isInstanceOf(InvalidStagingConfigurationException.class)
                 .hasMessageContaining("found 2");
     }
 
@@ -71,41 +71,30 @@ class FlowStageResolverTest {
         properties.setStartEnvironment("  ");
 
         assertThatThrownBy(resolver::resolveStartEnvironment)
-                .isInstanceOf(InvalidFlowStageConfigurationException.class)
+                .isInstanceOf(InvalidStagingConfigurationException.class)
                 .hasMessageContaining("must not be blank");
     }
 
     @Test
-    void choosesHighestRequestedStageRegardlessOfOrderAndDuplicates() {
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(List.of("ABN", " ref ", "ABN")))
-                .isSameAs(abn);
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(List.of("REF", "ABN")))
-                .isSameAs(abn);
-    }
-
-    @Test
-    void emptyRequestMeansNoAutoStaging() {
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(List.of())).isNull();
-        assertThat(resolver.resolveEffectiveFinalDeploymentEnvironment(null)).isNull();
+    void validatesTargetsRegardlessOfOrderDuplicatesOrEmptyRequests() {
+        resolver.validateFinalDeploymentEnvironments(List.of("ABN", " ref ", "ABN"));
+        resolver.validateFinalDeploymentEnvironments(List.of());
+        resolver.validateFinalDeploymentEnvironments(null);
     }
 
     @Test
     void rejectsAllRequestedStagesWhenOneIsUnknown() {
         List<String> requestedEnvironments = List.of("ABN", "UNKNOWN");
 
-        assertThatThrownBy(() -> resolver.resolveEffectiveFinalDeploymentEnvironment(requestedEnvironments))
-                .isInstanceOf(InvalidFlowStageRequestException.class)
+        assertThatThrownBy(() -> resolver.validateFinalDeploymentEnvironments(requestedEnvironments))
+                .isInstanceOf(InvalidStagingRequestException.class)
                 .hasMessageContaining("UNKNOWN");
     }
 
     @Test
-    void rejectsDifferentHighestStagesWithSameOrder() {
+    void acceptsKnownTargetsWithoutSelectingOneHighestStage() {
         ref.setStagingOrder(2);
-        List<String> requestedEnvironments = List.of("REF", "ABN");
-
-        assertThatThrownBy(() -> resolver.resolveEffectiveFinalDeploymentEnvironment(requestedEnvironments))
-                .isInstanceOf(InvalidFlowStageRequestException.class)
-                .hasMessageContaining("Ambiguous");
+        resolver.validateFinalDeploymentEnvironments(List.of("REF", "ABN"));
     }
 
     private static Environment environment(String name, int order, boolean development, boolean productive) {

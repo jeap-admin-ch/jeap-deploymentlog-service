@@ -33,8 +33,8 @@ public class DeploymentCreateDto {
     ComponentVersionCreateDto componentVersion;
 
     @ArraySchema(schema = @Schema(example = "PROD"), arraySchema = @Schema(
-            description = "Optional final environments of the current automated staging. The environment with the " +
-                    "highest configured stagingOrder is used. Omitted or empty means no automated staging."))
+            description = "Optional final environments of the current automated staging. All explicit targets " +
+                    "are retained on the deployment. Omitted or empty means no automated staging."))
     List<String> finalDeploymentEnvironments;
 
     DeploymentUnit deploymentUnit;

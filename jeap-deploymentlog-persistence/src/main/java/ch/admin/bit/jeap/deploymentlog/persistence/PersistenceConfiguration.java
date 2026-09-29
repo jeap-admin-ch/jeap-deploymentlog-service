@@ -1,7 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.persistence;
 
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageProperties;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingProperties;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import javax.sql.DataSource;
 
-@Import({FlowStageResolver.class, FlowStageProperties.class})
+@Import({StagingEnvironmentResolver.class, StagingProperties.class})
 @AutoConfiguration
 @EnableTransactionManagement
 @EnableJpaRepositories

@@ -1,7 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
-import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageConfigurationException;
-import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidFlowStageRequestException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidStagingConfigurationException;
+import ch.admin.bit.jeap.deploymentlog.domain.exception.InvalidStagingRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,10 +16,10 @@ import java.util.function.Predicate;
 
 @Service
 @RequiredArgsConstructor
-public class FlowStageResolver {
+public class StagingEnvironmentResolver {
 
     private final EnvironmentRepository environmentRepository;
-    private final FlowStageProperties properties;
+    private final StagingProperties properties;
 
     public Environment resolveStartEnvironment() {
         return resolveConfiguredOrFlagged(properties.getStartEnvironment(), Environment::isDevelopment,
@@ -31,51 +31,36 @@ public class FlowStageResolver {
                 "default final deployment environment", "productive=true");
     }
 
-    public Environment resolveEffectiveFinalDeploymentEnvironment(Collection<String> requestedEnvironmentNames) {
+    public void validateFinalDeploymentEnvironments(Collection<String> requestedEnvironmentNames) {
         if (requestedEnvironmentNames == null || requestedEnvironmentNames.isEmpty()) {
-            return null;
+            return;
         }
 
         Set<String> normalizedNames = new LinkedHashSet<>();
         for (String requestedName : requestedEnvironmentNames) {
             if (requestedName == null || requestedName.isBlank()) {
-                throw new InvalidFlowStageRequestException("finalDeploymentEnvironments must not contain blank values");
+                throw new InvalidStagingRequestException("finalDeploymentEnvironments must not contain blank values");
             }
             normalizedNames.add(normalize(requestedName));
         }
 
-        List<Environment> environments = new ArrayList<>();
         List<String> unknownNames = new ArrayList<>();
         for (String name : normalizedNames) {
-            environmentRepository.findByName(name)
-                    .ifPresentOrElse(environments::add, () -> unknownNames.add(name));
+            if (environmentRepository.findByName(name).isEmpty()) {
+                unknownNames.add(name);
+            }
         }
         if (!unknownNames.isEmpty()) {
-            throw new InvalidFlowStageRequestException(
+            throw new InvalidStagingRequestException(
                     "Unknown final deployment environment(s): " + String.join(", ", unknownNames));
         }
-
-        int highestOrder = environments.stream()
-                .map(Environment::getStagingOrder)
-                .max(Comparator.naturalOrder())
-                .orElseThrow();
-        List<Environment> highestEnvironments = environments.stream()
-                .filter(environment -> environment.getStagingOrder() == highestOrder)
-                .toList();
-        if (highestEnvironments.size() > 1) {
-            throw new InvalidFlowStageRequestException(
-                    "Ambiguous final deployment environments with stagingOrder %d: %s".formatted(
-                            highestOrder,
-                            highestEnvironments.stream().map(Environment::getName).sorted().toList()));
-        }
-        return highestEnvironments.getFirst();
     }
 
     public List<Environment> relevantEnvironments() {
         Environment start = resolveStartEnvironment();
         Environment end = resolveDefaultFinalDeploymentEnvironment();
         if (start.getStagingOrder() > end.getStagingOrder()) {
-            throw new InvalidFlowStageConfigurationException("Start stage must not follow end stage");
+            throw new InvalidStagingConfigurationException("Start stage must not follow end stage");
         }
         List<Environment> stages = new ArrayList<>();
         environmentRepository.findAll().forEach(stage -> {
@@ -87,7 +72,7 @@ public class FlowStageResolver {
         stages.sort(Comparator.comparingInt(Environment::getStagingOrder));
         for (int i = 1; i < stages.size(); i++) {
             if (stages.get(i - 1).getStagingOrder() == stages.get(i).getStagingOrder()) {
-                throw new InvalidFlowStageConfigurationException("Relevant stages must have distinct stagingOrder values");
+                throw new InvalidStagingConfigurationException("Relevant stages must have distinct stagingOrder values");
             }
         }
         return List.copyOf(stages);
@@ -99,12 +84,12 @@ public class FlowStageResolver {
                                                     String fallbackDescription) {
         if (configuredName != null) {
             if (configuredName.isBlank()) {
-                throw new InvalidFlowStageConfigurationException(
+                throw new InvalidStagingConfigurationException(
                         "Configured %s must not be blank".formatted(purpose));
             }
             String normalizedName = normalize(configuredName);
             return environmentRepository.findByName(normalizedName)
-                    .orElseThrow(() -> new InvalidFlowStageConfigurationException(
+                    .orElseThrow(() -> new InvalidStagingConfigurationException(
                             "Configured %s '%s' does not exist".formatted(purpose, normalizedName)));
         }
 
@@ -115,7 +100,7 @@ public class FlowStageResolver {
             }
         });
         if (candidates.size() != 1) {
-            throw new InvalidFlowStageConfigurationException(
+            throw new InvalidStagingConfigurationException(
                     "Cannot determine %s: expected exactly one environment with %s, found %d"
                             .formatted(purpose, fallbackDescription, candidates.size()));
         }

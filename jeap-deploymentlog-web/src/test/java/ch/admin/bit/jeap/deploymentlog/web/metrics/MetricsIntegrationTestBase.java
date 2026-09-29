@@ -36,8 +36,7 @@ import java.util.UUID;
         "management.endpoints.web.exposure.include=health,prometheus",
         "management.endpoints.web.base-path=/actuator",
         "management.prometheus.metrics.export.enabled=true",
-        "jeap.deploymentlog.metrics.deployment-refresh-interval=PT24H",
-        "jeap.deploymentlog.metrics.flow-open-refresh-interval=PT24H"
+        "jeap.deploymentlog.metrics.deployment-refresh-interval=PT24H"
 })
 @AutoConfigureMockMvc(addFilters = false)
 abstract class MetricsIntegrationTestBase {
@@ -50,7 +49,7 @@ abstract class MetricsIntegrationTestBase {
     @Autowired protected SystemRepository systemRepository;
     @Autowired protected ComponentRepository componentRepository;
     @Autowired protected PlatformTransactionManager transactionManager;
-    @Autowired protected DeploymentFlowMetrics metrics;
+    @Autowired protected DeploymentMetrics metrics;
     @Autowired protected PrometheusMeterRegistry registry;
     @Autowired protected MockMvc mockMvc;
     @MockitoBean private SchedulingService schedulingService;

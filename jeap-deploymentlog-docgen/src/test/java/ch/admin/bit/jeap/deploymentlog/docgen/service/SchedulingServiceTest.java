@@ -229,20 +229,20 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate candidate = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "component-page", "system");
         when(componentPageRepository.findCleanupCandidates(100)).thenReturn(List.of(candidate));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any()))
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any()))
                 .thenReturn(1);
         when(versionDeploymentRepository.existsForComponent(candidate.componentId())).thenReturn(false);
-        when(componentPageRepository.deleteIfNoFlow(candidate.componentId())).thenReturn(1);
+        when(componentPageRepository.deleteIfNoRelevantDeployment(candidate.componentId())).thenReturn(1);
         SchedulingService schedulingService = schedulingService(housekeepingProps);
 
         schedulingService.housekeeping();
 
         InOrder deletionOrder = inOrder(componentPageRepository, docgenLocksMock, confluenceAdapter);
         deletionOrder.verify(componentPageRepository)
-                .markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any());
+                .markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any());
         deletionOrder.verify(docgenLocksMock).runIfLockAquiredBeforeTimeout(eq("system"), any());
         deletionOrder.verify(confluenceAdapter).deletePage("component-page");
-        deletionOrder.verify(componentPageRepository).deleteIfNoFlow(candidate.componentId());
+        deletionOrder.verify(componentPageRepository).deleteIfNoRelevantDeployment(candidate.componentId());
     }
 
     @Test
@@ -254,8 +254,8 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate successful = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "successful-page", "second-system");
         when(componentPageRepository.findCleanupCandidates(100)).thenReturn(List.of(failed, successful));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(any(), any())).thenReturn(1);
-        when(componentPageRepository.deleteIfNoFlow(successful.componentId())).thenReturn(1);
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(any(), any())).thenReturn(1);
+        when(componentPageRepository.deleteIfNoRelevantDeployment(successful.componentId())).thenReturn(1);
         org.mockito.Mockito.doThrow(new IllegalStateException("Confluence unavailable"))
                 .when(confluenceAdapter).deletePage(failed.pageId());
         SchedulingService schedulingService = schedulingService(housekeepingProps);
@@ -263,12 +263,12 @@ class SchedulingServiceTest {
         schedulingService.housekeeping();
 
         verify(componentPageRepository)
-                .markCleanupAttemptedIfNoFlow(eq(failed.componentId()), any());
+                .markCleanupAttemptedIfNoRelevantDeployment(eq(failed.componentId()), any());
         verify(componentPageRepository)
-                .markCleanupAttemptedIfNoFlow(eq(successful.componentId()), any());
-        verify(componentPageRepository, never()).deleteIfNoFlow(failed.componentId());
+                .markCleanupAttemptedIfNoRelevantDeployment(eq(successful.componentId()), any());
+        verify(componentPageRepository, never()).deleteIfNoRelevantDeployment(failed.componentId());
         verify(confluenceAdapter).deletePage(successful.pageId());
-        verify(componentPageRepository).deleteIfNoFlow(successful.componentId());
+        verify(componentPageRepository).deleteIfNoRelevantDeployment(successful.componentId());
     }
 
     @Test
@@ -278,7 +278,7 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate candidate = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "component-page", "system");
         when(componentPageRepository.findCleanupCandidates(100)).thenReturn(List.of(candidate));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any()))
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any()))
                 .thenReturn(1);
         when(versionDeploymentRepository.existsForComponent(candidate.componentId())).thenReturn(true);
         SchedulingService schedulingService = schedulingService(housekeepingProps);
@@ -287,7 +287,7 @@ class SchedulingServiceTest {
 
         verify(versionDeploymentRepository).existsForComponent(candidate.componentId());
         verify(confluenceAdapter, never()).deletePage(candidate.pageId());
-        verify(componentPageRepository, never()).deleteIfNoFlow(candidate.componentId());
+        verify(componentPageRepository, never()).deleteIfNoRelevantDeployment(candidate.componentId());
     }
 
     @Test
@@ -297,7 +297,7 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate candidate = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "component-page", "system");
         when(componentPageRepository.findCleanupCandidates(100)).thenReturn(List.of(candidate));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any()))
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any()))
                 .thenReturn(0);
         SchedulingService schedulingService = schedulingService(housekeepingProps);
 
@@ -315,7 +315,7 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate candidate = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "component-page", "system");
         when(componentPageRepository.findCleanupCandidates(100)).thenReturn(List.of(candidate));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any()))
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any()))
                 .thenReturn(1);
         org.mockito.Mockito.doNothing().when(docgenLocksMock).runIfLockAquiredBeforeTimeout(any(), any());
         SchedulingService schedulingService = schedulingService(housekeepingProps);
@@ -323,11 +323,11 @@ class SchedulingServiceTest {
         schedulingService.housekeeping();
 
         verify(componentPageRepository)
-                .markCleanupAttemptedIfNoFlow(eq(candidate.componentId()), any());
+                .markCleanupAttemptedIfNoRelevantDeployment(eq(candidate.componentId()), any());
         verify(docgenLocksMock).runIfLockAquiredBeforeTimeout(eq("system"), any());
         verify(versionDeploymentRepository, never()).existsForComponent(any());
         verify(confluenceAdapter, never()).deletePage(any());
-        verify(componentPageRepository, never()).deleteIfNoFlow(any());
+        verify(componentPageRepository, never()).deleteIfNoRelevantDeployment(any());
     }
 
     @Test
@@ -340,13 +340,13 @@ class SchedulingServiceTest {
         ComponentPageCleanupCandidate second = new ComponentPageCleanupCandidate(
                 UUID.randomUUID(), "second-page", "system");
         when(componentPageRepository.findCleanupCandidates(2)).thenReturn(List.of(first, second));
-        when(componentPageRepository.markCleanupAttemptedIfNoFlow(any(), any())).thenReturn(0);
+        when(componentPageRepository.markCleanupAttemptedIfNoRelevantDeployment(any(), any())).thenReturn(0);
         SchedulingService schedulingService = schedulingService(housekeepingProps);
 
         schedulingService.housekeeping();
 
         verify(componentPageRepository).findCleanupCandidates(2);
-        verify(componentPageRepository, times(2)).markCleanupAttemptedIfNoFlow(any(), any());
+        verify(componentPageRepository, times(2)).markCleanupAttemptedIfNoRelevantDeployment(any(), any());
     }
 
     @Test

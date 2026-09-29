@@ -18,7 +18,7 @@ import static org.mockito.Mockito.*;
 class ComponentPageDtoFactoryTest {
     VersionDeploymentRepository versions = mock(VersionDeploymentRepository.class);
     DeploymentPageRepository pages = mock(DeploymentPageRepository.class);
-    FlowStageResolver stages = mock(FlowStageResolver.class);
+    StagingEnvironmentResolver stages = mock(StagingEnvironmentResolver.class);
     Component component = new Component("component", new System("system"));
     Environment ref = new Environment("REF");
     Environment prod = new Environment("PROD");

@@ -26,7 +26,7 @@ class DeploymentStagingConcurrencyTest {
     @Autowired SystemRepository systems;
     @Autowired ComponentRepository components;
     @Autowired PlatformTransactionManager manager;
-    @Autowired FlowStageResolver resolver;
+    @Autowired StagingEnvironmentResolver resolver;
 
     @Test void concurrentAttemptsAreClassifiedInOrderUnderComponentLock() throws Exception {
         TransactionTemplate tx = new TransactionTemplate(manager);
@@ -39,7 +39,7 @@ class DeploymentStagingConcurrencyTest {
             var component = components.save(new ch.admin.bit.jeap.deploymentlog.domain.Component("service", system));
             return new UUID[]{component.getId(), env.getId()};
         });
-        var service = new DeploymentStagingService(versions, new FlowStageProperties(), resolver);
+        var service = new DeploymentStagingService(versions, new StagingProperties(), resolver);
         var classifications = new ConcurrentLinkedQueue<DeploymentStagingType>();
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);

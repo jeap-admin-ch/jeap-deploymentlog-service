@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
+class DeploymentMetricsIntegrationTest extends MetricsIntegrationTestBase {
 
     @Test
     void recordsTerminalMetricsOnlyAfterCommit() {
@@ -106,10 +106,10 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
     }
 
     private void assertNoTerminalMeters(Fixture fixture) {
-        assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_COUNTER)
+        assertThat(registry.find(DeploymentMetrics.DEPLOYMENT_COUNTER)
                 .tag("system", fixture.system()).functionCounters())
                 .isNotEmpty().allMatch(counter -> counter.count() == 0);
-        assertThat(registry.find(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+        assertThat(registry.find(DeploymentMetrics.DEPLOYMENT_DURATION)
                 .tag("system", fixture.system()).timers())
                 .isNotEmpty().allMatch(timer -> timer.count() == 0);
     }
@@ -122,9 +122,9 @@ class DeploymentFlowMetricsIntegrationTest extends MetricsIntegrationTestBase {
             case CANCELLED -> "cancelled";
             default -> throw new IllegalArgumentException("Expected a terminal deployment state");
         };
-        assertThat(registry.get(DeploymentFlowMetrics.DEPLOYMENT_COUNTER).tags("system", fixture.system(),
+        assertThat(registry.get(DeploymentMetrics.DEPLOYMENT_COUNTER).tags("system", fixture.system(),
                 "result", result, "deployment_type", "CODE").functionCounter().count()).isEqualTo(1);
-        var duration = registry.get(DeploymentFlowMetrics.DEPLOYMENT_DURATION)
+        var duration = registry.get(DeploymentMetrics.DEPLOYMENT_DURATION)
                 .tags("system", fixture.system(), "deployment_type", "CODE").timer();
         assertThat(duration.count()).isEqualTo(1);
         assertThat(duration.totalTime(TimeUnit.SECONDS)).isEqualTo(90);

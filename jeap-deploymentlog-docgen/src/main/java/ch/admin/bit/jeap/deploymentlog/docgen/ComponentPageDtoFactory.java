@@ -9,7 +9,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
-import ch.admin.bit.jeap.deploymentlog.domain.FlowStageResolver;
+import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingHistoryEntry;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
@@ -36,7 +36,7 @@ class ComponentPageDtoFactory {
     private final DeploymentPageRepository deploymentPageRepository;
     private final DocumentationGeneratorConfluenceProperties confluenceProperties;
     private final JiraWebClientProperties jiraProperties;
-    private final FlowStageResolver stageResolver;
+    private final StagingEnvironmentResolver stageResolver;
 
     ComponentPageDto create(Component component) {
         List<StagingHistoryEntry> history = versionDeploymentRepository.history(component.getId());
