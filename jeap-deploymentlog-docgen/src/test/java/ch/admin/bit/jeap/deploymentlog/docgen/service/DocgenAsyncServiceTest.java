@@ -42,7 +42,8 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest(classes = {DeploymentAsyncExecutorConfiguration.class, DocgenAsyncService.class, DocgenLocks.class})
+@SpringBootTest(classes = {DeploymentAsyncExecutorConfiguration.class, DocgenAsyncService.class, DocgenLocks.class},
+        properties = "jeap.deploymentlog.documentation-generator.history-lock-retry-delay=PT0S")
 @Import(TestConfig.class)
 class DocgenAsyncServiceTest {
 
@@ -336,6 +337,42 @@ class DocgenAsyncServiceTest {
                 .generateJiraLinksForSystem("systemName", from, to);
         verify(simpleLockMock, timeout(Duration.ofSeconds(10).toMillis())).unlock();
         await().until(this::asyncTaskExecutorIsDone);
+    }
+
+    @Test
+    void retriesHistoryAfterSystemLockTimeout() {
+        docgenLocks.setTryAcquireTimeout(Duration.ZERO);
+        when(lockProvider.lock(any())).thenReturn(Optional.empty(), Optional.of(simpleLockMock));
+        List<SystemEnv> envs = List.of(new SystemEnv(UUID.randomUUID(), "system", UUID.randomUUID()));
+        docgenAsyncService.triggerUpdateDeploymentListPages("system", envs);
+        await().until(taskDispatcher::isIdle);
+        verify(lockProvider, times(2)).lock(any());
+        verify(documentationGenerator).updateDeploymentHistoryPages(envs);
+    }
+
+    @Test
+    void retriesHistoryAfterStructureLockTimeout() {
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        List<SystemEnv> envs = List.of(new SystemEnv(UUID.randomUUID(), "system", UUID.randomUUID()));
+        doThrow(new DocgenLockTimeoutException("docgen-documentation-structure")).doNothing()
+                .when(documentationGenerator).updateDeploymentHistoryPages(envs);
+        docgenAsyncService.triggerUpdateDeploymentListPages("system", envs);
+        await().until(taskDispatcher::isIdle);
+        verify(documentationGenerator, times(2)).updateDeploymentHistoryPages(envs);
+        verify(simpleLockMock, times(2)).unlock();
+    }
+
+    @Test
+    void stopsHistoryRetriesAfterThreeRetries() {
+        docgenLocks.setTryAcquireTimeout(Duration.ZERO);
+        when(lockProvider.lock(any())).thenReturn(Optional.empty());
+        double before = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+        docgenAsyncService.triggerUpdateDeploymentListPages("system",
+                List.of(new SystemEnv(UUID.randomUUID(), "system", UUID.randomUUID())));
+        await().until(taskDispatcher::isIdle);
+        verify(lockProvider, times(4)).lock(any());
+        verifyNoInteractions(documentationGenerator);
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(before + 1);
     }
 
     @Test

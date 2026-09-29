@@ -115,7 +115,8 @@ and the legacy housekeeping cron use the same `documentation-generator` namespac
 | `jeap.deploymentlog.documentation-generator.housekeeping.cron`          | `0 30 3 * * *`   | Cron expression of the housekeeping job deleting outdated pages. Set to `-` to disable the job.                   |
 | `jeap.deploymentlog.documentation-generator.async.queue-capacity`       | `512`            | Maximum number of queued, deduplicated Docgen tasks. A live task may displace a queued deployment-repair task, which remains discoverable by the repair job. |
 | `jeap.deploymentlog.documentation-generator.async.live-task-burst`      | `10`             | Number of live deployment tasks that may run consecutively before one queued background task is selected.        |
-| `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`       | `PT30S`          | Maximum time a Docgen task waits for a per-system or documentation-structure lock before leaving the page to the repair job. |
+| `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`       | `PT30S`         | Maximum time a Docgen task waits for a per-system or documentation-structure lock. History refreshes retry lock timeouts up to three times. |
+| `jeap.deploymentlog.documentation-generator.history-lock-retry-delay` | `PT30S` | Delay before each of up to three history-refresh retries after a lock timeout. Must not be negative; retries share the bounded background queue and do not block its worker during the delay. |
 
 The repair job processes never-attempted missing or outdated pages oldest-first, then rotates by the persistent last
 attempt time. Discovery is limited to the last seven days by default (previously one day); persisted pending generation

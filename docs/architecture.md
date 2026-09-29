@@ -160,7 +160,8 @@ Two levels of locking keep concurrent generation runs apart:
 
 - **Per-system docgen lock** (`DocgenLocks`) — a ShedLock lock named `docgen-<systemname>` serialises all
   generation runs for one system, across instances. A run waits up to 30 seconds by default for the lock; if it
-  cannot acquire it, deployment-page work is deferred to the scheduled repair job. Operations without a repair path
+  cannot acquire it, deployment-page work is deferred to the scheduled repair job. History refreshes retry up to three
+  times with a delay; both individual lock timeouts and exhausted retries are logged at INFO. Operations without a repair path
   report the timeout as a failure. The lock is kept alive
   while the run is in progress (`KeepAliveLockProvider`), so a long run retrying Confluence updates does
   not lose it. The wait can be changed with

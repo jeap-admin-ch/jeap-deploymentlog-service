@@ -25,6 +25,45 @@ class DocgenTaskDispatcherTest {
     }
 
     @Test
+    void delayedRetryDoesNotBlockReadyWorkAndNewRequestSupersedesIt() throws InterruptedException {
+        dispatcher = new DocgenTaskDispatcher(2, 1);
+        CountDownLatch ready = new CountDownLatch(1);
+        CountDownLatch replacement = new CountDownLatch(1);
+        var retries = new java.util.concurrent.atomic.AtomicInteger();
+        dispatcher.submitBackgroundAfter("history", retries::incrementAndGet, java.time.Duration.ofHours(1));
+        dispatcher.submitBackgroundAfter("history", retries::incrementAndGet, java.time.Duration.ZERO);
+        dispatcher.submitLive("live", ready::countDown);
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(dispatcher.isIdle()).isFalse();
+        assertThat(retries.get()).isZero();
+        dispatcher.submitBackground("history", replacement::countDown);
+        assertThat(replacement.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(retries.get()).isZero();
+    }
+
+    @Test
+    void delayedRetryRunsAfterItsDelay() throws InterruptedException {
+        dispatcher = new DocgenTaskDispatcher(1, 1);
+        CountDownLatch completed = new CountDownLatch(1);
+        long started = System.nanoTime();
+        dispatcher.submitBackgroundAfter("history", completed::countDown, java.time.Duration.ofMillis(200));
+        assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(System.nanoTime() - started).isGreaterThanOrEqualTo(TimeUnit.MILLISECONDS.toNanos(200));
+    }
+
+    @Test
+    void delayedRetryConsumesQueueCapacityAndIsCancelledOnShutdown() {
+        dispatcher = new DocgenTaskDispatcher(1, 1);
+        dispatcher.submitBackgroundAfter("history", () -> { }, java.time.Duration.ofHours(1));
+        assertThatThrownBy(() -> dispatcher.submitBackground("other", () -> { }))
+                .isInstanceOf(TaskRejectedException.class);
+        dispatcher.shutdown();
+        assertThat(dispatcher.isIdle()).isTrue();
+        assertThatThrownBy(() -> dispatcher.submitBackgroundAfter("history", () -> { }, java.time.Duration.ZERO))
+                .isInstanceOf(TaskRejectedException.class);
+    }
+
+    @Test
     void liveDeploymentOvertakesQueuedRepairTask() throws InterruptedException {
         dispatcher = new DocgenTaskDispatcher(10, 10);
         CountDownLatch blockerStarted = new CountDownLatch(1);

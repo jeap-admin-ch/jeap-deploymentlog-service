@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [16.9.0] - 2026-09-29
 
+### Fixed
+
+- Retry history refreshes after system or structure
+  lock timeouts up to three times with a configurable 30-second delay, coalescing queued requests without blocking the
+  worker during retry delays. Log exhausted lock retries at INFO with affected environments, the cause and the next-generation recovery path;
+  pending in-memory retries do not survive restart.
+
 ### Removed
 
 - Remove the legacy `deployment.flow_id` column and `flow` table with V34 after the deployment-history rollout.

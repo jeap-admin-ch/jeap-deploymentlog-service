@@ -260,9 +260,17 @@ more than two stages, has to adjust the `productive`, `development` and `staging
 | Confluence rejects an update as a conflict | The adapter waits `retry-on-conflict-wait-duration`, re-reads the page, re-renders the content and retries — up to three update attempts per call. If the conflict persists, the retry around the whole call repeats it up to four times with exponential backoff, so at most twelve update requests are sent. |
 | Jira issue cannot be updated               | Logged as a warning; the page generation succeeds. Use `repairJiraLinks` to catch up.                       |
 | Jira unavailable during a ready-for-deploy check | The request fails with `503` and the deployment is **not** recorded — the check is synchronous by design. |
-| Docgen lock cannot be acquired within 30 seconds (default) | Deployment-page generation is deferred to repair, while a persisted retention refresh remains pending. Non-repairable full generation, migration/merge and structure/history refreshes report failure instead of silently succeeding. |
+| Docgen lock cannot be acquired within 30 seconds (default) | Deployment-page generation is deferred to repair, while a persisted retention refresh remains pending. History refreshes retry lock timeouts up to three times with a 30-second delay. Other non-repairable jobs report failure. |
 | An instance dies mid-generation            | Its lock expires; the pages it did not finish are detected as missing or outdated and repaired.            |
 | Tracked structure page returns 404 but its title still exists | The page is recovered by its space-wide unique title and moved to the expected parent. If the technical user cannot see it, generation fails once with a permission-oriented error instead of retrying duplicate creation. |
+
+
+History retries are in-memory background tasks, coalesced by system and environment set. A newer queued request
+supersedes a retry. Shutdown discards pending retries. Retry exhaustion is logged at INFO with the system, environment IDs,
+lock-timeout reason and recovery path, without a stack trace. The existing error counter still increments on retry exhaustion.
+No further retry is queued: history can remain outdated until the next successful deployment-page generation (including
+repair) for the same system and environment, or an explicit history refresh. The repair job does not track the failed
+history request separately. Delays do not occupy the worker, but each lock-acquisition attempt can still wait up to the configured timeout.
 
 ## Related
 

@@ -142,7 +142,7 @@ public class DocgenLocks {
     void runWithSystemLock(String systemName, Runnable task) {
         String lockName = LOCK_NAME_PREFIX + systemName;
         SimpleLock lock = tryAcquireLockWithTimeout(lockName)
-                .orElseThrow(() -> new IllegalStateException("Unable to acquire lock " + lockName + " before timeout"));
+                .orElseThrow(() -> new DocgenLockTimeoutException(lockName));
         runLockedTask(() -> {
             task.run();
             return null;
@@ -151,8 +151,7 @@ public class DocgenLocks {
 
     public <T> T runWithDocumentationStructureLock(Supplier<T> task) {
         SimpleLock lock = tryAcquireLockWithTimeout(DOCUMENTATION_STRUCTURE_LOCK_NAME)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Unable to acquire documentation structure lock before timeout"));
+                .orElseThrow(() -> new DocgenLockTimeoutException(DOCUMENTATION_STRUCTURE_LOCK_NAME));
         return runLockedTask(task, DOCUMENTATION_STRUCTURE_LOCK_NAME, lock);
     }
 

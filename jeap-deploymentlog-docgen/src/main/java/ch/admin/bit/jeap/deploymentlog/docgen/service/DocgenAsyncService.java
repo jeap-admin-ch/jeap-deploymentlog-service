@@ -4,11 +4,15 @@ import ch.admin.bit.jeap.db.tx.AwsJdbcFailoverExceptionClassifier;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
+import jakarta.annotation.PostConstruct;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskRejectedException;
 
+import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,6 +26,10 @@ public class DocgenAsyncService {
     private static final String SYSTEM_NAME = "systemName";
     private static final String COMPONENT_NAME = "componentName";
     public static final String DEPLOYMENT_ID = "deploymentId";
+
+    private static final int HISTORY_LOCK_RETRIES = 3;
+    @Value("${jeap.deploymentlog.documentation-generator.history-lock-retry-delay:PT30S}")
+    private Duration historyLockRetryDelay = Duration.ofSeconds(30);
 
     private final DocumentationGenerator documentationGenerator;
     private final DeploymentRepository deploymentRepository;
@@ -41,6 +49,13 @@ public class DocgenAsyncService {
         this.locks = locks;
         this.dispatcher = dispatcher;
         this.errorCounter = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error");
+    }
+
+    @PostConstruct
+    void validateHistoryRetryDelay() {
+        if (historyLockRetryDelay.isNegative()) {
+            throw new IllegalArgumentException("history-lock-retry-delay must not be negative");
+        }
     }
 
     public void triggerDocgenForUndeployment(String systemName, UUID deploymentId) {
@@ -196,8 +211,42 @@ public class DocgenAsyncService {
         String environmentKey = requestedEnvironments.stream()
                 .map(systemEnv -> systemEnv.getSystemId() + ":" + systemEnv.getEnvId())
                 .distinct().sorted().collect(Collectors.joining(","));
-        dispatcher.submitBackground("deployment-history:" + systemName.toLowerCase(Locale.ROOT) + ":" + environmentKey, () ->
-                runLockedForSystem(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(requestedEnvironments)));
+        String taskKey = "deployment-history:" + systemName.toLowerCase(Locale.ROOT) + ":" + environmentKey;
+        dispatcher.submitBackground(taskKey, () -> updateHistoryWithRetry(taskKey, systemName, requestedEnvironments, 0));
+    }
+
+    private void updateHistoryWithRetry(String taskKey, String systemName, List<SystemEnv> environments, int retries) {
+        try {
+            locks.runWithSystemLock(systemName, () -> documentationGenerator.updateDeploymentHistoryPages(environments));
+        } catch (DocgenLockTimeoutException ex) {
+            if (retries < HISTORY_LOCK_RETRIES) {
+                scheduleHistoryRetry(taskKey, systemName, environments, retries + 1);
+            } else {
+                errorCounter.increment();
+                log.info("History refresh for system {} and environment IDs {} skipped after {} lock retries: {}. "
+                                + "No further retry is queued. History may remain outdated until the next successful "
+                                + "deployment-page generation (including repair) for the same system and environment, "
+                                + "or an explicit history refresh",
+                        value(SYSTEM_NAME, systemName),
+                        value("environmentIds", environments.stream().map(SystemEnv::getEnvId).distinct().toList()),
+                        retries, ex.getMessage());
+            }
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Docgen failed for system {}", value(SYSTEM_NAME, systemName), ex);
+        }
+    }
+
+    private void scheduleHistoryRetry(String taskKey, String systemName, List<SystemEnv> environments, int retry) {
+        try {
+            dispatcher.submitBackgroundAfter(taskKey,
+                    () -> updateHistoryWithRetry(taskKey, systemName, environments, retry), historyLockRetryDelay);
+            log.info("History generation for system {} deferred after lock timeout (retry {}/{})",
+                    value(SYSTEM_NAME, systemName), retry, HISTORY_LOCK_RETRIES);
+        } catch (TaskRejectedException ex) {
+            errorCounter.increment();
+            log.warn("Unable to enqueue history retry for system {}", value(SYSTEM_NAME, systemName), ex);
+        }
     }
 
     public void triggerUpdatesAfterDataRetention(DataRetentionRefreshTask refreshTask) {

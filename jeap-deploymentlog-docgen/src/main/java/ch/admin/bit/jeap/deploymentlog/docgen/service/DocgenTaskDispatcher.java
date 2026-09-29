@@ -6,13 +6,15 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskRejectedException;
 
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -28,6 +30,7 @@ public final class DocgenTaskDispatcher implements Executor {
     private final Object monitor = new Object();
     private final Map<String, Runnable> liveTasks = new LinkedHashMap<>();
     private final Map<String, Runnable> backgroundTasks = new LinkedHashMap<>();
+    private final Map<String, Long> backgroundNotBefore = new HashMap<>();
     private final Set<String> repairTaskKeys = new HashSet<>();
     private final AtomicLong externalTaskSequence = new AtomicLong();
     private final int queueCapacity;
@@ -60,6 +63,20 @@ public final class DocgenTaskDispatcher implements Executor {
         submit(taskKey, task, false, false);
     }
 
+    void submitBackgroundAfter(String taskKey, Runnable task, Duration delay) {
+        if (delay.isNegative()) {
+            throw new IllegalArgumentException("Retry delay must not be negative");
+        }
+        synchronized (monitor) {
+            ensureAcceptingTasks();
+            // A newer request already queued for this key supersedes the retry.
+            if (liveTasks.containsKey(taskKey) || backgroundTasks.containsKey(taskKey)) {
+                return;
+            }
+            submit(taskKey, task, false, false, delay);
+        }
+    }
+
     void submitRepair(String taskKey, Runnable task) {
         submit(taskKey, task, false, true);
     }
@@ -70,9 +87,13 @@ public final class DocgenTaskDispatcher implements Executor {
     }
 
     private void submit(String taskKey, Runnable task, boolean live, boolean repair) {
+        submit(taskKey, task, live, repair, Duration.ZERO);
+    }
+
+    private void submit(String taskKey, Runnable task, boolean live, boolean repair, Duration delay) {
         Objects.requireNonNull(taskKey, "taskKey");
         Objects.requireNonNull(task, "task");
-        Runnable contextualTask = SNAPSHOT_FACTORY.captureAll(new Object[0]).wrap(task);
+        Runnable contextualTask = SNAPSHOT_FACTORY.captureAll().wrap(task);
         synchronized (monitor) {
             ensureAcceptingTasks();
             boolean followUpForRunningTask = taskKey.equals(runningTaskKey);
@@ -81,6 +102,7 @@ public final class DocgenTaskDispatcher implements Executor {
             }
             if (live) {
                 backgroundTasks.remove(taskKey);
+                backgroundNotBefore.remove(taskKey);
                 repairTaskKeys.remove(taskKey);
                 if (!followUpForRunningTask) {
                     ensureCapacityForLiveTask(taskKey);
@@ -91,6 +113,7 @@ public final class DocgenTaskDispatcher implements Executor {
                     ensureCapacity(taskKey);
                 }
                 backgroundTasks.put(taskKey, contextualTask);
+                backgroundNotBefore.put(taskKey, System.nanoTime() + delay.toNanos());
                 if (repair) {
                     repairTaskKeys.add(taskKey);
                 } else {
@@ -132,6 +155,7 @@ public final class DocgenTaskDispatcher implements Executor {
         }
         if (newestKey != null) {
             backgroundTasks.remove(newestKey);
+            backgroundNotBefore.remove(newestKey);
             repairTaskKeys.remove(newestKey);
         }
         return newestKey;
@@ -174,24 +198,44 @@ public final class DocgenTaskDispatcher implements Executor {
 
     private QueuedTask takeNextTask() throws InterruptedException {
         synchronized (monitor) {
-            while (acceptingTasks && liveTasks.isEmpty() && backgroundTasks.isEmpty()) {
-                monitor.wait();
+            while (acceptingTasks) {
+                String backgroundKey = readyBackgroundKey();
+                if (!liveTasks.isEmpty() || backgroundKey != null) {
+                    return takeReadyTask(backgroundKey);
+                }
+                if (backgroundTasks.isEmpty()) {
+                    monitor.wait();
+                } else {
+                    long now = System.nanoTime();
+                    long remaining = backgroundNotBefore.values().stream()
+                            .mapToLong(deadline -> deadline - now).min().orElseThrow();
+                    if (remaining > 0) {
+                        TimeUnit.NANOSECONDS.timedWait(monitor, remaining);
+                    }
+                }
             }
-            if (!acceptingTasks) {
-                return null;
-            }
-            boolean takeLiveTask = !liveTasks.isEmpty()
-                    && (backgroundTasks.isEmpty() || consecutiveLiveTasks < liveTaskBurst);
-            Map<String, Runnable> selectedTasks = takeLiveTask ? liveTasks : backgroundTasks;
-            Iterator<Map.Entry<String, Runnable>> iterator = selectedTasks.entrySet().iterator();
-            Map.Entry<String, Runnable> entry = iterator.next();
-            QueuedTask task = new QueuedTask(entry.getKey(), entry.getValue());
-            iterator.remove();
-            repairTaskKeys.remove(task.key());
-            runningTaskKey = task.key();
-            consecutiveLiveTasks = takeLiveTask ? consecutiveLiveTasks + 1 : 0;
-            return task;
+            return null;
         }
+    }
+
+    private String readyBackgroundKey() {
+        long now = System.nanoTime();
+        return backgroundTasks.keySet().stream()
+                .filter(key -> backgroundNotBefore.get(key) - now <= 0)
+                .findFirst().orElse(null);
+    }
+
+    private QueuedTask takeReadyTask(String backgroundKey) {
+        boolean takeLiveTask = !liveTasks.isEmpty()
+                && (backgroundKey == null || consecutiveLiveTasks < liveTaskBurst);
+        Map<String, Runnable> selectedTasks = takeLiveTask ? liveTasks : backgroundTasks;
+        String key = takeLiveTask ? liveTasks.keySet().iterator().next() : backgroundKey;
+        Runnable task = selectedTasks.remove(key);
+        backgroundNotBefore.remove(key);
+        repairTaskKeys.remove(key);
+        runningTaskKey = key;
+        consecutiveLiveTasks = takeLiveTask ? consecutiveLiveTasks + 1 : 0;
+        return new QueuedTask(key, task);
     }
 
     public boolean isIdle() {
@@ -206,6 +250,7 @@ public final class DocgenTaskDispatcher implements Executor {
             acceptingTasks = false;
             liveTasks.clear();
             backgroundTasks.clear();
+            backgroundNotBefore.clear();
             repairTaskKeys.clear();
             monitor.notifyAll();
         }
