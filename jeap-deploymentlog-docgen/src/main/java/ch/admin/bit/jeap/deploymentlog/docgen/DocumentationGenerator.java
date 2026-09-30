@@ -15,6 +15,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 @RequiredArgsConstructor
@@ -54,12 +55,13 @@ public class DocumentationGenerator {
     private final JiraProjectPageGenerator jiraProjectPageGenerator;
     private final JiraIssuePageRepository jiraIssuePageRepository;
     private final DocumentationTransactionRunner transactionRunner;
+    private final AtomicReference<CachedStructure> structureCache = new AtomicReference<>();
 
     @Timed("deploymentlog_generate_deployment_page")
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId) {
         return trySynchronizeDocumentationStructure()
-                .map(structure -> transactionRunner.run(() -> generateDeploymentPages(deploymentId, structure)))
+                .map(structure -> runWithStructure(structure, () -> generateDeploymentPages(deploymentId, structure)))
                 .orElse(null);
     }
 
@@ -68,7 +70,7 @@ public class DocumentationGenerator {
         Environment environment = deployment.getEnvironment();
         System system = deployment.getComponentVersion().getComponent().getSystem();
 
-        SystemStructure systemStructure = structure.systems().get(system.getId());
+        SystemStructure systemStructure = refreshAffectedSystem(structure, system);
         String deploymentListParentPageId = generateDeploymentHistoryPageForEnvironment(
                 systemStructure.deploymentsPageId(), environment, system);
         int year = deployment.getStartedAt().getYear();
@@ -86,7 +88,7 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void migrateSystem(System system) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        transactionRunner.run(() -> {
+        runWithStructure(structure, () -> {
             migrateSystem(system, structure);
             return null;
         });
@@ -104,7 +106,7 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void mergeSystems(System system, System oldSystem) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        transactionRunner.run(() -> {
+        runWithStructure(structure, () -> {
             mergeSystems(system, oldSystem, structure);
             return null;
         });
@@ -263,7 +265,7 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateAllPages() {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        transactionRunner.run(() -> {
+        runWithStructure(structure, () -> {
             generateAllPages(structure);
             return null;
         });
@@ -284,7 +286,7 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateAllPagesForSystem(String systemName, Integer year) {
         DocumentationStructure structure = synchronizeDocumentationStructure();
-        transactionRunner.run(() -> {
+        runWithStructure(structure, () -> {
             generateAllPagesForSystem(systemName, year, structure);
             return null;
         });
@@ -382,8 +384,8 @@ public class DocumentationGenerator {
     @Timed("update_deployment_history_pages")
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateDeploymentHistoryPages(Collection<SystemEnv> envsBySystems) {
-        DocumentationStructure structure = synchronizeDocumentationStructure();
-        transactionRunner.run(() -> {
+        DocumentationStructure structure = resolveDocumentationStructure();
+        runWithStructure(structure, () -> {
             updateDeploymentHistoryPages(envsBySystems, structure);
             return null;
         });
@@ -404,8 +406,8 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updatePagesAfterDataRetention(DataRetentionResult result) {
         if (!result.isEmpty()) {
-            DocumentationStructure structure = synchronizeDocumentationStructure();
-            transactionRunner.run(() -> {
+            DocumentationStructure structure = resolveDocumentationStructure();
+            runWithStructure(structure, () -> {
                 updatePagesAfterDataRetention(result, structure);
                 return null;
             });
@@ -417,7 +419,7 @@ public class DocumentationGenerator {
         if (result.isEmpty()) {
             return true;
         }
-        return trySynchronizeDocumentationStructure().map(structure -> transactionRunner.run(() -> {
+        return trySynchronizeDocumentationStructure().map(structure -> runWithStructure(structure, () -> {
             updatePagesAfterDataRetention(result, structure);
             return true;
         })).orElse(false);
@@ -458,11 +460,71 @@ public class DocumentationGenerator {
     }
 
     private DocumentationStructure synchronizeDocumentationStructure() {
+        structureCache.set(null);
         return documentationStructureLock.runLocked(this::synchronizeDocumentationStructureLocked);
     }
 
+    private DocumentationStructure resolveDocumentationStructure() {
+        return cachedStructure().orElseGet(() -> documentationStructureLock.runLocked(
+                () -> cachedStructure().orElseGet(this::synchronizeDocumentationStructureLocked)));
+    }
+
     private Optional<DocumentationStructure> trySynchronizeDocumentationStructure() {
-        return documentationStructureLock.tryRunLocked(this::synchronizeDocumentationStructureLocked);
+        Optional<DocumentationStructure> cached = cachedStructure();
+        if (cached.isPresent()) {
+            return cached;
+        }
+        return documentationStructureLock.tryRunLocked(
+                () -> cachedStructure().orElseGet(this::synchronizeDocumentationStructureLocked));
+    }
+
+    private Optional<DocumentationStructure> cachedStructure() {
+        CachedStructure cached = structureCache.get();
+        if (cached == null || java.lang.System.nanoTime() - cached.createdAtNanos()
+                >= props.getStructureCacheMaxAge().toNanos()) {
+            return Optional.empty();
+        }
+        if (!cached.signature().equals(structureSignature(findOrderedSystems()))) {
+            structureCache.compareAndSet(cached, null);
+            return Optional.empty();
+        }
+        return Optional.of(cached.structure());
+    }
+
+    private StructureSignature structureSignature(List<System> systems) {
+        Map<UUID, SystemLocation> systemLocations = new HashMap<>();
+        for (System system : systems) {
+            SystemGroup group = system.getSystemGroup();
+            systemLocations.put(system.getId(), new SystemLocation(system.getName(),
+                    group == null ? null : group.getId(), group == null ? null : group.getName()));
+        }
+        Map<String, PageLocation> pageLocations = new HashMap<>();
+        documentationStructurePageRepository.findAll().stream()
+                .filter(page -> !page.getStructureKey().startsWith(GLOBAL_STAGE_PAGE_KEY_PREFIX))
+                .forEach(page -> pageLocations.put(page.getStructureKey(),
+                        new PageLocation(page.getPageId(), page.getParentPageId())));
+        return new StructureSignature(props.getRootPageId(), props.getSpaceKey(), props.getUrl(),
+                Map.copyOf(systemLocations), Map.copyOf(pageLocations));
+    }
+
+    private <T> T runWithStructure(DocumentationStructure structure, Supplier<T> task) {
+        try {
+            return transactionRunner.run(task);
+        } catch (RuntimeException ex) {
+            // A missing/moved Confluence ancestor must be checked again on the next repair attempt.
+            structureCache.updateAndGet(cached -> cached != null && cached.structure() == structure ? null : cached);
+            throw ex;
+        }
+    }
+
+    private SystemStructure refreshAffectedSystem(DocumentationStructure structure, System system) {
+        SystemStructure existing = structure.systems().get(system.getId());
+        String pageId = generateSystemPage(existing.parentPageId(), system);
+        if (pageId.equals(existing.systemPageId())) {
+            return existing;
+        }
+        // A deleted system page was recreated: reattach only this system's folders under its system lock.
+        return ensureSystemFolders(system, existing.parentPageId(), pageId);
     }
 
     private DocumentationStructure synchronizeDocumentationStructureLocked() {
@@ -500,19 +562,25 @@ public class DocumentationGenerator {
                     ? systemsPageId
                     : groupPageIds.get(system.getSystemGroup().getId());
             String systemPageId = generateSystemPage(systemParentPageId, system);
-            String componentsPageId = ensureStructurePage(systemComponentsPageKey(system.getId()), systemPageId,
-                    "Components (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
-                    List.of(new LegacyPageLocation(systemPageId, "Components " + system.getName()),
-                            new LegacyPageLocation(systemPageId, "Components")));
-            String deploymentsPageId = ensureStructurePage(systemDeploymentsPageKey(system.getId()), systemPageId,
-                    "Deployments (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
-                    List.of(new LegacyPageLocation(systemPageId, "Deployments " + system.getName()),
-                            new LegacyPageLocation(systemPageId, "Deployments")));
-            systemStructures.put(system.getId(), new SystemStructure(componentsPageId, deploymentsPageId));
+            systemStructures.put(system.getId(), ensureSystemFolders(system, systemParentPageId, systemPageId));
         }
 
         removeObsoleteGroupPages(groups.keySet());
-        return new DocumentationStructure(changesPageId, stagesPageId, systemStructures);
+        DocumentationStructure structure = new DocumentationStructure(changesPageId, stagesPageId, Map.copyOf(systemStructures));
+        structureCache.set(new CachedStructure(structure, structureSignature(systems), java.lang.System.nanoTime()));
+        return structure;
+    }
+
+    private SystemStructure ensureSystemFolders(System system, String parentPageId, String systemPageId) {
+        String componentsPageId = ensureStructurePage(systemComponentsPageKey(system.getId()), systemPageId,
+                "Components (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
+                List.of(new LegacyPageLocation(systemPageId, "Components " + system.getName()),
+                        new LegacyPageLocation(systemPageId, "Components")));
+        String deploymentsPageId = ensureStructurePage(systemDeploymentsPageKey(system.getId()), systemPageId,
+                "Deployments (" + system.getName() + ")", () -> EMPTY_STRUCTURE_PAGE,
+                List.of(new LegacyPageLocation(systemPageId, "Deployments " + system.getName()),
+                        new LegacyPageLocation(systemPageId, "Deployments")));
+        return new SystemStructure(parentPageId, systemPageId, componentsPageId, deploymentsPageId);
     }
 
     private List<System> findOrderedSystems() {
@@ -621,7 +689,20 @@ public class DocumentationGenerator {
         return SYSTEM_DEPLOYMENTS_PAGE_KEY_PREFIX + systemId;
     }
 
-    private record SystemStructure(String componentsPageId, String deploymentsPageId) {
+    private record CachedStructure(DocumentationStructure structure, StructureSignature signature, long createdAtNanos) {
+    }
+
+    private record StructureSignature(String rootPageId, String spaceKey, String url,
+                                      Map<UUID, SystemLocation> systems, Map<String, PageLocation> pages) {
+    }
+
+    private record SystemLocation(String name, UUID groupId, String groupName) {
+    }
+
+    private record PageLocation(String pageId, String parentPageId) {
+    }
+
+    private record SystemStructure(String parentPageId, String systemPageId, String componentsPageId, String deploymentsPageId) {
     }
 
     private record LegacyPageLocation(String parentPageId, String title) {

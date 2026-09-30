@@ -101,6 +101,19 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
     }
 
     @Override
+    public List<VersionArrivalMetricValue> arrivalMetrics(String startEnvironment, String endEnvironment) {
+        return jdbc.query("""
+                select system_name, component_name,
+                       count(distinct case when environment_name = ? then staging_version end),
+                       count(distinct case when environment_name = ? then staging_version end)
+                from deployment_metric_event
+                where deployment_type = 'CODE' and deployment_state = 'SUCCESS' and staging_version is not null
+                group by system_name, component_name
+                """, (rs, row) -> new VersionArrivalMetricValue(rs.getString(1), rs.getString(2),
+                        rs.getLong(3), rs.getLong(4)), startEnvironment, endEnvironment);
+    }
+
+    @Override
     public List<StagingMetricValue> metrics(String startEnvironment, String endEnvironment) {
         entityManager.flush();
         return jdbc.query("""
@@ -132,6 +145,7 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
                 left join latest_start latest on latest.component_id = v.component_id and latest.deployment_rank = 1
                 """, rs -> {
             java.util.Map<String, double[]> values = new java.util.LinkedHashMap<>();
+            java.util.Map<String, long[]> buckets = new java.util.HashMap<>();
             java.util.Map<String, String[]> labels = new java.util.HashMap<>();
             java.util.Map<String, Boolean> autoStaging = new java.util.HashMap<>();
             while (rs.next()) {
@@ -140,6 +154,7 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
                 String key = system + "\u0000" + component;
                 labels.put(key, new String[]{system, component});
                 double[] counts = values.computeIfAbsent(key, ignored -> new double[4]);
+                long[] latencyBuckets = buckets.computeIfAbsent(key, ignored -> new long[StagingLatencyBuckets.UPPER_BOUNDS.size()]);
                 Timestamp start = rs.getTimestamp(3);
                 Timestamp end = rs.getTimestamp(4);
                 if (start != null) counts[0]++;
@@ -147,15 +162,26 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
                 autoStaging.put(key, rs.getObject(5, Boolean.class));
                 if (start != null && end != null && !end.before(start)) {
                     counts[2]++;
-                    counts[3] += java.time.Duration.between(start.toInstant(), end.toInstant()).toMillis() / 1000.0;
+                    double seconds = java.time.Duration.between(start.toInstant(), end.toInstant()).toMillis() / 1000.0;
+                    counts[3] += seconds;
+                    addLatency(latencyBuckets, seconds);
                 }
             }
             return values.entrySet().stream().map(entry -> {
                 double[] v = entry.getValue();
                 String[] label = labels.get(entry.getKey());
                 return new StagingMetricValue(label[0], label[1], (long) v[0], (long) v[1],
-                        autoStaging.get(entry.getKey()), (long) v[2], v[3]);
+                        autoStaging.get(entry.getKey()), (long) v[2], v[3],
+                        java.util.Arrays.stream(buckets.get(entry.getKey())).boxed().toList());
             }).toList();
         }, endEnvironment, startEnvironment, endEnvironment, startEnvironment);
     }
+    private static void addLatency(long[] buckets, double seconds) {
+        for (int index = 0; index < buckets.length; index++) {
+            if (seconds <= StagingLatencyBuckets.UPPER_BOUNDS.get(index)) {
+                buckets[index]++;
+            }
+        }
+    }
+
 }

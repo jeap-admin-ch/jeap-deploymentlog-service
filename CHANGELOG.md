@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.10.0] - 2026-09-30
+
+### Changed
+
+- Expose cumulative retained-version staging latency buckets so dashboards can estimate the overall median across selected components.
+
+- Reuse successfully synchronized documentation structures for up to five minutes per instance during deployment,
+  history and retention page generation, avoiding a global structure lock and full Confluence traversal on every request.
+  Check system/group metadata and tracked structure locations before reuse; explicit regeneration still forces reconciliation.
+  Refresh the affected system overview on every deployment and invalidate cached structures after generation failures.
+  Configure `confluence.structure-cache-max-age` to adjust the lifetime or use `PT0S` to disable reuse.
+
+### Fixed
+
+- Strip trailing slashes from Confluence URLs without regex backtracking when generating component page links.
+
+- Resolve Sonar findings in documentation generation tests by isolating the exception assertion invocation and using collection size assertions.
+
+- Link component names to tracked component pages in both deployment history views, using plain text when no page is tracked.
+
+- Calculate time-window version throughput with durable `version_start_arrivals_total` and `version_end_arrivals_total`
+  counters instead of retained-version gauges. V35 adds version identity to existing deployment metric events;
+  reconciliation runs before retention and metric initialization. Historical Prometheus windows cannot be backfilled.
+
 ## [16.10.0] - 2026-10-01
 
 ### Dependencies

@@ -50,10 +50,8 @@
                 </ac:link>
             </td>
             <td colspan="1">
-                <ac:link>
-                    <ri:page th:ri:content-title="${deployment.componentPageTitle}"/>
-                    <ac:plain-text-link-body><![CDATA[[(${deployment.component})]]]></ac:plain-text-link-body>
-                </ac:link>
+                <a th:if="${deployment.componentPageUrl != null}" th:href="${deployment.componentPageUrl}" th:text="${deployment.component}"></a>
+                <span th:unless="${deployment.componentPageUrl != null}" th:text="${deployment.component}"></span>
             </td>
             <td>
                 <a th:href="${deployment.versionControlUrl}" th:if="${deployment.version} != '(undeployed)'" target="_blank">[(${deployment.version})]</a>

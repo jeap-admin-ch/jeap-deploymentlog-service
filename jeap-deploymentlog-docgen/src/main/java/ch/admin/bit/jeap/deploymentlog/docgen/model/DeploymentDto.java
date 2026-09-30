@@ -7,15 +7,12 @@ import lombok.Value;
 @Builder
 public class DeploymentDto {
 
-    public String getComponentPageTitle() {
-        return ComponentPageDto.pageTitle(component, system);
-    }
-
     String startedAt;
     String duration;
     String deploymentId;
     String deploymentLetterLink;
     String component;
+    String componentPageUrl;
     String system;
     String version;
     String versionControlUrl;

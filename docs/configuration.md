@@ -51,6 +51,7 @@ startup.
 | `component-flow-max-show`              | `50`    | Maximum number of latest version histories rendered on each component page. Must be greater than zero; no deployment data is deleted. |
 | `change-view-activity-period`           | `P30D`  | Activity period for Jira project pages below `Changes`. An issue is active when a deployment was started in this period. Accepts Spring Boot duration values and must be greater than zero. |
 | `deployment-history-overview-max-time`| `P7D`   | Only deployments started within this duration appear on the deployment history overview pages.                  |
+| `structure-cache-max-age` | `PT5M` | Maximum reuse time per instance for a successfully synchronized documentation structure. Metadata changes or generation failures invalidate it earlier; `PT0S` disables reuse. The next ordinary request after expiry performs a full reconciliation. |
 | `retry-on-conflict-wait-duration`     | `PT10S` | How long to wait before re-reading the page and retrying an update that Confluence rejected as a conflict (HTTP 409). |
 | `mock-confluence-client`              | `false` | Replaces the Confluence client with a mock that generates no pages. For local development and tests only.       |
 

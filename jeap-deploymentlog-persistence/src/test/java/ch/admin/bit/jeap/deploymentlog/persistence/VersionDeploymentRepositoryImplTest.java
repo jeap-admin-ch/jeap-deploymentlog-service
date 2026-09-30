@@ -21,6 +21,7 @@ class VersionDeploymentRepositoryImplTest {
     @Autowired SystemRepository systems;
     @Autowired ComponentRepository components;
     @Autowired EntityManager em;
+    @Autowired DataRetentionRepository retention;
     Environment ref;
     Environment prod;
     Component component;
@@ -91,6 +92,28 @@ class VersionDeploymentRepositoryImplTest {
         assertThat(metric.endVersions()).isEqualTo(1);
         assertThat(metric.latencyCount()).isEqualTo(1);
         assertThat(metric.latencySeconds()).isEqualTo(7200);
+        for (int index = 0; index < StagingLatencyBuckets.UPPER_BOUNDS.size(); index++) {
+            assertThat(metric.latencyBucket(index))
+                    .isEqualTo(StagingLatencyBuckets.UPPER_BOUNDS.get(index) < 7200 ? 0 : 1);
+        }
+    }
+
+    @Test void latencyBucketsIncludeZeroAndExcludeIncompleteAndReversedVersions() {
+        success(deployment("zero", ref, 0));
+        success(deployment("zero", prod, 0));
+        success(deployment("hour", ref, 0));
+        success(deployment("hour", prod, 1));
+        success(deployment("reverse", prod, 0));
+        success(deployment("reverse", ref, 1));
+        success(deployment("incomplete", ref, 0));
+
+        var metric = versions.metrics("REF", "PROD").getFirst();
+        assertThat(metric.latencyCount()).isEqualTo(2);
+        assertThat(metric.latencySeconds()).isEqualTo(3600);
+        for (int index = 0; index < StagingLatencyBuckets.UPPER_BOUNDS.size(); index++) {
+            assertThat(metric.latencyBucket(index))
+                    .isEqualTo(StagingLatencyBuckets.UPPER_BOUNDS.get(index) < 3600 ? 1 : 2);
+        }
     }
 
     @Test void autoStagingUsesLatestStartStageRequestRegardlessOfOutcomeAndVersion() {
@@ -150,6 +173,64 @@ class VersionDeploymentRepositoryImplTest {
         em.remove(first); em.flush(); em.clear();
         assertThat(versions.history(component.getId())).isEmpty();
         assertThat(versions.metrics("REF", "PROD")).isEmpty();
+    }
+
+    @Test void arrivalsAreDistinctAndSurviveRetentionAndRepeatDeployment() {
+        Deployment first = deployment("1.0", ref, 0);
+        Deployment retry = deployment("1.0", ref, 1);
+        Deployment end = deployment("1.0", prod, 2);
+        success(first); success(retry); success(end);
+        Deployment failed = deployment("failed", ref, 3);
+        failed.failed(now.plusHours(4), "failed");
+        deployment("started", ref, 4);
+        Deployment config = deployment("config", ref, 5);
+        config.getDeploymentTypes().clear(); config.getDeploymentTypes().add(DeploymentType.CONFIG);
+        success(config);
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 1, 1));
+        em.remove(first); em.remove(retry); em.remove(end); em.flush();
+        success(deployment("1.0", ref, 6)); em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 1, 1));
+        success(deployment("2.0", ref, 7)); em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 2, 1));
+    }
+
+    @Test void reconcilesPreUpgradeMetricEventsBeforeRetention() {
+        Deployment first = deployment("1.0", ref, 0); success(first); em.flush();
+        em.createNativeQuery("""
+                insert into deployment_metric_event
+                  (deployment_id, deployment_type, system_name, component_name, environment_name, deployment_state)
+                values (:id, 'CODE', 'SYSTEM', 'service', 'REF', 'SUCCESS')
+                """).setParameter("id", first.getId()).executeUpdate();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 1, 0));
+        assertThat(first.getStagingType()).isEqualTo(DeploymentStagingType.NEW);
+    }
+
+    @Test void retentionPreservesArrivalsEvenWhenMetricListenerWasMissed() {
+        Deployment first = deployment("1.0", ref, 0); success(first); em.flush();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).isEmpty();
+        assertThat(retention.deleteCandidates(java.util.Set.of(first.getId()), now.plusDays(1)).deletedDeployments())
+                .isEqualTo(1);
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 1, 0));
+    }
+
+    @Test void successfulUndeploymentDoesNotCountAsVersionArrival() {
+        Deployment removal = TestDataFactory.createDeployment(ref, component, now, "removed",
+                TestDataFactory.createDeploymentTarget(), DeploymentSequence.UNDEPLOYED);
+        removal.getDeploymentTypes().add(DeploymentType.CODE);
+        deployments.save(removal); success(removal); em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).isEmpty();
     }
 
     Deployment deployment(String version, Environment env, int hours) {

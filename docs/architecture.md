@@ -153,8 +153,14 @@ further matching requests update that follow-up instead of being discarded or gr
 follow-up has one reserved slot so it is retained even when the regular queue is full.
 
 The single worker prevents slow Confluence calls from exhausting the datasource pool needed by deployment API
-requests. Docgen also acquires the documentation-structure lock before opening the transaction for the remaining
-page generation, so a worker waiting for that global lock does not retain a JDBC connection.
+requests. When structure reconciliation is needed, Docgen acquires the documentation-structure lock before opening
+the transaction for the remaining page generation, so waiting for that global lock does not retain a JDBC connection.
+Ordinary deployment, history and retention work reuses a successfully synchronized structure for up to five minutes
+per instance. Each reuse checks system names, group assignments/names, configured Confluence location and tracked
+structure page IDs/parents in the database. The cache contains only immutable identifiers, never JPA entities.
+Deployment generation still refreshes the affected system overview. Generation failures invalidate the snapshot so
+that the next repair attempt checks the structure again. Expiry is checked on use; explicit full regeneration,
+migration/merge and administrative reconciliation always bypass the cache.
 
 Two levels of locking keep concurrent generation runs apart:
 
@@ -175,7 +181,7 @@ Lock contention for deployment-page repair is an expected deferral and is logged
 Global structure reconciliation holds its distributed documentation lock across the Confluence operations, but no
 database transaction. Individual tracking writes commit independently, so a slow Confluence response cannot leave an
 idle database connection attached to the whole reconciliation run; a later run resumes idempotently after failure.
-Full regeneration, system migration/merge, history refresh and structure reconciliation use the throwing lock path;
+Full regeneration, system migration/merge and structure reconciliation use the throwing lock path; history refresh uses it on cache misses;
 their callers receive or log a failure instead of silently accepting an incomplete operation. Persistent retention
 refresh tasks remain pending when generation is deferred. Missing and outdated pages
 remain identifiable through persistent deployment/page tracking. The scheduled repair job first processes the oldest

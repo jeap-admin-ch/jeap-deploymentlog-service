@@ -298,12 +298,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
 
         String values = IntStream.range(0, requestedTypes.size())
                 .mapToObj(index -> "(:deploymentId, :deploymentType" + index + ", :system, :component, " +
-                        ":environment, :state, :endedAt)")
+                        ":environment, :state, :endedAt, :stagingVersion)")
                 .collect(Collectors.joining(", "));
         var query = entityManager.createNativeQuery("""
                         insert into deployment_metric_event
                             (deployment_id, deployment_type, system_name, component_name,
-                             environment_name, deployment_state, ended_at)
+                             environment_name, deployment_state, ended_at, staging_version)
                         values %s
                         on conflict do nothing
                         """.formatted(values))
@@ -312,7 +312,8 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                 .setParameter(COMPONENT, event.component())
                 .setParameter(ENVIRONMENT, event.environment())
                 .setParameter("state", event.state().name())
-                .setParameter("endedAt", event.endedAt());
+                .setParameter("endedAt", event.endedAt())
+                .setParameter("stagingVersion", event.stagingVersion());
         IntStream.range(0, requestedTypes.size()).forEach(index ->
                 query.setParameter("deploymentType" + index, requestedTypes.get(index)));
         query.executeUpdate();
@@ -321,17 +322,31 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     @Transactional
     public void reconcileTerminalDeploymentMetrics() {
+        // Enrich existing metric events from pre-upgrade instances while deployments are still retained.
+        entityManager.createNativeQuery("""
+                update deployment_metric_event metric
+                set staging_version = (
+                    select cv.version_name from deployment d
+                    join component_version cv on cv.id = d.component_version_id
+                    where d.id = metric.deployment_id)
+                where metric.staging_version is null and metric.deployment_type = 'CODE'
+                  and metric.deployment_state = 'SUCCESS'
+                  and exists (select 1 from deployment d where d.id = metric.deployment_id
+                              and d.state = 'SUCCESS' and d.sequence <> 'UNDEPLOYED')
+                """).executeUpdate();
         entityManager.createNativeQuery("""
                         insert into deployment_metric_event
                             (deployment_id, deployment_type, system_name, component_name,
-                             environment_name, deployment_state, ended_at)
+                             environment_name, deployment_state, ended_at, staging_version)
                         select deployment.id,
                                deployment_type.type,
                                system.name,
                                component.name,
                                environment.name,
                                deployment.state,
-                               deployment.ended_at
+                               deployment.ended_at,
+                               case when deployment.state = 'SUCCESS' and deployment.sequence <> 'UNDEPLOYED'
+                                    and deployment_type.type = 'CODE' then component_version.version_name end
                         from deployment
                         join deployment_types deployment_type on deployment_type.deployment_id = deployment.id
                         join component_version on component_version.id = deployment.component_version_id

@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.UUID;
 
 interface JpaComponentPageRepository extends CrudRepository<ComponentPage, UUID> {
+    List<ComponentPage> findByComponentIdIn(java.util.Collection<UUID> componentIds);
+
     List<ComponentPage> findByParentPageId(String parentPageId);
 
     @Query("""

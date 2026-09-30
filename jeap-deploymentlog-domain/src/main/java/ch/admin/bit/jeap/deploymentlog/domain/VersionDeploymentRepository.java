@@ -8,5 +8,6 @@ public interface VersionDeploymentRepository {
     boolean existsForComponent(UUID componentId);
     void lockComponent(UUID componentId);
     List<StagingHistoryEntry> history(UUID componentId);
+    List<VersionArrivalMetricValue> arrivalMetrics(String startEnvironment, String endEnvironment);
     List<StagingMetricValue> metrics(String startEnvironment, String endEnvironment);
 }

@@ -181,7 +181,9 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | `deployment_duration_seconds`                | timer   | Duration of a terminal deployment from `started_at` to `ended_at`, tagged with `system`, `component`, `environment` and `deployment_type`. |
 | `version_start` | gauge | Distinct successful versions on the start stage. |
 | `version_end` | gauge | Distinct successful versions on the end stage. |
+| `version_start_arrivals_total` / `version_end_arrivals_total` | counters (Prometheus names) | Durable cumulative distinct successful CODE versions per start/end stage. Use deduplicated `increase()` for time-window throughput; repeated deployments do not increment these counts. |
 | `version_staging_latency_seconds_sum` / `version_staging_latency_seconds_count` | gauges | Sum and number of first-success latencies among retained versions, measured between deployment start timestamps. |
+| `version_staging_latency_seconds_buckets` | gauge | Cumulative retained-version latency counts with an inclusive `le` bound in seconds (including `+Inf`); aggregate buckets for median/percentile estimates. |
 | `autostaging_enabled` | gauge | Latest non-ROLLBACK CODE deployment on the start stage: 1 if its explicit targets contain the end stage, 0 otherwise; NaN if no eligible deployment exists. |
 
 Only the configured start stage determines `autostaging_enabled`; REF is merely an example. An AD_HOC deployment
@@ -193,7 +195,7 @@ flow type or flow state labels. Version identity is component plus version name,
 Repeated successful deployments never count the same version twice on a stage.
 
 Deployment counters retain their existing persistence and reconciliation. Deployment duration observations are emitted
-after commit and are not replayed on restart. Version counts, latency totals and AutoStaging status are calculated
+after commit and are not replayed on restart. Retained-version counts, latency totals and AutoStaging status are calculated
 directly from retained deployments on every replica. They are gauges because data retention can decrease them.
 First successful timestamps determine latency; versions missing a successful start or end, or with end before start,
 do not contribute a latency observation. These are the first successes among retained deployments, not the first
@@ -202,17 +204,29 @@ including those of old deployments, mean no AutoStaging in the calculation.
 
 All replicas publish the same database totals, refreshed every 30 seconds by default. Deduplicate replicas with
 `max by (system, component, start_environment, end_environment)` before calculating changes over a time window.
-For example, Lost Version Ratio is:
+V35 adds a nullable version identity to the existing `deployment_metric_event` table. Reconciliation enriches
+existing events only where their source deployment is still retained; no deployment is reclassified. The identity is
+captured for successful CODE deployments, excluding undeployments. Retention reconciles metrics before deleting source
+rows. Arrival counters are read from these durable events and do not fall when deployment history is deleted.
+Startup reconciliation establishes the baseline before publishing the counters. Already-deleted versions whose metric
+events lack a version identity cannot be reconstructed. No new history table is introduced.
+
+For example, the Lost Version Ratio over the selected dashboard window is:
 
 ```promql
 1 -
-sum(delta((max by (system, component, start_environment, end_environment) (version_end))[$__range:]))
+sum(increase((max by (system, component, start_environment, end_environment) (version_end_arrivals_total))[$__range:]))
 /
-sum(delta((max by (system, component, start_environment, end_environment) (version_start))[$__range:]))
+sum(increase((max by (system, component, start_environment, end_environment) (version_start_arrivals_total))[$__range:]))
 ```
 
 This is intentionally a throughput ratio, not a matched cohort: versions may start and finish in different windows,
-so short windows can yield negative values. A window with no starts has no defined ratio.
+so short windows can yield negative values. A window with no starts has no defined ratio; dashboards must filter a zero denominator.
+Prometheus observes counter changes when they are persisted/refreshed/scraped, not at backdated deployment timestamps.
+There is no retroactive time series for periods before this release. A new series needs at least two samples for
+`increase()`; arrivals before its first scrape cannot be recovered from the counter alone. Allow a complete observation
+window after rollout; scrape timing and extrapolation can produce fractional counts. The stock gauges remain available
+for inventory views, but must not be used with `increase()` for arrival counts.
 AutoStaging is a per-component status, not a ratio. It reflects the latest start-stage CODE deployment by
 `started_at` (deployment id breaks timestamp ties), excluding ROLLBACK and undeployments. Its outcome is irrelevant:
 a failed attempt still expresses the requested automation. A RETRY can change the status. Without an eligible
@@ -225,9 +239,9 @@ max by (system, component, start_environment, end_environment) (autostaging_enab
 This is inferred from the latest request, not a direct observation of pipeline configuration or proof of an
 automatically completed execution. No explicit targets means no AutoStaging.
 
-Mean latency is the window delta of `version_staging_latency_seconds_sum` divided by the delta of
-`version_staging_latency_seconds_count`, also deduplicated across replicas. Scrape timing affects window boundaries. Retention or stage-configuration changes also affect these deltas;
-windows containing such changes do not represent pure arrival counts.
+Mean retained-version latency is the sum of `version_staging_latency_seconds_sum` divided by the sum of
+`version_staging_latency_seconds_count`, deduplicated across replicas and filtered to positive counts. It remains an
+inventory metric, not a time-window arrival metric. Retention or stage-configuration changes can affect this value.
 
 Deployments carrying several `deploymentTypes` still publish one ordinary deployment metric series per type; select
 `deployment_type="CODE"` when comparing those metrics with the version metrics.
@@ -272,9 +286,45 @@ No further retry is queued: history can remain outdated until the next successfu
 repair) for the same system and environment, or an explicit history refresh. The repair job does not track the failed
 history request separately. Delays do not occupy the worker, but each lock-acquisition attempt can still wait up to the configured timeout.
 
+Normal deployment/history/retention generation reuses its last successful structure reconciliation for up to
+`jeap.deploymentlog.documentation-generator.confluence.structure-cache-max-age` (default `PT5M`) per instance.
+Metadata changes in the database invalidate reuse immediately on the next check; external Confluence changes are
+repaired after a generation failure, an explicit reconciliation or the next request after expiry. A cold cache or a
+changed structure still needs the global lock. This reduces the frequency, not the duration, of a full reconciliation.
+Set `PT0S` to restore reconciliation before every ordinary request.
+
 ## Related
 
 - [Architecture](architecture.md)
 - [Configuration](configuration.md)
 - [Documentation Generation](documentation-generation.md)
 - [REST API](rest-api.md)
+
+
+### Staging latency median
+
+Since 16.10.0 the retained-version latency distribution is exported as cumulative
+`version_staging_latency_seconds_buckets` gauges. Each complete version contributes once;
+failed attempts, incomplete versions, undeployments and negative latencies do not contribute.
+These are snapshots rebuilt from retained deployments, so retention can reduce the counts.
+Do not apply `rate()` or `increase()` to these buckets.
+
+Deduplicate instances, then aggregate the buckets across the selected components:
+
+```promql
+histogram_quantile(0.5,
+  sum by (le) (
+    max by (system, component, start_environment, end_environment, le) (
+      version_staging_latency_seconds_buckets
+    )
+  )
+)
+```
+
+Apply dashboard filters inside the selector. This estimates the median across individual version
+latencies, not a median of component averages. Prometheus interpolates within bucket boundaries;
+it is not an exact percentile. Bounds range from zero through minutes, hours, days and years
+to ten years, followed by `+Inf` (26 series per component/stage pair).
+No observations produce NaN (N/A). The panel represents retained history at the query time;
+changing the dashboard range does not turn it into a cohort/time-window median.
+Existing sum/count metrics remain available for averages.

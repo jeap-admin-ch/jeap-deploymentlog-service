@@ -209,7 +209,16 @@ class TemplateRendererTest {
                 .build();
 
         String content = templateRenderer.renderDeploymentHistoryPage(deploymentHistoryPageDto);
-        assertThat(content).contains("ri:content-title=\"service&lt;&amp;&gt; (SYSTEM A)\"");
+        assertThat(content).contains("<span>service&lt;&amp;&gt;</span>")
+                .doesNotContain("ri:content-title=\"service", "service<&>");
+
+        DeploymentDto linked = DeploymentDto.builder().component("service<&>")
+                .componentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42").build();
+        String linkedContent = templateRenderer.renderDeploymentHistoryPage(
+                DeploymentHistoryPageDto.builder().deployments(List.of(linked)).build());
+        assertThat(linkedContent).contains("href=\"https://confluence.example/pages/viewpage.action?pageId=42\"",
+                ">service&lt;&amp;&gt;</a>").doesNotContain("<span>service&lt;&amp;&gt;</span>");
+
     }
 
     @Test
@@ -464,7 +473,16 @@ class TemplateRendererTest {
                 .isNotNull()
                 .contains(dto.getDeploymentHistoryOverviewMinStartedAt())
                 .contains("CODE, CONFIG")
-                .contains("ri:content-title=\"service&lt;&amp;&gt; (SYSTEM A)\"");
+                .contains("<span>service&lt;&amp;&gt;</span>")
+                .doesNotContain("ri:content-title=\"service", "service<&>");
+
+        DeploymentDto linked = DeploymentDto.builder().component("service<&>")
+                .componentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42").build();
+        String linkedContent = templateRenderer.renderDeploymentHistoryOverviewPage(
+                DeploymentHistoryOverviewPageDto.builder().deployments(List.of(linked)).build());
+        assertThat(linkedContent).contains("href=\"https://confluence.example/pages/viewpage.action?pageId=42\"",
+                ">service&lt;&amp;&gt;</a>").doesNotContain("<span>service&lt;&amp;&gt;</span>");
+
     }
 
     @Test

@@ -39,4 +39,15 @@ class DocumentationGeneratorConfluencePropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("change-view-activity-period");
     }
+    @Test
+    void structureCacheDefaultsToFiveMinutesAndCanBeDisabled() {
+        var properties = new DocumentationGeneratorConfluenceProperties();
+        assertThat(properties.getStructureCacheMaxAge()).isEqualTo(Duration.ofMinutes(5));
+        properties.setStructureCacheMaxAge(Duration.ZERO);
+        properties.init();
+        properties.setStructureCacheMaxAge(Duration.ofSeconds(-1));
+        assertThatThrownBy(properties::init).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("structure-cache-max-age");
+    }
+
 }

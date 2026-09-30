@@ -90,6 +90,7 @@ class DocumentationGeneratorTest {
     DocumentationTransactionRunner transactionRunnerMock;
 
     private DocumentationGenerator documentationGenerator;
+    private DocumentationGeneratorConfluenceProperties props;
     private final Map<String, DocumentationStructurePage> structurePages = new HashMap<>();
 
     @Test
@@ -207,8 +208,11 @@ class DocumentationGeneratorTest {
                         .build());
 
         documentationGenerator.generateDeploymentPages(deploymentId);
+        documentationGenerator.generateDeploymentPages(deploymentId);
 
-        verify(componentPageGeneratorMock).generatePage(
+        verify(documentationStructureLockMock, times(1)).tryRunLocked(any());
+        verify(generatorServiceMock, times(3)).createSystemPageDto(system);
+        verify(componentPageGeneratorMock, times(2)).generatePage(
                 ROOT_PAGE_ID + "/Systems/SYSTEM A/Components (SYSTEM A)", component);
         verify(componentPageGeneratorMock, never()).generatePages(anyString(), any());
     }
@@ -339,7 +343,7 @@ class DocumentationGeneratorTest {
     void generateAllPages_usesConfiguredRootPageIdAsAncestor() {
         String configuredRootPageId = "a-distinct-configured-root-page-id";
         DocumentationGeneratorConfig generatorConfig = new DocumentationGeneratorConfig();
-        DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
+        props = new DocumentationGeneratorConfluenceProperties();
         props.setRootPageId(configuredRootPageId);
         DocumentationGenerator generator = new DocumentationGenerator(
                 confluenceAdapterMock,
@@ -556,6 +560,60 @@ class DocumentationGeneratorTest {
         org.junit.jupiter.api.Assertions.assertEquals(stagesPageId, trackedStagePage.getParentPageId());
     }
 
+    @Test
+    void historyRefreshReusesStructureButExplicitReconciliationForcesRefresh() {
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        clearInvocations(confluenceAdapterMock);
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verifyNoInteractions(confluenceAdapterMock);
+        verify(documentationStructureLockMock, times(1)).runLocked(any());
+        documentationGenerator.reconcileDocumentationStructure();
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verify(documentationStructureLockMock, times(2)).runLocked(any());
+    }
+
+    @Test
+    void detectsNewAndRenamedSystemsWithoutWaitingForCacheExpiry() {
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        System system = new System("new-system");
+        when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
+        when(generatorServiceMock.createSystemPageDto(system))
+                .thenAnswer(ignored -> SystemPageDto.builder().name(system.getName()).build());
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        system.updateName("renamed-system");
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verify(documentationStructureLockMock, times(3)).runLocked(any());
+    }
+
+    @Test
+    void detectsTrackingChangesFromAnotherInstanceAndRootConfigurationChanges() {
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        structurePages.get("TOP:STAGES").updateLocation("recreated-stages", ROOT_PAGE_ID);
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        props.setRootPageId("new-root");
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verify(documentationStructureLockMock, times(3)).runLocked(any());
+    }
+
+    @Test
+    void disabledCacheRequiresLockOnEveryRefresh() {
+        props.setStructureCacheMaxAge(java.time.Duration.ZERO);
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verify(documentationStructureLockMock, times(2)).runLocked(any());
+    }
+
+    @Test
+    void failedPageGenerationInvalidatesCachedStructureForRepair() {
+        List<SystemEnv> noEnvironments = List.of();
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        doThrow(new IllegalStateException("Confluence ancestor missing")).when(transactionRunnerMock).run(any());
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.updateDeploymentHistoryPages(noEnvironments));
+        doAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get()).when(transactionRunnerMock).run(any());
+        documentationGenerator.updateDeploymentHistoryPages(List.of());
+        verify(documentationStructureLockMock, times(2)).runLocked(any());
+    }
+
     @BeforeEach
     void setUp() {
         structurePages.clear();
@@ -596,7 +654,7 @@ class DocumentationGeneratorTest {
         TemplateRenderer templateRenderer = new TemplateRenderer(generatorConfig.templateEngine(
                 applicationContext),
                 new VersionFlowDiagramRenderer());
-        DocumentationGeneratorConfluenceProperties props = new DocumentationGeneratorConfluenceProperties();
+        props = new DocumentationGeneratorConfluenceProperties();
         props.setRootPageId(ROOT_PAGE_ID);
         documentationGenerator = new DocumentationGenerator(
                 confluenceAdapterMock,

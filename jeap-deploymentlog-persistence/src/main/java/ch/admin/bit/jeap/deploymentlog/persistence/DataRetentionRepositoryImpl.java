@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRefreshTask;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionResult;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemEnv;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -36,6 +37,7 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
     public static final String DEPLOYMENT_IDS = "deploymentIds";
 
     private final EntityManager entityManager;
+    private final DeploymentRepository deploymentRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -101,6 +103,8 @@ class DataRetentionRepositoryImpl implements DataRetentionRepository {
             return DataRetentionResult.empty();
         }
 
+        // Persist version identities before retention removes the source rows, including after a missed listener.
+        deploymentRepository.reconcileTerminalDeploymentMetrics();
         DataRetentionResult result = snapshotResult(deletableDeployments);
         Set<UUID> deletableDeploymentIds = deletableDeployments.stream()
                 .map(Deployment::getId)

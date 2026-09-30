@@ -31,6 +31,11 @@ public class ComponentPageRepositoryImpl implements ComponentPageRepository {
     }
 
     @Override
+    public List<ComponentPage> findByComponentIdIn(java.util.Collection<UUID> componentIds) {
+        return componentIds.isEmpty() ? List.of() : repository.findByComponentIdIn(componentIds);
+    }
+
+    @Override
     public ComponentPage save(ComponentPage componentPage) {
         return repository.save(componentPage);
     }

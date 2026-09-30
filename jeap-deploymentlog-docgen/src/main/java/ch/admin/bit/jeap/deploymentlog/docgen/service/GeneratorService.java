@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.docgen.service;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
+import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGeneratorConfluenceProperties;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGeneratorProperties;
 import ch.admin.bit.jeap.deploymentlog.docgen.model.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
@@ -25,6 +26,8 @@ public class GeneratorService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    private final ComponentPageRepository componentPageRepository;
+    private final DocumentationGeneratorConfluenceProperties confluenceProperties;
     private final EnvironmentRepository environmentRepository;
     private final DeploymentRepository deploymentRepository;
     private final SystemPageRepository systemPageRepository;
@@ -198,9 +201,11 @@ public class GeneratorService {
 
     public List<DeploymentDto> getDeploymentsForSystemAndEnv(System system, Environment environment, int maxShow) {
         List<Deployment> deploymentList = deploymentRepository.findDeploymentForSystemAndEnvLimited(system, environment, maxShow);
+        Map<UUID, String> componentPageUrls = componentPageUrls(deploymentList);
         return deploymentList.stream().map(deployment -> DeploymentDto.builder()
                         .deploymentId(deployment.getId().toString())
                         .component(deployment.getComponentVersion().getComponent().getName())
+                        .componentPageUrl(componentPageUrls.get(deployment.getComponentVersion().getComponent().getId()))
                         .system(deployment.getComponentVersion().getComponent().getSystem().getName())
                         .startedAt(getStartedAtFormatted(deployment))
                         .duration(getDurationFormatted(deployment))
@@ -216,9 +221,11 @@ public class GeneratorService {
 
     public List<DeploymentDto> getDeploymentsForEnv(Environment environment, ZonedDateTime minStartedAt, int maxShow) {
         List<Deployment> deploymentList = deploymentRepository.findDeploymentForEnvLimited(environment, minStartedAt, maxShow);
+        Map<UUID, String> componentPageUrls = componentPageUrls(deploymentList);
         return deploymentList.stream().map(deployment -> DeploymentDto.builder()
                         .deploymentId(deployment.getId().toString())
                         .component(deployment.getComponentVersion().getComponent().getName())
+                        .componentPageUrl(componentPageUrls.get(deployment.getComponentVersion().getComponent().getId()))
                         .system(deployment.getComponentVersion().getComponent().getSystem().getName())
                         .startedAt(getStartedAtFormatted(deployment))
                         .duration(getDurationFormatted(deployment))
@@ -230,6 +237,24 @@ public class GeneratorService {
                         .deploymentTypes(getDeploymentTypesAsString(deployment.getDeploymentTypes()))
                         .build())
                 .toList();
+    }
+
+    private Map<UUID, String> componentPageUrls(List<Deployment> deployments) {
+        Set<UUID> componentIds = deployments.stream()
+                .map(deployment -> deployment.getComponentVersion().getComponent().getId())
+                .collect(Collectors.toSet());
+        List<ComponentPage> pages = componentPageRepository.findByComponentIdIn(componentIds);
+        if (pages.isEmpty() || !StringUtils.hasText(confluenceProperties.getUrl())) {
+            return Map.of();
+        }
+        String url = confluenceProperties.getUrl();
+        int end = url.length();
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
+        }
+        String baseUrl = url.substring(0, end);
+        return pages.stream().collect(Collectors.toMap(ComponentPage::getComponentId,
+                page -> baseUrl + "/pages/viewpage.action?pageId=" + page.getPageId()));
     }
 
     public List<Integer> getDeploymentsYearsForSystemAndEnv(System system, Environment environment) {

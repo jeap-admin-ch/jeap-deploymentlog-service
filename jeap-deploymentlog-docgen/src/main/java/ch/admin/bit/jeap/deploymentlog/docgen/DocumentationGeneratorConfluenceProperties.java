@@ -56,6 +56,9 @@ public class DocumentationGeneratorConfluenceProperties {
 
     private boolean mockConfluenceClient = false;
 
+    /** Maximum reuse time for a successfully synchronized documentation structure; zero disables reuse. */
+    private Duration structureCacheMaxAge = Duration.ofMinutes(5);
+
     private Duration retryOnConflictWaitDuration = Duration.ofSeconds(10);
 
     @PostConstruct
@@ -66,6 +69,9 @@ public class DocumentationGeneratorConfluenceProperties {
         if (changeViewActivityPeriod == null || changeViewActivityPeriod.isZero()
                 || changeViewActivityPeriod.isNegative()) {
             throw new IllegalArgumentException("change-view-activity-period must be greater than zero");
+        }
+        if (structureCacheMaxAge == null || structureCacheMaxAge.isNegative()) {
+            throw new IllegalArgumentException("structure-cache-max-age must not be negative");
         }
         log.info("Confluence configuration: {}", this);
     }

@@ -6,6 +6,8 @@ import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +27,12 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class GeneratorServiceTest {
+
+    @Mock
+    private ComponentPageRepository componentPageRepository;
+
+    @Mock
+    private ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGeneratorConfluenceProperties confluenceProperties;
 
     @InjectMocks
     private GeneratorService generatorService;
@@ -331,6 +339,34 @@ class GeneratorServiceTest {
         assertThat(deploymentLetterPageDto.getTargetDetails()).isNull();
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 5, 100000})
+    void historyLinksOnlyTrackedComponentPagesInBothViews(int trailingSlashes) {
+        System system = new System("System A");
+        Environment environment = new Environment("DEV");
+        Deployment linked = createDeployment(system, environment);
+        Deployment unlinked = createDeployment(system, environment);
+        UUID componentId = linked.getComponentVersion().getComponent().getId();
+        List<Deployment> deployments = List.of(linked, unlinked, linked);
+        when(deploymentRepositoryMock.findDeploymentForSystemAndEnvLimited(system, environment, 5))
+                .thenReturn(deployments);
+        when(deploymentRepositoryMock.findDeploymentForEnvLimited(eq(environment), any(), eq(5)))
+                .thenReturn(deployments);
+        when(componentPageRepository.findByComponentIdIn(any()))
+                .thenReturn(List.of(ComponentPage.create(componentId, "42", "parent")));
+        when(confluenceProperties.getUrl()).thenReturn("https://confluence.example/wiki" + "/".repeat(trailingSlashes));
+
+        List<DeploymentDto> systemHistory = generatorService.getDeploymentsForSystemAndEnv(system, environment, 5);
+        List<DeploymentDto> overview = generatorService.getDeploymentsForEnv(environment, ZonedDateTime.now(), 5);
+
+        for (List<DeploymentDto> history : List.of(systemHistory, overview)) {
+            assertThat(history).extracting(DeploymentDto::getComponentPageUrl).containsExactly(
+                    "https://confluence.example/wiki/pages/viewpage.action?pageId=42",
+                    null, "https://confluence.example/wiki/pages/viewpage.action?pageId=42");
+        }
+        verify(componentPageRepository, times(2)).findByComponentIdIn(any());
+    }
+
     @Test
     void getDeploymentsForEnv_withUndeployment_correctLetterLink() {
         System systemA = new System("System A");
@@ -341,7 +377,7 @@ class GeneratorServiceTest {
                 .findDeploymentForEnvLimited(eq(environmentDEV), any(), anyInt());
 
         List<DeploymentDto> deploymentsForEnv = generatorService.getDeploymentsForEnv(environmentDEV, ZonedDateTime.now(), 5);
-        assertThat(deploymentsForEnv.size()).isEqualTo(1);
+        assertThat(deploymentsForEnv).hasSize(1);
         assertThat(deploymentsForEnv.get(0).getDeploymentLetterLink()).endsWith(DocumentationGenerator.UNDEPLOY_PAGE_SUFFIX);
     }
 
@@ -355,7 +391,7 @@ class GeneratorServiceTest {
                 .findDeploymentForSystemAndEnvLimited(eq(systemA), eq(environmentDEV), anyInt());
 
         List<DeploymentDto> deploymentsForEnv = generatorService.getDeploymentsForSystemAndEnv(systemA, environmentDEV, 5);
-        assertThat(deploymentsForEnv.size()).isEqualTo(1);
+        assertThat(deploymentsForEnv).hasSize(1);
         assertThat(deploymentsForEnv.get(0).getDeploymentLetterLink()).endsWith(DocumentationGenerator.UNDEPLOY_PAGE_SUFFIX);
     }
 

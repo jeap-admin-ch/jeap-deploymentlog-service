@@ -9,6 +9,8 @@ public interface ComponentPageRepository {
 
     Optional<ComponentPage> findByComponentId(UUID componentId);
 
+    List<ComponentPage> findByComponentIdIn(java.util.Collection<UUID> componentIds);
+
     ComponentPage save(ComponentPage componentPage);
 
     List<ComponentPage> findByParentPageId(String parentPageId);
