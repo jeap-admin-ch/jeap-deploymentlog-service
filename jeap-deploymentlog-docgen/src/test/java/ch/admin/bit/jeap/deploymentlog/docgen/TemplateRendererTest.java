@@ -72,7 +72,7 @@ class TemplateRendererTest {
                 .deployments(List.of(
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:00:00")
                                 .startedAtInstant(Instant.parse("2026-08-01T08:00:00Z"))
-                                .stage("DEV").state("FAILURE").type("AD_HOC").finalDeploymentEnvironments(List.of("PROD<&>")).build(),
+                                .stage("DEV").state("FAILURE").type("AD_HOC").stagingTarget("PROD<&>").build(),
                         ComponentFlowDeploymentDto.builder().startedAt("2026-08-01 10:05:00")
                                 .startedAtInstant(Instant.parse("2026-08-01T08:05:00Z"))
                                 .stage("DEV").state("SUCCESS")
@@ -190,6 +190,8 @@ class TemplateRendererTest {
     void renderDeploymentHistoryPage() {
 
         DeploymentDto deploymentDto = DeploymentDto.builder()
+                .component("service<&>")
+                .system("SYSTEM A")
                 .version("0.0.1")
                 .versionControlUrl("https://somewere.com")
                 .startedBy("John Doe")
@@ -207,7 +209,7 @@ class TemplateRendererTest {
                 .build();
 
         String content = templateRenderer.renderDeploymentHistoryPage(deploymentHistoryPageDto);
-        assertNotNull(content);
+        assertThat(content).contains("ri:content-title=\"service&lt;&amp;&gt; (SYSTEM A)\"");
     }
 
     @Test
@@ -438,6 +440,8 @@ class TemplateRendererTest {
     @Test
     void renderDeploymentHistoryOverviewPage() {
         DeploymentDto deploymentDto = DeploymentDto.builder()
+                .component("service<&>")
+                .system("SYSTEM A")
                 .version("0.0.1")
                 .versionControlUrl("https://somewere.com")
                 .startedBy("John Doe")
@@ -459,7 +463,8 @@ class TemplateRendererTest {
         assertThat(content)
                 .isNotNull()
                 .contains(dto.getDeploymentHistoryOverviewMinStartedAt())
-                .contains("CODE, CONFIG");
+                .contains("CODE, CONFIG")
+                .contains("ri:content-title=\"service&lt;&amp;&gt; (SYSTEM A)\"");
     }
 
     @Test

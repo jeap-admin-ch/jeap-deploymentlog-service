@@ -201,6 +201,7 @@ public class GeneratorService {
         return deploymentList.stream().map(deployment -> DeploymentDto.builder()
                         .deploymentId(deployment.getId().toString())
                         .component(deployment.getComponentVersion().getComponent().getName())
+                        .system(deployment.getComponentVersion().getComponent().getSystem().getName())
                         .startedAt(getStartedAtFormatted(deployment))
                         .duration(getDurationFormatted(deployment))
                         .version(deployment.getComponentVersion().getVersionName())

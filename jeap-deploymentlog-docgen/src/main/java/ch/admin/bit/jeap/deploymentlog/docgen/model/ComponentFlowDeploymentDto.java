@@ -14,6 +14,6 @@ public class ComponentFlowDeploymentDto {
     String state;
     String type;
     int stagingOrder;
-    java.util.List<String> finalDeploymentEnvironments;
+    String stagingTarget;
     String pageUrl;
 }

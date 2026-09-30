@@ -25,7 +25,7 @@
             <td>
                 <table class="wrapped" style="width: 100%;">
                     <tbody>
-                    <tr><th>Beginn</th><th>Stage</th><th>Typ</th><th>Status</th><th>Staging-Ziele</th><th>Details</th></tr>
+                    <tr><th>Beginn</th><th>Stage</th><th>Typ</th><th>Status</th><th>Ziel-Stage</th><th>Details</th></tr>
                     <tr th:each="deployment: ${flow.deployments}"
                         th:style="${deployment.type == 'AD_HOC'} ? 'background-color: #ffebe6;' : ''">
                         <td th:text="${deployment.startedAt}"></td>
@@ -40,7 +40,7 @@
                                 <span th:case="*" th:text="${deployment.state}"></span>
                             </th:block>
                         </td>
-                        <td th:text="${deployment.finalDeploymentEnvironments == null or deployment.finalDeploymentEnvironments.isEmpty() ? '-' : #strings.listJoin(deployment.finalDeploymentEnvironments, ', ')}"></td>
+                        <td th:text="${deployment.stagingTarget == null ? '-' : deployment.stagingTarget}"></td>
                         <td>
                             <a th:if="${deployment.pageUrl != null}" th:href="${deployment.pageUrl}">Detail</a>
                             <span th:unless="${deployment.pageUrl != null}">-</span>

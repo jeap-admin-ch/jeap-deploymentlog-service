@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
+import ch.admin.bit.jeap.deploymentlog.docgen.model.ComponentPageDto;
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
@@ -76,7 +77,7 @@ public class ComponentPageGenerator {
     }
 
     private static String pageTitle(Component component, String systemName) {
-        return component.getName() + " (" + systemName + ")";
+        return ComponentPageDto.pageTitle(component.getName(), systemName);
     }
 
     @Transactional

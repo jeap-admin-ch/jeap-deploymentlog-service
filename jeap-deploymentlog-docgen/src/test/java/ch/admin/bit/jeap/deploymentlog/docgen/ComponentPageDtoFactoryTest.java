@@ -7,6 +7,8 @@ import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Set;
@@ -78,6 +80,41 @@ class ComponentPageDtoFactoryTest {
         Deployment end = deployment(prod, 3, DeploymentState.SUCCESS);
         when(versions.findLatestVersions(component.getId(), 2)).thenReturn(List.of(List.of(end)));
         assertThat(factory.create(component).getFlows().getFirst().getDuration()).isEqualTo("03:00:00");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "ref;abn;prod;dev, PROD",
+            "ref;abn;dev, ABN",
+            "ref, REF",
+            "dev,",
+            ","
+    })
+    void displaysHighestTargetWithinRelevantStages(String reported, String expected) {
+        Environment abn = new Environment("ABN");
+        ref.setStagingOrder(10);
+        abn.setStagingOrder(20);
+        prod.setStagingOrder(30);
+        // Deliberately unsorted: stagingOrder, not list order or alphabet, determines the target.
+        when(stages.relevantEnvironments()).thenReturn(List.of(prod, ref, abn));
+        Deployment deployment = deployment(ref, 0, DeploymentState.SUCCESS);
+        Set<String> targets = reported == null ? Set.of() : Set.of(reported.split(";"));
+        deployment.setFinalDeploymentEnvironments(targets);
+        when(versions.findLatestVersions(component.getId(), 2)).thenReturn(List.of(List.of(deployment)));
+
+        var result = factory.create(component).getFlows().getFirst().getDeployments().getFirst();
+
+        assertThat(result.getStagingTarget()).isEqualTo(expected);
+        assertThat(deployment.getFinalDeploymentEnvironments()).isEqualTo(targets);
+    }
+
+    @Test void endStageWithOnlyOutOfRangeOnwardStageShowsCurrentStage() {
+        when(stages.relevantEnvironments()).thenReturn(List.of(ref, prod));
+        Deployment deployment = deployment(prod, 0, DeploymentState.SUCCESS);
+        deployment.setFinalDeploymentEnvironments(Set.of("prod", "dev"));
+        when(versions.findLatestVersions(component.getId(), 2)).thenReturn(List.of(List.of(deployment)));
+        assertThat(factory.create(component).getFlows().getFirst().getDeployments().getFirst().getStagingTarget())
+                .isEqualTo("PROD");
     }
 
     Deployment deployment(Environment environment, int hours, DeploymentState state) {

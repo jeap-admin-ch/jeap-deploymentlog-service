@@ -9,6 +9,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
+import ch.admin.bit.jeap.deploymentlog.domain.Environment;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingHistoryEntry;
@@ -40,9 +41,11 @@ class ComponentPageDtoFactory {
 
     ComponentPageDto create(Component component) {
         List<StagingHistoryEntry> history = versionDeploymentRepository.history(component.getId());
-        List<ComponentFlowDto> flows = versionDeploymentRepository
-                .findLatestVersions(component.getId(), confluenceProperties.getComponentFlowMaxShow()).stream()
-                .map(deployments -> toDto(deployments, history))
+        List<List<Deployment>> versions = versionDeploymentRepository
+                .findLatestVersions(component.getId(), confluenceProperties.getComponentFlowMaxShow());
+        List<Environment> relevantStages = versions.isEmpty() ? List.of() : stageResolver.relevantEnvironments();
+        List<ComponentFlowDto> flows = versions.stream()
+                .map(deployments -> toDto(deployments, history, relevantStages))
                 .toList();
         return ComponentPageDto.builder()
                 .componentName(component.getName())
@@ -51,7 +54,8 @@ class ComponentPageDtoFactory {
                 .build();
     }
 
-    private ComponentFlowDto toDto(List<Deployment> deployments, List<StagingHistoryEntry> history) {
+    private ComponentFlowDto toDto(List<Deployment> deployments, List<StagingHistoryEntry> history,
+                                   List<Environment> relevantStages) {
         Deployment first = deployments.getFirst();
         return ComponentFlowDto.builder()
                 .version(first.getComponentVersion().getVersionName())
@@ -61,12 +65,12 @@ class ComponentPageDtoFactory {
                 .deployments(deployments.stream()
                         .sorted(Comparator.comparing(Deployment::getStartedAt, Comparator.reverseOrder())
                                 .thenComparing(Deployment::getId))
-                        .map(this::toDeploymentDto).toList())
+                        .map(deployment -> toDeploymentDto(deployment, relevantStages)).toList())
                 .jiraIssues(jiraIssues(deployments))
                 .build();
     }
 
-    private ComponentFlowDeploymentDto toDeploymentDto(Deployment deployment) {
+    private ComponentFlowDeploymentDto toDeploymentDto(Deployment deployment, List<Environment> relevantStages) {
         String pageUrl = deploymentPageRepository.findDeploymentPageByDeploymentId(deployment.getId())
                 .map(page -> deploymentPageUrl(page.getPageId()))
                 .orElse(null);
@@ -77,9 +81,18 @@ class ComponentPageDtoFactory {
                 .state(deployment.getState().name())
                 .type(deployment.getStagingType() == null ? null : deployment.getStagingType().name())
                 .stagingOrder(deployment.getEnvironment().getStagingOrder())
-                .finalDeploymentEnvironments(deployment.getFinalDeploymentEnvironments().stream().sorted().toList())
+                .stagingTarget(stagingTarget(deployment, relevantStages))
                 .pageUrl(pageUrl)
                 .build();
+    }
+
+    private String stagingTarget(Deployment deployment, List<Environment> relevantStages) {
+        return relevantStages.stream()
+                .filter(stage -> deployment.getFinalDeploymentEnvironments().stream()
+                        .anyMatch(name -> stage.getName().equalsIgnoreCase(name.trim())))
+                .max(Comparator.comparingInt(Environment::getStagingOrder))
+                .map(Environment::getName)
+                .orElseGet(() -> null);
     }
 
     private String deploymentPageUrl(String pageId) {
