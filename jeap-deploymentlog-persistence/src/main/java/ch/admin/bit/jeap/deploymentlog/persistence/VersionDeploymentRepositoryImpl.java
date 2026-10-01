@@ -103,12 +103,29 @@ public class VersionDeploymentRepositoryImpl implements VersionDeploymentReposit
     @Override
     public List<VersionArrivalMetricValue> arrivalMetrics(String startEnvironment, String endEnvironment) {
         return jdbc.query("""
-                select system_name, component_name,
-                       count(distinct case when environment_name = ? then staging_version end),
-                       count(distinct case when environment_name = ? then staging_version end)
-                from deployment_metric_event
-                where deployment_type = 'CODE' and deployment_state = 'SUCCESS' and staging_version is not null
-                group by system_name, component_name
+                with arrivals as (
+                    select component_id, staging_version,
+                           max(case when environment_name = ? then 1 else 0 end) as start_arrived,
+                           max(case when environment_name = ? then 1 else 0 end) as end_arrived
+                    from deployment_metric_event
+                    where deployment_type = 'CODE' and deployment_state = 'SUCCESS'
+                      and staging_version is not null and component_id is not null
+                    group by component_id, staging_version
+                ), historical_labels as (
+                    select component_id, system_name, component_name,
+                           row_number() over (partition by component_id
+                               order by ended_at desc nulls last, deployment_id desc) as label_rank
+                    from deployment_metric_event
+                    where deployment_type = 'CODE' and deployment_state = 'SUCCESS'
+                      and staging_version is not null and component_id is not null
+                )
+                select coalesce(s.name, h.system_name), coalesce(c.name, h.component_name),
+                       sum(a.start_arrived), sum(a.end_arrived)
+                from arrivals a
+                join historical_labels h on h.component_id = a.component_id and h.label_rank = 1
+                left join component c on c.id = a.component_id
+                left join system s on s.id = c.system_id
+                group by coalesce(s.name, h.system_name), coalesce(c.name, h.component_name)
                 """, (rs, row) -> new VersionArrivalMetricValue(rs.getString(1), rs.getString(2),
                         rs.getLong(3), rs.getLong(4)), startEnvironment, endEnvironment);
     }

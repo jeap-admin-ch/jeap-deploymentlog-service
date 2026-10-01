@@ -14,7 +14,8 @@ public record DeploymentTerminalMetricEvent(
         DeploymentState state,
         ZonedDateTime startedAt,
         ZonedDateTime endedAt,
-        String stagingVersion) {
+        String stagingVersion,
+        UUID componentId) {
 
     // Retain the existing constructor for callers that do not supply a staging version.
     @SuppressWarnings("java:S107")
@@ -22,6 +23,15 @@ public record DeploymentTerminalMetricEvent(
                                          String environment, Set<DeploymentType> deploymentTypes, DeploymentState state,
                                          ZonedDateTime startedAt, ZonedDateTime endedAt) {
         this(deploymentId, externalId, system, component, environment, deploymentTypes, state, startedAt, endedAt, null);
+    }
+
+    // Preserve callers compiled against the initial version-arrival event shape.
+    @SuppressWarnings("java:S107")
+    public DeploymentTerminalMetricEvent(UUID deploymentId, String externalId, String system, String component,
+                                         String environment, Set<DeploymentType> deploymentTypes, DeploymentState state,
+                                         ZonedDateTime startedAt, ZonedDateTime endedAt, String stagingVersion) {
+        this(deploymentId, externalId, system, component, environment, deploymentTypes, state, startedAt, endedAt,
+                stagingVersion, null);
     }
 
     static DeploymentTerminalMetricEvent from(Deployment deployment) {
@@ -39,6 +49,7 @@ public record DeploymentTerminalMetricEvent(
                 deployment.getState() == DeploymentState.SUCCESS
                         && deployment.getSequence() != DeploymentSequence.UNDEPLOYED
                         && deployment.getDeploymentTypes().contains(DeploymentType.CODE)
-                        ? deployment.getComponentVersion().getVersionName() : null);
+                        ? deployment.getComponentVersion().getVersionName() : null,
+                component.getId());
     }
 }

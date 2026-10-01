@@ -97,6 +97,33 @@ class VersionStagingMetricsTest {
         verify(deploymentRepository, times(2)).reconcileTerminalDeploymentMetrics();
     }
 
+    @Test void removesOldArrivalSeriesAfterRenameAndCanRegisterThemAgain() {
+        var repository = mock(VersionDeploymentRepository.class);
+        var resolver = mock(StagingEnvironmentResolver.class);
+        when(resolver.resolveStartEnvironment()).thenReturn(new Environment("REF"));
+        when(resolver.resolveDefaultFinalDeploymentEnvironment()).thenReturn(new Environment("PROD"));
+        when(repository.arrivalMetrics("REF", "PROD")).thenReturn(
+                List.of(new VersionArrivalMetricValue("OLD", "service", 7, 5)),
+                List.of(new VersionArrivalMetricValue("NEW", "service", 7, 5)),
+                List.of(new VersionArrivalMetricValue("OLD", "service", 8, 6)));
+        var registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        try {
+            var metrics = new VersionStagingMetrics(repository, mock(DeploymentRepository.class),
+                    new StagingProperties(), resolver, registry);
+            metrics.initialize();
+            metrics.refresh();
+            assertThat(registry.find("version_start_arrivals").tag("system", "OLD").functionCounter()).isNull();
+            assertThat(registry.get("version_start_arrivals").tag("system", "NEW").functionCounter().count()).isEqualTo(7);
+            assertThat(registry.get("version_end_arrivals").tag("system", "NEW").functionCounter().count()).isEqualTo(5);
+            assertThat(registry.scrape()).doesNotContain("system=\"OLD\"");
+            metrics.refresh();
+            assertThat(registry.find("version_start_arrivals").tag("system", "NEW").functionCounter()).isNull();
+            assertThat(registry.get("version_start_arrivals").tag("system", "OLD").functionCounter().count()).isEqualTo(8);
+        } finally {
+            registry.close();
+        }
+    }
+
     @Test void exportsCumulativeLatencyBucketsAndReplacesThemAfterRetention() {
         var repository = mock(VersionDeploymentRepository.class);
         var resolver = mock(StagingEnvironmentResolver.class);

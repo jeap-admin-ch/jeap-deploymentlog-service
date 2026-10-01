@@ -191,7 +191,7 @@ on the end stage does not change this status, even if its explicit targets conta
 
 The former `flow_counter`, `flow_open`, `flow_duration_seconds` and `flow_recovery_duration_seconds` are removed.
 Version metrics have `system`, `component`, `start_environment` and `end_environment` labels, with no version,
-flow type or flow state labels. Version identity is component plus version name, not a ComponentVersion database id.
+flow type or flow state labels. Version identity is the stable component UUID plus version name, not system/component names or a ComponentVersion database id.
 Repeated successful deployments never count the same version twice on a stage.
 
 Deployment counters retain their existing persistence and reconciliation. Deployment duration observations are emitted
@@ -204,12 +204,18 @@ including those of old deployments, mean no AutoStaging in the calculation.
 
 All replicas publish the same database totals, refreshed every 30 seconds by default. Deduplicate replicas with
 `max by (system, component, start_environment, end_environment)` before calculating changes over a time window.
-V35 adds a nullable version identity to the existing `deployment_metric_event` table. Reconciliation enriches
+V35 adds nullable component UUID and version identity columns to the existing `deployment_metric_event` table. Reconciliation enriches
 existing events only where their source deployment is still retained; no deployment is reclassified. The identity is
 captured for successful CODE deployments, excluding undeployments. Retention reconciles metrics before deleting source
 rows. Arrival counters are read from these durable events and do not fall when deployment history is deleted.
 Startup reconciliation establishes the baseline before publishing the counters. Already-deleted versions whose metric
-events lack a version identity cannot be reconstructed. No new history table is introduced.
+events lack a component UUID or version identity cannot be reconstructed and are excluded from arrival counts.
+No new history table is introduced. System renames and merges preserve component identity, so redeploying an already
+counted version does not add another arrival. Labels use the current system and component names; deleted components
+fall back to their latest recorded successful CODE-event names. Reusing a deleted component's name creates a new
+identity and counts its arrivals separately. Obsolete meter series are removed when labels move. Existing Prometheus
+history is not relabeled: renames/merges create or change series baselines, so windows spanning these administrative
+changes are not guaranteed to give continuous throughput counts.
 
 For example, the Lost Version Ratio over the selected dashboard window is:
 

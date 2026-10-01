@@ -18,6 +18,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Deduplicate version arrivals by stable component UUID and version name across system renames and merges;
+  update metric labels to current names and remove obsolete series. Backfill identities only from retained deployments.
 - Strip trailing slashes from Confluence URLs without regex backtracking when generating component page links.
 - Link component names to tracked component pages in both deployment history views, using plain text when no page is tracked.
 - Calculate time-window version throughput with durable `version_start_arrivals_total` and `version_end_arrivals_total`

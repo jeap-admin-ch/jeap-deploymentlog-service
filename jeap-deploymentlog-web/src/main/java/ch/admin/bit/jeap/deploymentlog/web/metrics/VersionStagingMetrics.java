@@ -4,12 +4,15 @@ import ch.admin.bit.jeap.deploymentlog.domain.*;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Meter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,7 +61,15 @@ public class VersionStagingMetrics {
             current.arrivals.set(value);
         });
         values.forEach((key, state) -> {
-            if (!active.contains(key)) state.value.set(new StagingMetricValue("", "", 0, 0, null, 0, 0));
+            if (!active.contains(key)) {
+                if (!arrivals.containsKey(key) && !state.arrivals.get().system().isEmpty()) {
+                    // A rename/merge moved these durable totals to new labels. Stop exporting the old series.
+                    state.meters.forEach(registry::remove);
+                    values.remove(key);
+                } else {
+                    state.value.set(new StagingMetricValue("", "", 0, 0, null, 0, 0));
+                }
+            }
         });
     }
 
@@ -69,23 +80,24 @@ public class VersionStagingMetrics {
         if (arrivals != null) state.arrivals.set(arrivals);
         String[] tags = {"system", labels.system(), "component", labels.component(),
                 "start_environment", start, "end_environment", end};
-        FunctionCounter.builder("version_start_arrivals", state, v -> v.arrivals.get().startVersions()).tags(tags).register(registry);
-        FunctionCounter.builder("version_end_arrivals", state, v -> v.arrivals.get().endVersions()).tags(tags).register(registry);
-        Gauge.builder("version_start", state, v -> v.value.get().startVersions()).tags(tags).register(registry);
-        Gauge.builder("version_end", state, v -> v.value.get().endVersions()).tags(tags).register(registry);
-        Gauge.builder("autostaging_enabled", state, Values::autoStagingEnabled).tags(tags).register(registry);
-        Gauge.builder("version_staging_latency_seconds_count", state, v -> v.value.get().latencyCount()).tags(tags).register(registry);
-        Gauge.builder("version_staging_latency_seconds_sum", state, v -> v.value.get().latencySeconds()).tags(tags).register(registry);
+        state.meters.add(FunctionCounter.builder("version_start_arrivals", state, v -> v.arrivals.get().startVersions()).tags(tags).register(registry));
+        state.meters.add(FunctionCounter.builder("version_end_arrivals", state, v -> v.arrivals.get().endVersions()).tags(tags).register(registry));
+        state.meters.add(Gauge.builder("version_start", state, v -> v.value.get().startVersions()).tags(tags).register(registry));
+        state.meters.add(Gauge.builder("version_end", state, v -> v.value.get().endVersions()).tags(tags).register(registry));
+        state.meters.add(Gauge.builder("autostaging_enabled", state, Values::autoStagingEnabled).tags(tags).register(registry));
+        state.meters.add(Gauge.builder("version_staging_latency_seconds_count", state, v -> v.value.get().latencyCount()).tags(tags).register(registry));
+        state.meters.add(Gauge.builder("version_staging_latency_seconds_sum", state, v -> v.value.get().latencySeconds()).tags(tags).register(registry));
         for (int index = 0; index < StagingLatencyBuckets.UPPER_BOUNDS.size(); index++) {
             int bucketIndex = index;
-            Gauge.builder("version_staging_latency_seconds_buckets", state,
+            state.meters.add(Gauge.builder("version_staging_latency_seconds_buckets", state,
                             v -> v.value.get().latencyBucket(bucketIndex))
-                    .tags(tags).tag("le", StagingLatencyBuckets.label(index)).register(registry);
+                    .tags(tags).tag("le", StagingLatencyBuckets.label(index)).register(registry));
         }
         return state;
     }
 
     private static class Values {
+        private final List<Meter> meters = new ArrayList<>();
         private final AtomicReference<VersionArrivalMetricValue> arrivals =
                 new AtomicReference<>(new VersionArrivalMetricValue("", "", 0, 0));
         private final AtomicReference<StagingMetricValue> value =

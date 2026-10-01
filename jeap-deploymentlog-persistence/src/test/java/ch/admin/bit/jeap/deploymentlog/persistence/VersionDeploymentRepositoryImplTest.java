@@ -233,6 +233,85 @@ class VersionDeploymentRepositoryImplTest {
         assertThat(versions.arrivalMetrics("REF", "PROD")).isEmpty();
     }
 
+    @Test void arrivalsRemainDistinctAfterSystemRename() {
+        success(deployment("1.0", ref, 0));
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        component.getSystem().updateName("RENAMED");
+        success(deployment("1.0", ref, 1));
+        success(deployment("1.0", prod, 2));
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("RENAMED", "service", 1, 1));
+    }
+
+    @Test void arrivalsRemainDistinctAfterMergeAndRetention() {
+        Deployment original = deployment("1.0", ref, 0);
+        success(original);
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(retention.deleteCandidates(java.util.Set.of(original.getId()), now.plusDays(1)).deletedDeployments())
+                .isEqualTo(1);
+        System oldSystem = component.getSystem();
+        System target = systems.save(new System("TARGET"));
+        component.updateSystem(target);
+        em.flush();
+        // The component keeps its identity when its old system is removed after a merge.
+        em.createNativeQuery("delete from system where id = :id")
+                .setParameter("id", oldSystem.getId()).executeUpdate();
+        success(deployment("1.0", ref, 1));
+        success(deployment("1.0", prod, 2));
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("TARGET", "service", 1, 1));
+    }
+
+    @Test void deletedComponentKeepsHistoricalLabelsWithoutCollapsingAReplacement() {
+        Deployment original = deployment("1.0", ref, 0);
+        success(original);
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        retention.deleteCandidates(java.util.Set.of(original.getId()), now.plusDays(1));
+        System system = component.getSystem();
+        em.remove(component);
+        em.flush();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 1, 0));
+        component = components.save(new Component("service", system));
+        success(deployment("1.0", ref, 1));
+        em.flush();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("SYSTEM", "service", 2, 0));
+    }
+
+    @org.springframework.test.annotation.DirtiesContext
+    @Test void eventRecordingPreservesComponentIdentityWithoutReconciliation() {
+        Deployment original = deployment("1.0", ref, 0);
+        success(original);
+        em.flush();
+        deployments.recordTerminalDeploymentMetric(new DeploymentTerminalMetricEvent(original.getId(),
+                original.getExternalId(), "SYSTEM", "service", "REF", java.util.Set.of(DeploymentType.CODE),
+                DeploymentState.SUCCESS, original.getStartedAt(), original.getEndedAt(), "1.0", component.getId()));
+        component.getSystem().updateName("RENAMED");
+        em.flush();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).containsExactly(
+                new VersionArrivalMetricValue("RENAMED", "service", 1, 0));
+    }
+
+    @Test void unidentifiedHistoricalEventsAreNotGuessedFromNames() {
+        em.createNativeQuery("""
+                insert into deployment_metric_event
+                  (deployment_id, deployment_type, system_name, component_name, environment_name, deployment_state,
+                   staging_version)
+                values (:id, 'CODE', 'SYSTEM', 'service', 'REF', 'SUCCESS', '1.0')
+                """).setParameter("id", java.util.UUID.randomUUID()).executeUpdate();
+        deployments.reconcileTerminalDeploymentMetrics();
+        assertThat(versions.arrivalMetrics("REF", "PROD")).isEmpty();
+    }
+
     Deployment deployment(String version, Environment env, int hours) {
         Deployment d = TestDataFactory.createDeployment(env, component, now.plusHours(hours), version,
                 now.minusDays(1), TestDataFactory.createDeploymentTarget());

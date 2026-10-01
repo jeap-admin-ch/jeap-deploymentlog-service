@@ -298,12 +298,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
 
         String values = IntStream.range(0, requestedTypes.size())
                 .mapToObj(index -> "(:deploymentId, :deploymentType" + index + ", :system, :component, " +
-                        ":environment, :state, :endedAt, :stagingVersion)")
+                        ":environment, :state, :endedAt, :stagingVersion, :componentId)")
                 .collect(Collectors.joining(", "));
         var query = entityManager.createNativeQuery("""
                         insert into deployment_metric_event
                             (deployment_id, deployment_type, system_name, component_name,
-                             environment_name, deployment_state, ended_at, staging_version)
+                             environment_name, deployment_state, ended_at, staging_version, component_id)
                         values %s
                         on conflict do nothing
                         """.formatted(values))
@@ -313,7 +313,8 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                 .setParameter(ENVIRONMENT, event.environment())
                 .setParameter("state", event.state().name())
                 .setParameter("endedAt", event.endedAt())
-                .setParameter("stagingVersion", event.stagingVersion());
+                .setParameter("stagingVersion", event.stagingVersion())
+                .setParameter("componentId", event.componentId());
         IntStream.range(0, requestedTypes.size()).forEach(index ->
                 query.setParameter("deploymentType" + index, requestedTypes.get(index)));
         query.executeUpdate();
@@ -328,8 +329,12 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                 set staging_version = (
                     select cv.version_name from deployment d
                     join component_version cv on cv.id = d.component_version_id
-                    where d.id = metric.deployment_id)
-                where metric.staging_version is null and metric.deployment_type = 'CODE'
+                    where d.id = metric.deployment_id),
+                    component_id = (
+                        select cv.component_id from deployment d
+                        join component_version cv on cv.id = d.component_version_id
+                        where d.id = metric.deployment_id)
+                where (metric.staging_version is null or metric.component_id is null) and metric.deployment_type = 'CODE'
                   and metric.deployment_state = 'SUCCESS'
                   and exists (select 1 from deployment d where d.id = metric.deployment_id
                               and d.state = 'SUCCESS' and d.sequence <> 'UNDEPLOYED')
@@ -337,7 +342,7 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
         entityManager.createNativeQuery("""
                         insert into deployment_metric_event
                             (deployment_id, deployment_type, system_name, component_name,
-                             environment_name, deployment_state, ended_at, staging_version)
+                             environment_name, deployment_state, ended_at, staging_version, component_id)
                         select deployment.id,
                                deployment_type.type,
                                system.name,
@@ -346,7 +351,8 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
                                deployment.state,
                                deployment.ended_at,
                                case when deployment.state = 'SUCCESS' and deployment.sequence <> 'UNDEPLOYED'
-                                    and deployment_type.type = 'CODE' then component_version.version_name end
+                                    and deployment_type.type = 'CODE' then component_version.version_name end,
+                               component.id
                         from deployment
                         join deployment_types deployment_type on deployment_type.deployment_id = deployment.id
                         join component_version on component_version.id = deployment.component_version_id

@@ -351,6 +351,7 @@ class DeploymentServiceTest {
         ArgumentCaptor<DeploymentTerminalMetricEvent> eventCaptor = ArgumentCaptor.forClass(DeploymentTerminalMetricEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().state()).isEqualTo(DeploymentState.CANCELLED);
+        assertThat(eventCaptor.getValue().componentId()).isEqualTo(deployment.getComponentVersion().getComponent().getId());
     }
 
     @Test
