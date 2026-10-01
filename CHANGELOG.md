@@ -10,7 +10,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Expose cumulative retained-version staging latency buckets so dashboards can estimate the overall median across selected components.
-
 - Reuse successfully synchronized documentation structures for up to five minutes per instance during deployment,
   history and retention page generation, avoiding a global structure lock and full Confluence traversal on every request.
   Check system/group metadata and tracked structure locations before reuse; explicit regeneration still forces reconciliation.
@@ -20,11 +19,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Strip trailing slashes from Confluence URLs without regex backtracking when generating component page links.
-
-- Resolve Sonar findings in documentation generation tests by isolating the exception assertion invocation and using collection size assertions.
-
 - Link component names to tracked component pages in both deployment history views, using plain text when no page is tracked.
-
 - Calculate time-window version throughput with durable `version_start_arrivals_total` and `version_end_arrivals_total`
   counters instead of retained-version gauges. V35 adds version identity to existing deployment metric events;
   reconciliation runs before retention and metric initialization. Historical Prometheus windows cannot be backfilled.
