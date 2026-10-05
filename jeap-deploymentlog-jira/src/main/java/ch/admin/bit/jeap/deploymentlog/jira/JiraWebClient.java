@@ -28,6 +28,12 @@ public interface JiraWebClient {
      * Search the labels of the given jira issues. Issue keys that cannot be resolved in jira (issue does not
      * exist, is not readable, or the key is syntactically invalid) never fail the search - they are reported
      * in {@link JiraIssuesSearchResult#getNotFoundIssueKeys()}.
+     * Issues whose issue type name matches, case-insensitively, one of
+     * {@code JiraWebClientProperties#getLabelCheckExemptIssueTypes()} (by default just "Epic") are reported
+     * separately in {@link JiraIssuesSearchResult#getIgnoredIssueKeys()} and are excluded from both the label map
+     * and the not-found set. Matching is name-based only: jira issue type names can be renamed by jira admins
+     * or returned translated for the technical user, in which case an exempt issue type silently stops being
+     * recognized as exempt.
      *
      * @throws JiraUnavailableException if jira rejects the request of the deployment log service itself
      *                                  (e.g. invalid jira credentials)

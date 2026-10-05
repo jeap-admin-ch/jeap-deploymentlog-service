@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.13.0] - 2026-10-07
+
+### Changed
+
+- Exclude configurable Jira issue types (`Epic` by default) from the `R4DEPLOY` label check of the
+  ready-for-deploy check. Issues of an exempt type are no longer reported as missing the label or as not
+  found; they are simply ignored by the check. The exempt issue type names are configurable via
+  `jeap.deploymentlog.jira.label-check-exempt-issue-types` (defaults to `Epic`) and matched case-insensitively
+  against the issue type name Jira returns for the technical user.
+
 ## [16.12.1] - 2026-10-06
 
 ### Fixed

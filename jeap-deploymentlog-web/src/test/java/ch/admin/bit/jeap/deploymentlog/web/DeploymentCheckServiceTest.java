@@ -140,6 +140,28 @@ class DeploymentCheckServiceTest {
     }
 
     @Test
+    void checkIssuesReadyForDeploy_withEpics_thenEpicsAreIgnored() {
+        //given
+        final Set<String> issues = Set.of("JEAP-1234", "JEAP-5000", "JEAP-6000");
+        when(jiraWebClient.searchIssuesLabels(issues)).thenReturn(JiraIssuesSearchResult.builder()
+                .labelsByIssueKey(Map.of("JEAP-1234", List.of(R4DEPLOY_LABEL)))
+                .ignoredIssueKeys(List.of("JEAP-5000", "JEAP-6000"))
+                .notFoundIssueKeys(Set.of())
+                .build());
+
+        //when
+        final DeploymentCheckResultDto result = service.checkIssuesReadyForDeploy(issues);
+
+        //then
+        assertThat(result.getResult()).isEqualTo(DeploymentCheckResult.OK);
+        assertThat(result.getMessage()).isNull();
+        assertThat(result.getIssuesWithoutLabel()).isEmpty();
+        assertThat(result.getIssuesNotFound()).isEmpty();
+        assertThat(result.getProjectsNotVisible()).isEmpty();
+        verify(jiraWebClient, never()).getVisibleProjectKeys();
+    }
+
+    @Test
     void checkIssuesReadyForDeploy_whenNoIssues_thenReturnsOk() {
         //given
         when(jiraWebClient.searchIssuesLabels(Set.of())).thenReturn(searchResult(Map.of(), Set.of()));

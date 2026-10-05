@@ -350,22 +350,27 @@ scheduled jobs do, see [Operations](operations.md#manual-triggers).
 ## Ready-for-deploy check
 
 With `?readyForDeployCheck=true` and a `changelog` containing `jiraIssueKeys`, the service asks Jira about
-those issues before recording the deployment. The result is returned as `checkResult`:
+those issues before recording the deployment. Issues whose type is exempt from the label check (`Epic` by
+default) only need to exist. The exempt issue types are configurable via
+`jeap.deploymentlog.jira.label-check-exempt-issue-types` (defaults to `Epic`) and matched against the jira
+issue type **name** case-insensitively. Since jira admins can rename issue types, or jira can return the name
+translated into the technical user's language, a renamed/translated issue type silently stops being exempt
+and is checked for the label like any other issue. The result is returned as `checkResult`:
 
 | Field                | Description                                                                                                        |
 |----------------------|----------------------------------------------------------------------------------------------------------------------|
 | `result`             | `OK`, `WARNING` or `NOK`.                                                                                            |
 | `message`            | Human-readable summary of the findings, `null` when everything is fine.                                              |
-| `issuesWithoutLabel` | Issues that exist but do not carry the `R4DEPLOY` label.                                                             |
+| `issuesWithoutLabel` | Issues that exist but do not carry the `R4DEPLOY` label. Issues of an exempt issue type are never listed here.       |
 | `issuesNotFound`     | Issue keys that could not be resolved: they do not exist, are not readable for the technical user, or are not syntactically valid issue keys. |
 | `projectsNotVisible` | Project keys of unresolved issues whose project is not visible to the technical user at all — often a key that was never a Jira reference. |
 
 The outcome decides what happens to the request:
 
 - **`OK`** — no findings. The deployment is recorded, `201`.
-- **`WARNING`** — some issues could not be resolved, but every resolved issue carries the label. The
-  deployment **is** recorded, `201`, with the findings in the body.
-- **`NOK`** — at least one resolved issue lacks the `R4DEPLOY` label. The deployment is **not** recorded and
+- **`WARNING`** — some issues could not be resolved, but every resolved, non-exempt issue carries the
+  label. The deployment **is** recorded, `201`, with the findings in the body.
+- **`NOK`** — at least one resolved, non-exempt issue lacks the `R4DEPLOY` label. The deployment is **not** recorded and
   the response is `200` with the check result, so the caller can abort the deployment.
 
 If Jira itself is unavailable or rejects the technical user, the request fails with `503` and nothing is

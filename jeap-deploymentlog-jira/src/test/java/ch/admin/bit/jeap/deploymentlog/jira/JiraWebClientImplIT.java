@@ -29,6 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * export JIRA_IT_PASSWORD='...'
  * export JIRA_IT_EXISTING_ISSUE=JEAP-7261            # any issue readable by the technical user
  * export JIRA_IT_NOT_VISIBLE_ISSUE=SECRET-1          # optional: issue in a project not visible to the user
+ * export JIRA_IT_EPIC_ISSUE=JEAP-1                   # optional: issue of type Epic (or another configured
+ *                                                     # jeap.deploymentlog.jira.label-check-exempt-issue-types
+ *                                                     # entry), readable by the technical user
  * export JIRA_IT_UPDATE_ISSUE=JEAP-9999              # optional: CAUTION - writes a remote link to this issue
  * export JIRA_IT_UPDATE_PAGE_ID=416886357            # page id for the remote link written by the update test
  *
@@ -82,6 +85,22 @@ class JiraWebClientImplIT {
         log.info("Search result for {}: {}", issueKeys, result);
         assertThat(result.getLabelsByIssueKey()).containsKey(existingIssue);
         assertThat(result.getNotFoundIssueKeys()).containsExactlyInAnyOrder(nonExistingIssue, "AND-1");
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "JIRA_IT_EPIC_ISSUE", matches = ".+")
+    void searchIssuesLabels_epicIssue_isReportedSeparatelyAndNotCheckedForTheLabel() {
+        // Verifies on the real jira instance that the issue type name returned for the technical user
+        // (which can be renamed or translated by jira admins) is still recognized as exempt from the
+        // R4DEPLOY label check, i.e. that name-based matching has not silently stopped working.
+        String epicIssue = requireEnv("JIRA_IT_EPIC_ISSUE").trim().toUpperCase(Locale.ROOT);
+
+        JiraIssuesSearchResult result = jiraWebClient.searchIssuesLabels(Set.of(epicIssue));
+
+        log.info("Search result for epic issue {}: {}", epicIssue, result);
+        assertThat(result.getIgnoredIssueKeys()).contains(epicIssue);
+        assertThat(result.getLabelsByIssueKey()).doesNotContainKey(epicIssue);
+        assertThat(result.getNotFoundIssueKeys()).doesNotContain(epicIssue);
     }
 
     @Test

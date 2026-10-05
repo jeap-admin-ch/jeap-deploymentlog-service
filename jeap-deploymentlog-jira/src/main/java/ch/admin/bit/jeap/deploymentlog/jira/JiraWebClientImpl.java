@@ -33,6 +33,7 @@ public class JiraWebClientImpl implements JiraWebClient {
     private final RestClient restClient;
     private final String documentationRootUrl;
     private final String appId;
+    private final Set<String> labelCheckExemptIssueTypes;
     private final AtomicReference<CachedProjects> visibleProjectsCache = new AtomicReference<>();
 
     private record CachedProjects(Set<String> projectKeys, Instant fetchedAt) {
@@ -41,6 +42,9 @@ public class JiraWebClientImpl implements JiraWebClient {
     public JiraWebClientImpl(JiraWebClientProperties props, String documentationRootUrl, RestClient.Builder restClientBuilder) {
         this.documentationRootUrl = documentationRootUrl;
         this.appId = props.getAppId();
+        this.labelCheckExemptIssueTypes = props.getLabelCheckExemptIssueTypes().stream()
+                .map(issueType -> issueType.toUpperCase(Locale.ROOT))
+                .collect(Collectors.toUnmodifiableSet());
         this.restClient = restClientBuilder
                 .defaultHeaders(header -> header.setBasicAuth(props.getUsername(), props.getPassword()))
                 .baseUrl(
@@ -129,22 +133,33 @@ public class JiraWebClientImpl implements JiraWebClient {
                 });
 
         Map<String, List<String>> labelsByIssueKey = new TreeMap<>();
+        SortedSet<String> ignoredIssueKeys = new TreeSet<>();
         for (int fromIndex = 0; fromIndex < validIssueKeys.size(); fromIndex += SEARCH_CHUNK_SIZE) {
             List<String> chunk = validIssueKeys.subList(fromIndex, Math.min(fromIndex + SEARCH_CHUNK_SIZE, validIssueKeys.size()));
-            labelsByIssueKey.putAll(searchIssuesLabelsChunk(chunk));
+            searchIssuesChunk(chunk).forEach(issue -> {
+                if (isLabelCheckExempt(issue)) {
+                    ignoredIssueKeys.add(normalizedKey(issue));
+                } else {
+                    labelsByIssueKey.put(normalizedKey(issue), labels(issue));
+                }
+            });
         }
         validIssueKeys.stream()
-                .filter(key -> !labelsByIssueKey.containsKey(key))
+                .filter(key -> !labelsByIssueKey.containsKey(key) && !ignoredIssueKeys.contains(key))
                 .forEach(notFoundIssueKeys::add);
 
-        log.debug("Received jira issues with labels '{}', issue keys not resolved in jira: '{}'", labelsByIssueKey, notFoundIssueKeys);
+        log.debug("Received jira issues with labels '{}', issues with ignored labels '{}', issue keys not resolved in jira: '{}'",
+                labelsByIssueKey, ignoredIssueKeys, notFoundIssueKeys);
         return JiraIssuesSearchResult.builder()
                 .labelsByIssueKey(labelsByIssueKey)
+                .ignoredIssueKeys(List.copyOf(ignoredIssueKeys))
                 .notFoundIssueKeys(notFoundIssueKeys)
                 .build();
     }
 
-    private Map<String, List<String>> searchIssuesLabelsChunk(List<String> issueKeys) {
+    // Returns the resolved issues (including their type and labels), not just labels, so that callers can
+    // tell label-check-exempt issue types (e.g. Epic) apart from other issue types.
+    private List<JiraIssueDto> searchIssuesChunk(List<String> issueKeys) {
         // Issue keys are quoted to avoid JQL parsing errors for keys resembling JQL reserved words (e.g. AND-1).
         // The keys are validated against ISSUE_KEY_PATTERN and can therefore not break out of the quotes.
         final String jql = issueKeys.stream()
@@ -154,7 +169,7 @@ public class JiraWebClientImpl implements JiraWebClient {
         // for the deployment log jira user, instead of rejecting the whole query with a 400 response.
         final Map<String, Object> searchRequest = Map.of(
                 "jql", jql,
-                "fields", List.of("key", "labels"),
+                "fields", List.of("key", "labels", "issuetype"),
                 "validateQuery", false,
                 "maxResults", issueKeys.size());
 
@@ -176,9 +191,7 @@ public class JiraWebClientImpl implements JiraWebClient {
             }
             return searchResult.getIssues().stream()
                     .filter(JiraWebClientImpl::hasKey)
-                    .collect(Collectors.toMap(
-                            issue -> issue.getKey().toUpperCase(Locale.ROOT),
-                            JiraWebClientImpl::labels));
+                    .toList();
         } catch (HttpClientErrorException e) {
             throw JiraUnavailableException.jiraClientError(action, e);
         }
@@ -190,6 +203,17 @@ public class JiraWebClientImpl implements JiraWebClient {
             return false;
         }
         return true;
+    }
+
+    private static String normalizedKey(JiraIssueDto issue) {
+        return issue.getKey().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isLabelCheckExempt(JiraIssueDto issue) {
+        return issue.getFields() != null
+                && issue.getFields().getIssuetype() != null
+                && issue.getFields().getIssuetype().getName() != null
+                && labelCheckExemptIssueTypes.contains(issue.getFields().getIssuetype().getName().toUpperCase(Locale.ROOT));
     }
 
     private static List<String> labels(JiraIssueDto issue) {

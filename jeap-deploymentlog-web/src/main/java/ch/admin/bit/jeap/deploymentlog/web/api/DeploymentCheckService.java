@@ -39,6 +39,9 @@ public class DeploymentCheckService {
                 .toList();
         UnresolvedIssues unresolvedIssues = categorizeUnresolvedIssues(searchResult.getNotFoundIssueKeys());
 
+        if (!searchResult.getIgnoredIssueKeys().isEmpty()) {
+            log.info("Ignoring label check for issues '{}'", searchResult.getIgnoredIssueKeys());
+        }
         return generateResultDto(issuesWithoutLabel, unresolvedIssues);
     }
 

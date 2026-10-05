@@ -67,6 +67,7 @@ Prefix `jeap.deploymentlog.jira`. Unknown keys under this prefix fail the startu
 | `password`        | —       | Password of the technical user. Excluded from the configuration log output.                                                   |
 | `mock-jira-client`| `false` | Replaces the Jira client with a mock. For local development and tests only.                                                   |
 | `retry-delay-ms`  | `2000`  | Delay in milliseconds before the first retry of a failed Jira request; doubled for every further retry.                        |
+| `label-check-exempt-issue-types` | `Epic` | Issue type names exempt from the `R4DEPLOY` label check of the ready-for-deploy check (they only need to exist). Matched case-insensitively against the issue type name Jira returns for the technical user; renaming or translating an issue type can silently remove the exemption. |
 
 ## Documentation generator
 

@@ -6,4 +6,5 @@ import java.util.List;
 @Data
 public class JiraFieldsDto {
     List<String> labels;
+    JiraIssueTypeDto issuetype;
 }

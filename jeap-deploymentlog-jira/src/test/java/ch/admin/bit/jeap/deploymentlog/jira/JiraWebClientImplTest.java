@@ -95,7 +95,7 @@ class JiraWebClientImplTest {
     void testSearchIssuesLabels() {
         // Issue keys are quoted in the JQL, the query is not validated and maxResults matches the key count
         final String expectedRequestBody = """
-                { "jql": "key in (\\"JEAP-1234\\")", "fields": ["key", "labels"], "validateQuery": false, "maxResults": 1 }""";
+                { "jql": "key in (\\"JEAP-1234\\")", "fields": ["key", "labels", "issuetype"], "validateQuery": false, "maxResults": 1 }""";
         final String responseBody = getJiraSearchResultDtoJson(Map.of("JEAP-1234", List.of("myLabel")));
         server.expect(requestTo("https://jira-test.com/rest/api/2/search")).
                 andExpect(method(HttpMethod.POST)).
@@ -107,6 +107,25 @@ class JiraWebClientImplTest {
 
         assertThat(result.getLabelsByIssueKey()).containsOnlyKeys("JEAP-1234");
         assertThat(result.getLabelsByIssueKey().get("JEAP-1234")).containsOnly("myLabel");
+        assertThat(result.getIgnoredIssueKeys()).isEmpty();
+        assertThat(result.getNotFoundIssueKeys()).isEmpty();
+    }
+
+    @Test
+    void testSearchIssuesLabels_epicsAreReportedSeparately() {
+        final String responseBody = """
+                { "issues": [
+                    { "key": "JEAP-1", "fields": { "labels": ["R4DEPLOY"], "issuetype": { "id": "1", "name": "Story" } } },
+                    { "key": "jeap-2", "fields": { "labels": [], "issuetype": { "id": "2", "name": "Epic" } } },
+                    { "key": "JEAP-3", "fields": { "labels": ["other"] } }
+                ] }""";
+        server.expect(requestTo("https://jira-test.com/rest/api/2/search")).
+                andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
+
+        JiraIssuesSearchResult result = jiraWebClient.searchIssuesLabels(Set.of("JEAP-1", "JEAP-2", "JEAP-3"));
+
+        assertThat(result.getLabelsByIssueKey()).containsOnlyKeys("JEAP-1", "JEAP-3");
+        assertThat(result.getIgnoredIssueKeys()).containsExactly("JEAP-2");
         assertThat(result.getNotFoundIssueKeys()).isEmpty();
     }
 
