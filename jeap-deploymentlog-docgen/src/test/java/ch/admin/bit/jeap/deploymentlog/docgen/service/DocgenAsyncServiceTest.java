@@ -507,7 +507,30 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void dataRetentionRefreshDefersSharedLockTimeoutAndCompletesOnRetry() {
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(new DataRetentionResult(
+                Set.of(new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID())),
+                Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID())));
+        when(documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(refreshTask.result()))
+                .thenThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                .thenReturn(true);
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerUpdatesAfterDataRetention(refreshTask);
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(dataRetentionRepository, never()).deletePendingRefreshTask(any());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(errorsBefore);
+
+        docgenAsyncService.triggerUpdatesAfterDataRetention(refreshTask);
+        await().until(this::asyncTaskExecutorIsDone);
+        verify(dataRetentionRepository).deletePendingRefreshTask(refreshTask.id());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(errorsBefore);
+    }
+
+    @Test
     void dataRetentionRefreshRemainsPendingWhenLockCannotBeAcquired() {
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
         docgenLocks.setTryAcquireTimeout(Duration.ZERO);
         when(lockProvider.lock(any())).thenReturn(Optional.empty());
         DataRetentionRefreshTask refreshTask = DataRetentionRefreshTask.from(new DataRetentionResult(
@@ -519,6 +542,7 @@ class DocgenAsyncServiceTest {
         await().until(this::asyncTaskExecutorIsDone);
         verify(documentationGenerator, never()).updatePagesAfterDataRetentionIfStructureAvailable(any());
         verify(dataRetentionRepository, never()).deletePendingRefreshTask(any());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(errorsBefore);
     }
 
     private boolean asyncTaskExecutorIsDone() {

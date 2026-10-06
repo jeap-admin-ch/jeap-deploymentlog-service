@@ -271,14 +271,21 @@ public class DocgenAsyncService {
                 .distinct()
                 .sorted()
                 .toList();
-        runLockedForSystems(affectedSystemNames, 0, () -> {
-            if (documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(result)) {
-                dataRetentionRepository.deletePendingRefreshTask(refreshTask.id());
-            } else {
-                log.info("Documentation structure is busy; keeping data-retention refresh {} pending",
-                        refreshTask.id());
-            }
-        });
+        try {
+            runLockedForSystems(affectedSystemNames, 0, () -> {
+                if (documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(result)) {
+                    dataRetentionRepository.deletePendingRefreshTask(refreshTask.id());
+                } else {
+                    log.info("Documentation structure is busy; keeping data-retention refresh {} pending",
+                            refreshTask.id());
+                }
+            });
+        } catch (DocgenLockTimeoutException ex) {
+            log.info("Documentation lock is busy; keeping data-retention refresh {} pending", refreshTask.id());
+        } catch (Exception ex) {
+            errorCounter.increment();
+            log.warn("Docgen failed for data-retention refresh {}", refreshTask.id(), ex);
+        }
     }
 
     private void runLockedForSystems(List<String> systemNames, int index, Runnable task) {
@@ -286,7 +293,7 @@ public class DocgenAsyncService {
             task.run();
             return;
         }
-        runLockedForSystem(systemNames.get(index), () -> runLockedForSystems(systemNames, index + 1, task));
+        locks.runWithSystemLock(systemNames.get(index), () -> runLockedForSystems(systemNames, index + 1, task));
     }
 
     private static String deploymentTaskKey(UUID deploymentId) {

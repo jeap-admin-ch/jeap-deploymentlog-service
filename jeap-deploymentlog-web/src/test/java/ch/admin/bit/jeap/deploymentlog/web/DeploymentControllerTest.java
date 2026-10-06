@@ -71,10 +71,20 @@ class DeploymentControllerTest {
     @BeforeEach
     void configureFinalEnvironment() {
         when(stagingProperties.isEnabled()).thenReturn(true);
+        when(deploymentService.createOrReuseDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any()))
+                .thenReturn(new DeploymentCreationResult(null, true));
     }
 
-    @Test
-    void putNewDeployment_whenNotExists_thenReturnsCreated() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void putDeploymentUsesCreationOutcomeWhenInitialLookupMisses(boolean created) throws Exception {
+        UUID deploymentId = UUID.randomUUID();
+        when(deploymentService.createOrReuseDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any()))
+                .thenReturn(new DeploymentCreationResult(deploymentId, created));
         String externalId = "123";
         ComponentVersionCreateDto componentVersion = new ComponentVersionCreateDto();
         componentVersion.setComponentName("test");
@@ -104,11 +114,17 @@ class DeploymentControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(deploymentCreateDto))
                                 .with(httpBasic("write", "secret")))
-                .andExpect(status().isCreated());
+                .andExpect(status().is(created ? 201 : 200));
+
+        if (created) {
+            verify(docgenAsyncService).triggerDocgenForDeployment(deploymentId);
+        } else {
+            verifyNoInteractions(docgenAsyncService);
+        }
 
         verify(deploymentService, times(1)).findByExternalId(externalId);
 
-        verify(deploymentService, times(1)).createDeploymentWithFinalEnvironments(
+        verify(deploymentService, times(1)).createOrReuseDeploymentWithFinalEnvironments(
                 externalId,
                 deploymentCreateDto.getComponentVersion().getVersionName(),
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
@@ -207,7 +223,7 @@ class DeploymentControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(stagingEnvironmentResolver);
-        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
+        verify(deploymentService, never()).createOrReuseDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
     }
@@ -227,7 +243,7 @@ class DeploymentControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string("Unknown final deployment environment(s): UNKNOWN"));
 
-        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
+        verify(deploymentService, never()).createOrReuseDeploymentWithFinalEnvironments(any(), any(), any(), any(), any(), any(),
                 anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
     }
@@ -479,7 +495,7 @@ class DeploymentControllerTest {
 
         verify(deploymentService, never()).findByExternalId(externalId);
 
-        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
+        verify(deploymentService, never()).createOrReuseDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -555,7 +571,7 @@ class DeploymentControllerTest {
 
         //then: a NOK check result blocks the deployment - no deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
+        verify(deploymentService, never()).createOrReuseDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -588,7 +604,7 @@ class DeploymentControllerTest {
 
         //then: a WARNING check result does not block the deployment - the deployment record is created
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, times(1)).createDeploymentWithFinalEnvironments(
+        verify(deploymentService, times(1)).createOrReuseDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 
@@ -613,7 +629,7 @@ class DeploymentControllerTest {
 
         //then
         verify(deploymentCheckService, times(1)).checkIssuesReadyForDeploy(issues);
-        verify(deploymentService, never()).createDeploymentWithFinalEnvironments(
+        verify(deploymentService, never()).createOrReuseDeploymentWithFinalEnvironments(
                 any(), any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyString(), any());
     }
 

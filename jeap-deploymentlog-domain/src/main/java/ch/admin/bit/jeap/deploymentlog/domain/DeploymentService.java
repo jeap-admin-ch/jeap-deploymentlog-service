@@ -114,9 +114,60 @@ public class DeploymentService {
                                  String remedyChangeId,
                                  Set<DeploymentType> deploymentTypes) {
 
+        return createOrReuseDeploymentWithFinalEnvironments(externalId,
+                versionName,
+                taggedAt,
+                versionCtrlUrl,
+                commitRef,
+                committedAt,
+                publishedVersion,
+                systemName,
+                componentName,
+                environmentName,
+                finalDeploymentEnvironmentNames,
+                target,
+                startedAt,
+                startedBy,
+                deploymentUnit,
+                links,
+                properties,
+                referenceIdentifiers,
+                changelogComment,
+                changelogComparedToVersion,
+                changelogJiraIssueKeys,
+                remedyChangeId,
+                deploymentTypes).deploymentId();
+    }
+
+    @RetryOnAwsJdbcFailover
+    @SuppressWarnings("java:S107")
+    public DeploymentCreationResult createOrReuseDeploymentWithFinalEnvironments(String externalId,
+                                 String versionName,
+                                 ZonedDateTime taggedAt,
+                                 String versionCtrlUrl,
+                                 String commitRef,
+                                 ZonedDateTime committedAt,
+                                 boolean publishedVersion,
+                                 String systemName,
+                                 String componentName,
+                                 String environmentName,
+                                 Collection<String> finalDeploymentEnvironmentNames,
+                                 DeploymentTarget target,
+                                 ZonedDateTime startedAt,
+                                 String startedBy,
+                                 DeploymentUnit deploymentUnit,
+                                 Set<Link> links,
+                                 Map<String, String> properties,
+                                 Set<String> referenceIdentifiers,
+                                 String changelogComment,
+                                 String changelogComparedToVersion,
+                                 Set<String> changelogJiraIssueKeys,
+                                 String remedyChangeId,
+                                 Set<DeploymentType> deploymentTypes) {
+
         Optional<Deployment> existingDeployment = deploymentRepository.findByExternalId(externalId);
         if (existingDeployment.isPresent()) {
-            return existingDeployment.get().getId();
+            return new DeploymentCreationResult(existingDeployment.get().getId(), false);
         }
 
         final ch.admin.bit.jeap.deploymentlog.domain.Component component = systemService.retrieveOrCreateComponent(systemName, componentName);
@@ -152,7 +203,7 @@ public class DeploymentService {
         Deployment savedDeployment = deploymentRepository.save(deployment);
         deploymentStagingService.prepare(savedDeployment, finalDeploymentEnvironmentNames);
         eventPublisher.publishEvent(DeploymentStartedMetricEvent.from(savedDeployment));
-        return savedDeployment.getId();
+        return new DeploymentCreationResult(savedDeployment.getId(), true);
     }
 
     @SuppressWarnings("java:S107")

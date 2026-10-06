@@ -9,6 +9,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Return HTTP 200 without enqueueing documentation when deployment creation reuses an existing deployment.
+  Defer retention-refresh lock contention without warning logs or generation-error metrics.
+
 - Cache merged environment history pages by UUID and defer shared-lock contention without invalidating
   the documentation structure or counting a generation error. Bound tracking reads to short transactions.
 

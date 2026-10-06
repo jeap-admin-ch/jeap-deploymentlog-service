@@ -3,6 +3,7 @@ package ch.admin.bit.jeap.deploymentlog.web.api;
 import ch.admin.bit.jeap.db.tx.TransactionalReadReplica;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.DeploymentCreationResult;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentType;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingProperties;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingEnvironmentResolver;
@@ -81,7 +82,7 @@ public class DeploymentController {
             }
         }
 
-        UUID deploymentId = deploymentService.createDeploymentWithFinalEnvironments(externalId,
+        DeploymentCreationResult creationResult = deploymentService.createOrReuseDeploymentWithFinalEnvironments(externalId,
                 deploymentCreateDto.getComponentVersion().getVersionName(),
                 deploymentCreateDto.getComponentVersion().getTaggedAt(),
                 deploymentCreateDto.getComponentVersion().getVersionControlUrl(),
@@ -105,7 +106,11 @@ public class DeploymentController {
                 deploymentCreateDto.getRemedyChangeId(),
                 deploymentCreateDto.getDeploymentTypes());
 
-        triggerDocgenForDeployment(deploymentId);
+        if (!creationResult.created()) {
+            return new ResponseEntity<>(HttpStatus.OK);
+        }
+
+        triggerDocgenForDeployment(creationResult.deploymentId());
 
         if (deploymentCreateResultDto == null) {
             return new ResponseEntity<>(HttpStatus.CREATED);
