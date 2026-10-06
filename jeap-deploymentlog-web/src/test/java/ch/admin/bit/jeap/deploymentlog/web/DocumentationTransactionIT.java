@@ -14,6 +14,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentListPageRepository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
@@ -21,11 +22,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.sql.DataSource;
+import org.springframework.orm.jpa.EntityManagerHolder;
+import org.hibernate.engine.spi.SessionImplementor;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -60,12 +64,24 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    private final AtomicReference<AssertionError> connectionFailure = new AtomicReference<>();
+
+    @AfterEach
+    void noAsyncConnectionAssertionFailed() {
+        awaitUntilAsyncTasksCompleted();
+        assertThat(connectionFailure.get()).isNull();
+    }
+
     private final AtomicInteger remoteCalls = new AtomicInteger();
     private final AtomicInteger jiraCalls = new AtomicInteger();
     private final AtomicBoolean failProjectPage = new AtomicBoolean();
 
     @BeforeEach
     void checkRemoteCallBoundaries() {
+        doAnswer(invocation -> {
+            assertNoDatabaseTransaction();
+            return invocation.callRealMethod();
+        }).when(confluence).findPageByTitle(anyString(), anyString());
         doAnswer(invocation -> {
             assertNoDatabaseTransaction();
             if (failProjectPage.get() && "PROJ (Jira)".equals(invocation.getArgument(1))) {
@@ -213,8 +229,24 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     }
 
     private void assertNoDatabaseTransaction() {
+        try {
+            assertConnectionReleased();
+        } catch (AssertionError failure) {
+            connectionFailure.compareAndSet(null, failure);
+            throw failure;
+        }
+    }
+
+    private void assertConnectionReleased() {
         assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
         assertThat(TransactionSynchronizationManager.hasResource(dataSource)).isFalse();
+        TransactionSynchronizationManager.getResourceMap().values().stream()
+                .filter(EntityManagerHolder.class::isInstance)
+                .map(EntityManagerHolder.class::cast)
+                .forEach(holder -> assertThat(holder.getEntityManager().unwrap(SessionImplementor.class)
+                        .getJdbcCoordinator().getLogicalConnection().isPhysicallyConnected())
+                        .as("Thread-bound EntityManager must not retain a JDBC connection during HTTP calls")
+                        .isFalse());
         remoteCalls.incrementAndGet();
     }
 }

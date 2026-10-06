@@ -145,6 +145,28 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void jiraLockTimeoutLeavesRequestPendingAndRetryCompletesWithoutCountingAnError() {
+        UUID deploymentId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        when(deploymentRepository.getPageGenerationRequestId(deploymentId)).thenReturn(Optional.of(requestId));
+        when(documentationGenerator.generateDeploymentPages(deploymentId))
+                .thenThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                .thenReturn(generatedDeploymentPageDtoWithoutJiraIssueKeys());
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+        await().until(taskDispatcher::isIdle);
+        verify(deploymentService, never()).completePageGenerationRequest(any(), any());
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(errorsBefore);
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+        await().until(taskDispatcher::isIdle);
+        verify(deploymentService).completePageGenerationRequest(deploymentId, requestId);
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count()).isEqualTo(errorsBefore);
+    }
+
+    @Test
     void successfulGenerationAcknowledgesCapturedRequest() {
         UUID deploymentId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();

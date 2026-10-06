@@ -9,6 +9,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Cache merged environment history pages by UUID and defer shared-lock contention without invalidating
+  the documentation structure or counting a generation error. Bound tracking reads to short transactions.
+
 - Retry deployment creation after a recoverable AWS JDBC connection failover in a fresh transaction,
   preserving idempotency by external deployment ID.
 

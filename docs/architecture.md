@@ -153,16 +153,17 @@ further matching requests update that follow-up instead of being discarded or gr
 follow-up has one reserved slot so it is retained even when the regular queue is full.
 
 The single worker prevents slow Confluence calls from exhausting the datasource pool needed by deployment API
-requests. When structure reconciliation is needed, Docgen acquires the documentation-structure lock before opening
-the transaction for the remaining page generation, so waiting for that global lock does not retain a JDBC connection.
+requests. Database reads and tracking writes use short transactions; Confluence/Jira calls and distributed-lock acquisition
+run outside them. There is no transaction spanning the whole generation run.
 Ordinary deployment, history and retention work reuses a successfully synchronized structure for up to five minutes
 per instance. Each reuse checks system names, group assignments/names, configured Confluence location and tracked
 structure page IDs/parents in the database. The cache contains only immutable identifiers, never JPA entities.
 Deployment generation still refreshes the affected system overview. Generation failures invalidate the snapshot so
-that the next repair attempt checks the structure again. Expiry is checked on use; explicit full regeneration,
+that the next repair attempt checks the structure again. Lock-acquisition timeouts preserve the snapshot: deployment
+work stays pending for repair and does not increment the generation-error counter. Expiry is checked on use; explicit full regeneration,
 migration/merge and administrative reconciliation always bypass the cache.
 
-Two levels of locking keep concurrent generation runs apart:
+Distributed locks keep concurrent generation runs apart:
 
 - **Per-system docgen lock** (`DocgenLocks`) — a ShedLock lock named `docgen-<systemname>` serialises all
   generation runs for one system, across instances. A run waits up to 30 seconds by default for the lock; if it
@@ -172,6 +173,8 @@ Two levels of locking keep concurrent generation runs apart:
   while the run is in progress (`KeepAliveLockProvider`), so a long run retrying Confluence updates does
   not lose it. The wait can be changed with
   `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`.
+- **Shared page locks** — renewable locks `docgen:component:<UUID>` and `docgen:jira-changes` serialize
+  component and Jira generation across systems without holding database row locks during HTTP calls.
 - **Scheduled job locks** — the cron jobs carry their own `@SchedulerLock`, so only one instance runs them
   at a time.
 

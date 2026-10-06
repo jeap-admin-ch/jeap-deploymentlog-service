@@ -6,6 +6,9 @@ import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -175,8 +178,9 @@ class DocumentationGeneratorTest {
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
     }
 
-    @Test
-    void generateDeploymentPagesUpdatesOnlyAffectedComponentPage() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void generateDeploymentPagesReusesStructureAfterJiraLockContention(boolean lockTimeout) {
         System system = new System("SYSTEM A");
         ch.admin.bit.jeap.deploymentlog.domain.Component component =
                 new ch.admin.bit.jeap.deploymentlog.domain.Component("component-a", system);
@@ -207,7 +211,16 @@ class DocumentationGeneratorTest {
                         .changeJiraIssueKeys(Set.of())
                         .build());
 
-        documentationGenerator.generateDeploymentPages(deploymentId);
+        if (lockTimeout) {
+            doThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                    .when(documentationStructureLockMock).runWithChangesLock(any());
+            assertThrows(DocgenLockTimeoutException.class,
+                    () -> documentationGenerator.generateDeploymentPages(deploymentId));
+            doAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get())
+                    .when(documentationStructureLockMock).runWithChangesLock(any());
+        } else {
+            documentationGenerator.generateDeploymentPages(deploymentId);
+        }
         documentationGenerator.generateDeploymentPages(deploymentId);
 
         verify(documentationStructureLockMock, times(1)).tryRunLocked(any());
@@ -274,6 +287,10 @@ class DocumentationGeneratorTest {
         ));
 
         Environment environment = mock(Environment.class);
+        Environment secondEnvironment = mock(Environment.class);
+        UUID environmentId = UUID.randomUUID();
+        when(environment.getId()).thenReturn(environmentId);
+        when(secondEnvironment.getId()).thenReturn(environmentId);
         Deployment deployment1Mock = mock(Deployment.class);
         Deployment deployment2Mock = mock(Deployment.class);
         ComponentVersion componentVersion = mock(ComponentVersion.class);
@@ -281,7 +298,7 @@ class DocumentationGeneratorTest {
         when(deployment1Mock.getComponentVersion()).thenReturn(componentVersion);
         when(deployment2Mock.getComponentVersion()).thenReturn(componentVersion);
         when(deployment1Mock.getEnvironment()).thenReturn(environment);
-        when(deployment2Mock.getEnvironment()).thenReturn(environment);
+        when(deployment2Mock.getEnvironment()).thenReturn(secondEnvironment);
         when(deployment1Mock.getStartedAt()).thenReturn(ZonedDateTime.now());
         when(deployment2Mock.getStartedAt()).thenReturn(ZonedDateTime.now());
         when(deploymentRepositoryMock.getById(deployment1Id)).thenReturn(deployment1Mock);

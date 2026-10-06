@@ -150,6 +150,13 @@ public class DocgenAsyncService {
 
     private void handleDeploymentPageGenerationFailure(UUID deploymentId, String systemName, String componentName,
                                                        Exception ex, String failureMessage) {
+        if (ex instanceof DocgenLockTimeoutException) {
+            log.info("Page generation lock is busy for deployment {}, system {} and component {}; " +
+                            "leaving the request pending for the repair job",
+                    value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
+                    value(COMPONENT_NAME, componentName));
+            return;
+        }
         if (AwsJdbcFailoverExceptionClassifier.isRetryable(ex)) {
             log.info("Database connection recovered while processing page generation for deployment {}, " +
                             "system {} and component {}; " +

@@ -196,20 +196,22 @@ pages when a system is renamed or merged.
 
 ### Concurrency and conflicts
 
-Two safeguards keep concurrent runs from corrupting the tree:
+The following safeguards keep concurrent runs from corrupting the tree:
 
 - A **per-system lock** (ShedLock, `docgen-<systemname>`) serialises all generation runs for one system
-  across all service instances. A run that cannot acquire the lock within three minutes gives up and leaves
+  across all service instances. A run that cannot acquire the lock within the configured timeout (30 seconds by default) gives up and leaves
   the work to the scheduled repair job.
-- Structure reconciliation uses the dedicated global ShedLock `docgen-documentation-structure` around a short,
-  independent transaction. This prevents jobs for different systems from concurrently creating the same structure
+- Structure reconciliation uses the dedicated global ShedLock `docgen-documentation-structure` across reconciliation, with short database transactions for individual reads and writes. This prevents jobs for different systems from concurrently creating the same structure
   tracking record without serialising their subsequent system-specific page generation.
-- Component-page creation additionally locks the component database row. This serialises the title lookup, Confluence
+- Component-page creation additionally acquires the renewable distributed lock `docgen:component:<UUID>`. This serialises the title lookup, Confluence
   operation and tracking update across service instances even during a component move. Tracking is written only after
   Confluence has successfully created, updated or moved the page.
-- Jira project-page generation locks the persisted `Changes` structure row. This serialises project title lookup,
+- Jira project-page generation acquires the renewable distributed lock `docgen:jira-changes`. This serialises project title lookup,
   Confluence operations and tracking across different system locks and service instances; a project Page ID is stored
   only after Confluence succeeds.
+- Shared-lock acquisition timeouts defer deployment work to repair without invalidating the cached structure or
+  incrementing the generation-error counter. A pending request is cleared only after all generation steps succeed.
+  Database transactions do not span Confluence or Jira calls.
 - When Confluence rejects an update because the page was modified concurrently (HTTP 409), the adapter
   waits `retry-on-conflict-wait-duration` (a constant wait, 10 seconds by default), re-reads the page and
   **re-renders** the content from the current state before retrying. Writing an already rendered snapshot

@@ -44,14 +44,16 @@ public class ComponentPageGenerator {
     }
 
     private String generatePageLocked(String componentsParentPageId, Component component, String systemName) {
-        if (!versionDeploymentRepository.existsForComponent(component.getId())) {
+        boolean hasVersionDeployment = transactionRunner.run(
+                () -> versionDeploymentRepository.existsForComponent(component.getId()));
+        if (!hasVersionDeployment) {
             log.info("Skipping component page generation for system '{}' and component '{}': no relevant version deployment exists",
                     systemName, component.getName());
             return null;
         }
 
         String pageTitle = pageTitle(component, systemName);
-        Optional<ComponentPage> trackedPage = componentPageRepository.findByComponentId(component.getId());
+        Optional<ComponentPage> trackedPage = transactionRunner.run(() -> componentPageRepository.findByComponentId(component.getId()));
         String pageId = trackedPage.map(ComponentPage::getPageId)
                 .or(() -> confluenceAdapter.findPageByTitle(componentsParentPageId, pageTitle))
                 .orElse(null);
@@ -107,7 +109,7 @@ public class ComponentPageGenerator {
 
     void moveTrackedPages(String oldComponentsParentPageId, String newComponentsParentPageId,
                           String targetSystemName) {
-        componentPageRepository.findByParentPageId(oldComponentsParentPageId).stream()
+        transactionRunner.run(() -> componentPageRepository.findByParentPageId(oldComponentsParentPageId)).stream()
                 .map(ComponentPage::getComponentId)
                 .map(id -> transactionRunner.run(() -> componentRepository.findById(id).map(component -> {
                     Hibernate.initialize(component.getSystem());

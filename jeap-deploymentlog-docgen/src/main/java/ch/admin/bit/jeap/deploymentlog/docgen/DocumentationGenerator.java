@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.*;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.GeneratorService;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import io.micrometer.core.annotation.Timed;
@@ -115,7 +116,7 @@ public class DocumentationGenerator {
 
     private void mergeSystems(System system, System oldSystem, DocumentationStructure structure) {
         log.info("Retrieve the deployments for the system '{}' to merge into '{}'", oldSystem.getName(), system.getName());
-        List<DeploymentPageQueryResult> deployments = deploymentPageRepository.getDeploymentPagesForSystem(oldSystem.getId());
+        List<DeploymentPageQueryResult> deployments = transactionRunner.run(() -> deploymentPageRepository.getDeploymentPagesForSystem(oldSystem.getId()));
 
         SystemStructure targetStructure = structure.systems().get(system.getId());
 
@@ -134,7 +135,7 @@ public class DocumentationGenerator {
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
 
-        Optional<SystemPage> existingOldSystemPage = systemPageRepository.findSystemPageBySystemId(oldSystem.getId());
+        Optional<SystemPage> existingOldSystemPage = transactionRunner.run(() -> systemPageRepository.findSystemPageBySystemId(oldSystem.getId()));
         if (existingOldSystemPage.isPresent()) {
             String existingOldSystemPageId = existingOldSystemPage.get().getSystemPageId();
             log.info("Deleting old system page with id '{}' and all child pages", existingOldSystemPageId);
@@ -152,7 +153,7 @@ public class DocumentationGenerator {
     }
 
     private void moveDeploymentPages(System system, String deploymentsPageId, List<DeploymentPageQueryResult> deployments) {
-        Map<Environment, String> environmentPagesByEnvironment = new HashMap<>();
+        Map<UUID, String> environmentPagesByEnvironment = new HashMap<>();
         Map<String, String> environmentPagesByEnvironmentAndYear = new HashMap<>();
 
         for (DeploymentPageQueryResult deploymentInfo : deployments) {
@@ -162,11 +163,11 @@ public class DocumentationGenerator {
             String deploymentLetterParentPageId;
 
             // Environment page
-            if (environmentPagesByEnvironment.containsKey(environment)) {
-                deploymentListParentPageId = environmentPagesByEnvironment.get(environment);
+            if (environmentPagesByEnvironment.containsKey(environment.getId())) {
+                deploymentListParentPageId = environmentPagesByEnvironment.get(environment.getId());
             } else {
                 deploymentListParentPageId = generateDeploymentHistoryPageForEnvironment(deploymentsPageId, environment, system);
-                environmentPagesByEnvironment.put(environment, deploymentListParentPageId);
+                environmentPagesByEnvironment.put(environment.getId(), deploymentListParentPageId);
             }
 
             // Environment page pro year
@@ -185,7 +186,7 @@ public class DocumentationGenerator {
 
     private String generateSystemPage(String parentPageId, System system) {
         Supplier<String> content = () -> templateRenderer.renderSystemPage(generatorService.createSystemPageDto(system));
-        Optional<SystemPage> trackedPage = systemPageRepository.findSystemPageBySystemId(system.getId());
+        Optional<SystemPage> trackedPage = transactionRunner.run(() -> systemPageRepository.findSystemPageBySystemId(system.getId()));
         String pageId = trackedPage.map(SystemPage::getSystemPageId)
                 .or(() -> confluenceAdapter.findPageByTitle(props.getRootPageId(), system.getName()))
                 .orElse(null);
@@ -202,10 +203,10 @@ public class DocumentationGenerator {
         String pageTitle = DeploymentHistoryPageDto.pageTitle(system.getName(), environment.getName());
         Supplier<String> content = () -> templateRenderer.renderDeploymentHistoryPage(
                 createDeploymentHistoryPageDto(system, environment));
-        Optional<EnvironmentHistoryPage> trackedPage = environmentHistoryPageRepository
-                .findEnvironmentHistoryPageBySystemIdAndEnvironmentId(system.getId(), environment.getId());
+        Optional<EnvironmentHistoryPage> trackedPage = transactionRunner.run(() -> environmentHistoryPageRepository
+                .findEnvironmentHistoryPageBySystemIdAndEnvironmentId(system.getId(), environment.getId()));
         String pageId = trackedPage.map(EnvironmentHistoryPage::getPageId)
-                .or(() -> systemPageRepository.findSystemPageBySystemId(system.getId())
+                .or(() -> transactionRunner.run(() -> systemPageRepository.findSystemPageBySystemId(system.getId()))
                         .flatMap(systemPage -> confluenceAdapter.findPageByTitle(systemPage.getSystemPageId(), pageTitle)))
                 .orElse(null);
         boolean moveRequired = trackedPage.map(EnvironmentHistoryPage::getParentPageId)
@@ -251,8 +252,8 @@ public class DocumentationGenerator {
 
     private String generateDeploymentListPage(String parentPageId, Environment environment, System system, int year) {
         DeploymentListPageDto deploymentListPageDto = new DeploymentListPageDto(environment.getName(), system.getName(), year);
-        Optional<DeploymentListPage> trackedPage = deploymentListPageRepository
-                .findDeploymentListPageBySystemIdAndEnvironmentIdAndYear(system.getId(), environment.getId(), year);
+        Optional<DeploymentListPage> trackedPage = transactionRunner.run(() -> deploymentListPageRepository
+                .findDeploymentListPageBySystemIdAndEnvironmentIdAndYear(system.getId(), environment.getId(), year));
         String pageId = trackedPage.map(DeploymentListPage::getPageId).orElse(null);
         boolean moveRequired = trackedPage.map(DeploymentListPage::getParentPageId)
                 .map(parent -> !parent.equals(parentPageId))
@@ -556,6 +557,8 @@ public class DocumentationGenerator {
     private <T> T runWithStructure(DocumentationStructure structure, Supplier<T> task) {
         try {
             return task.get();
+        } catch (DocgenLockTimeoutException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             // A missing/moved Confluence ancestor must be checked again on the next repair attempt.
             structureCache.updateAndGet(cached -> cached != null && cached.structure() == structure ? null : cached);
