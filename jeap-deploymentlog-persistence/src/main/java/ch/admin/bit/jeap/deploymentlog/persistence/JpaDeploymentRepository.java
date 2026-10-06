@@ -34,6 +34,12 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID>, JpaS
     Optional<UUID> getPageGenerationRequestId(@Param("id") UUID deploymentId);
 
     @Modifying
+    @Query("update Deployment d set d.pageGenerationRequestId = :requestId where d.id = :id " +
+            "and d.pageGenerationRequestId is null and d.pageGenerationSuppressed = false " +
+            "and d.pageGenerationLegacyUnclassified = false")
+    void requestPageGenerationIfAbsent(@Param("id") UUID deploymentId, @Param("requestId") UUID requestId);
+
+    @Modifying
     @Query("update Deployment d set d.pageGenerationRequestId = null where d.id = :id and d.pageGenerationRequestId = :requestId")
     void completePageGenerationRequest(@Param("id") UUID deploymentId, @Param("requestId") UUID requestId);
 

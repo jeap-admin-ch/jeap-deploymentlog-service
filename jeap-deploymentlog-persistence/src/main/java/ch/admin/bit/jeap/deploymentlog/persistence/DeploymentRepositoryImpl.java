@@ -61,6 +61,11 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     }
 
     @Override
+    public void requestPageGenerationIfAbsent(UUID deploymentId) {
+        jpaDeploymentRepository.requestPageGenerationIfAbsent(deploymentId, UUID.randomUUID());
+    }
+
+    @Override
     public void completePageGenerationRequest(UUID deploymentId, UUID requestId) {
         jpaDeploymentRepository.completePageGenerationRequest(deploymentId, requestId);
     }

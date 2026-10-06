@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.*;
 import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,7 +67,7 @@ public class DocumentationGenerator {
     }
 
     private GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId, DocumentationStructure structure) {
-        Deployment deployment = deploymentRepository.getById(deploymentId);
+        Deployment deployment = loadDeployment(deploymentId);
         Environment environment = deployment.getEnvironment();
         System system = deployment.getComponentVersion().getComponent().getSystem();
 
@@ -142,8 +143,11 @@ public class DocumentationGenerator {
             deleteSystemStructureTracking(oldSystem.getId());
         }
 
-        environmentHistoryPageRepository.deleteEnvironmentHistoryPageBySystemId(oldSystem.getId());
-        deploymentListPageRepository.deleteDeploymentListPageBySystemId(oldSystem.getId());
+        transactionRunner.run(() -> {
+            environmentHistoryPageRepository.deleteEnvironmentHistoryPageBySystemId(oldSystem.getId());
+            deploymentListPageRepository.deleteDeploymentListPageBySystemId(oldSystem.getId());
+            return null;
+        });
         generateAllJiraProjectPages(structure);
     }
 
@@ -152,7 +156,7 @@ public class DocumentationGenerator {
         Map<String, String> environmentPagesByEnvironmentAndYear = new HashMap<>();
 
         for (DeploymentPageQueryResult deploymentInfo : deployments) {
-            Deployment deployment = deploymentRepository.getById(deploymentInfo.id());
+            Deployment deployment = loadDeployment(deploymentInfo.id());
             Environment environment = deployment.getEnvironment();
             String deploymentListParentPageId;
             String deploymentLetterParentPageId;
@@ -272,7 +276,7 @@ public class DocumentationGenerator {
     }
 
     private void generateAllPages(DocumentationStructure structure) {
-        findOrderedSystems().forEach(system -> {
+        findOrderedSystems(true).forEach(system -> {
             SystemStructure systemStructure = structure.systems().get(system.getId());
             componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
             recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
@@ -293,7 +297,7 @@ public class DocumentationGenerator {
     }
 
     private void generateAllPagesForSystem(String systemName, Integer year, DocumentationStructure structure) {
-        System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
+        System system = transactionRunner.run(() -> initializeSystem(systemRepository.findByNameIgnoreCase(systemName).orElseThrow()));
         SystemStructure systemStructure = structure.systems().get(system.getId());
         componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
         recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, year);
@@ -303,17 +307,19 @@ public class DocumentationGenerator {
         generateAllJiraProjectPages(structure);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void generateJiraLinksForSystem(String systemName, ZonedDateTime from, ZonedDateTime to) {
-        System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
-        List<Deployment> deployments = deploymentRepository.findAllDeploymentsForSystemStartedBetween(system, from, to);
-        log.info("Found {} deployments for system '{}' between {} and {}", deployments.size(), systemName, from, to);
-        deployments.stream()
-                .flatMap(deployment -> JiraProjectPageDtoFactory.normalizedIssueKeys(deployment).stream())
-                .distinct()
-                .sorted()
-                .forEach(issueKey -> jiraIssuePageRepository.findByIssueKey(issueKey)
-                        .ifPresent(page -> jiraAdapter.updateIssuePageRemoteLink(issueKey, page.getPageId())));
+        Map<String, String> links = transactionRunner.run(() -> {
+            System system = systemRepository.findByNameIgnoreCase(systemName).orElseThrow();
+            List<Deployment> deployments = deploymentRepository.findAllDeploymentsForSystemStartedBetween(system, from, to);
+            log.info("Found {} deployments for system '{}' between {} and {}", deployments.size(), systemName, from, to);
+            Map<String, String> result = new TreeMap<>();
+            deployments.stream().flatMap(deployment -> JiraProjectPageDtoFactory.normalizedIssueKeys(deployment).stream())
+                    .distinct().forEach(issueKey -> jiraIssuePageRepository.findByIssueKey(issueKey)
+                            .ifPresent(page -> result.put(issueKey, page.getPageId())));
+            return result;
+        });
+        links.forEach(jiraAdapter::updateIssuePageRemoteLink);
     }
 
     private void recursivelyGenerateDeploymentHistory(String deploymentsPageId, System system, Integer year) {
@@ -394,8 +400,8 @@ public class DocumentationGenerator {
     private void updateDeploymentHistoryPages(Collection<SystemEnv> envsBySystems,
                                               DocumentationStructure structure) {
         for (SystemEnv systemEnv : envsBySystems) {
-            System system = systemRepository.getById(systemEnv.getSystemId());
-            Environment env = environmentRepository.getById(systemEnv.getEnvId());
+            System system = transactionRunner.run(() -> initializeSystem(systemRepository.getById(systemEnv.getSystemId())));
+            Environment env = transactionRunner.run(() -> initializeEnvironment(environmentRepository.getById(systemEnv.getEnvId())));
             SystemStructure systemStructure = structure.systems().get(systemEnv.getSystemId());
             if (systemStructure != null) {
                 generateDeploymentHistoryPageForEnvironment(systemStructure.deploymentsPageId(), env, system);
@@ -431,12 +437,12 @@ public class DocumentationGenerator {
             if (systemStructure == null) {
                 continue;
             }
-            System system = systemRepository.getById(systemEnv.getSystemId());
-            Environment environment = environmentRepository.getById(systemEnv.getEnvId());
+            System system = transactionRunner.run(() -> initializeSystem(systemRepository.getById(systemEnv.getSystemId())));
+            Environment environment = transactionRunner.run(() -> initializeEnvironment(environmentRepository.getById(systemEnv.getEnvId())));
             generateDeploymentHistoryPageForEnvironment(systemStructure.deploymentsPageId(), environment, system);
         }
         result.componentIds().stream()
-                .map(componentRepository::findById)
+                .map(id -> transactionRunner.run(() -> componentRepository.findById(id).map(this::initializeComponent)))
                 .flatMap(Optional::stream)
                 .sorted(Comparator.comparing(ch.admin.bit.jeap.deploymentlog.domain.Component::getId))
                 .forEach(component -> {
@@ -446,12 +452,15 @@ public class DocumentationGenerator {
                     }
                 });
         result.environmentIds().stream()
-                .map(environmentRepository::getById)
+                .map(id -> transactionRunner.run(() -> initializeEnvironment(environmentRepository.getById(id))))
                 .sorted(Comparator.comparing(Environment::getStagingOrder).thenComparing(Environment::getName))
                 .forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                         structure.stagesPageId(), environment, null));
         generateAllJiraProjectPages(structure);
-        jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
+        documentationStructureLock.runWithChangesLock(() -> {
+            jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
+            return null;
+        });
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -507,9 +516,46 @@ public class DocumentationGenerator {
                 Map.copyOf(systemLocations), Map.copyOf(pageLocations));
     }
 
+    private Deployment loadDeployment(UUID id) {
+        return transactionRunner.run(() -> {
+            Deployment deployment = deploymentRepository.getById(id);
+            Hibernate.initialize(deployment.getEnvironment());
+            Hibernate.initialize(deployment.getComponentVersion());
+            initializeComponent(deployment.getComponentVersion().getComponent());
+            Hibernate.initialize(deployment.getChangelog());
+            if (deployment.getChangelog() != null) {
+                Hibernate.initialize(deployment.getChangelog().getJiraIssueKeys());
+            }
+            Hibernate.initialize(deployment.getLinks());
+            Hibernate.initialize(deployment.getProperties());
+            Hibernate.initialize(deployment.getReferenceIdentifiers());
+            Hibernate.initialize(deployment.getDeploymentTypes());
+            return deployment;
+        });
+    }
+
+    private ch.admin.bit.jeap.deploymentlog.domain.Component initializeComponent(
+            ch.admin.bit.jeap.deploymentlog.domain.Component component) {
+        Hibernate.initialize(component);
+        Hibernate.initialize(component.getSystem());
+        return component;
+    }
+
+    private System initializeSystem(System system) {
+        Hibernate.initialize(system);
+        Hibernate.initialize(system.getSystemGroup());
+        system.getComponents().forEach(this::initializeComponent);
+        return system;
+    }
+
+    private Environment initializeEnvironment(Environment environment) {
+        Hibernate.initialize(environment);
+        return environment;
+    }
+
     private <T> T runWithStructure(DocumentationStructure structure, Supplier<T> task) {
         try {
-            return transactionRunner.run(task);
+            return task.get();
         } catch (RuntimeException ex) {
             // A missing/moved Confluence ancestor must be checked again on the next repair attempt.
             structureCache.updateAndGet(cached -> cached != null && cached.structure() == structure ? null : cached);
@@ -584,10 +630,15 @@ public class DocumentationGenerator {
     }
 
     private List<System> findOrderedSystems() {
-        return systemRepository.findAllWithSystemGroup().stream()
+        return findOrderedSystems(false);
+    }
+
+    private List<System> findOrderedSystems(boolean includeComponents) {
+        return transactionRunner.run(() -> systemRepository.findAllWithSystemGroup().stream()
+                .map(system -> includeComponents ? initializeSystem(system) : system)
                 .sorted(Comparator.comparing(System::getName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(System::getId))
-                .toList();
+                .toList());
     }
 
     private void removeDeploymentHistoryIntermediatePage(String rootPageId, String stagesPageId) {
@@ -709,13 +760,17 @@ public class DocumentationGenerator {
     }
 
     private void generateJiraProjectPagesForDeployment(DocumentationStructure structure, Deployment deployment) {
-        documentationStructurePageRepository.lockByStructureKey(CHANGES_PAGE_KEY);
-        jiraProjectPageGenerator.generateForDeployment(structure.changesPageId(), deployment);
+        documentationStructureLock.runWithChangesLock(() -> {
+            jiraProjectPageGenerator.generateForDeployment(structure.changesPageId(), deployment);
+            return null;
+        });
     }
 
     private void generateAllJiraProjectPages(DocumentationStructure structure) {
-        documentationStructurePageRepository.lockByStructureKey(CHANGES_PAGE_KEY);
-        jiraProjectPageGenerator.generateAll(structure.changesPageId());
+        documentationStructureLock.runWithChangesLock(() -> {
+            jiraProjectPageGenerator.generateAll(structure.changesPageId());
+            return null;
+        });
     }
 
     private record DocumentationStructure(String changesPageId,

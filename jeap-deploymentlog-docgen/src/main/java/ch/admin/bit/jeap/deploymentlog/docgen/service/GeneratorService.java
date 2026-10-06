@@ -22,6 +22,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+// Read from the writer: page generation must see the deployment and page tracking just committed.
+@Transactional
 public class GeneratorService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -424,6 +426,7 @@ public class GeneratorService {
     /**
      * Persists the generated SystemPage or update the Timestamp
      */
+    @Transactional
     public void persistSystemPage(System system, String pageId, String parentPageId) {
         Optional<SystemPage> systemPageOpt = systemPageRepository.findSystemPageBySystemId(system.getId());
         systemPageOpt.ifPresentOrElse(systemPage -> {
@@ -443,6 +446,7 @@ public class GeneratorService {
         });
     }
 
+    @Transactional
     public void persistDeploymentHistoryPage(System system, Environment environment, String pageId,
                                              String parentPageId) {
         Optional<EnvironmentHistoryPage> environmentHistoryPageOpt = environmentHistoryPageRepository
@@ -465,6 +469,7 @@ public class GeneratorService {
         });
     }
 
+    @Transactional
     public void persistDeploymentListPage(System system, Environment environment, String pageId, int year,
                                           String parentPageId) {
         Optional<DeploymentListPage> deploymentListPageOpt = deploymentListPageRepository

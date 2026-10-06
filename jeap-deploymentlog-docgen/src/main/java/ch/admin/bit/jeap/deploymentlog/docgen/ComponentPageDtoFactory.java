@@ -15,6 +15,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.StagingHistoryEntry;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -29,6 +30,8 @@ import java.util.Objects;
 @org.springframework.stereotype.Component
 @RequiredArgsConstructor
 @Slf4j
+// Read from the writer: page generation must see the deployment and page tracking just committed.
+@Transactional
 class ComponentPageDtoFactory {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

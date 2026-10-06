@@ -115,12 +115,12 @@ class DocumentationGeneratorTest {
     }
 
     @Test
-    void generateAllPages_acquiresStructureLockBeforeStartingPageTransaction() {
+    void generateAllPages_acquiresStructureLockBeforeLoadingData() {
         documentationGenerator.generateAllPages();
 
         InOrder inOrder = inOrder(documentationStructureLockMock, transactionRunnerMock);
         inOrder.verify(documentationStructureLockMock).runLocked(any());
-        inOrder.verify(transactionRunnerMock).run(any());
+        inOrder.verify(transactionRunnerMock, times(2)).run(any());
     }
 
     @Test
@@ -276,6 +276,10 @@ class DocumentationGeneratorTest {
         Environment environment = mock(Environment.class);
         Deployment deployment1Mock = mock(Deployment.class);
         Deployment deployment2Mock = mock(Deployment.class);
+        ComponentVersion componentVersion = mock(ComponentVersion.class);
+        when(componentVersion.getComponent()).thenReturn(new Component("component", oldSystem));
+        when(deployment1Mock.getComponentVersion()).thenReturn(componentVersion);
+        when(deployment2Mock.getComponentVersion()).thenReturn(componentVersion);
         when(deployment1Mock.getEnvironment()).thenReturn(environment);
         when(deployment2Mock.getEnvironment()).thenReturn(environment);
         when(deployment1Mock.getStartedAt()).thenReturn(ZonedDateTime.now());
@@ -605,11 +609,12 @@ class DocumentationGeneratorTest {
 
     @Test
     void failedPageGenerationInvalidatesCachedStructureForRepair() {
-        List<SystemEnv> noEnvironments = List.of();
         documentationGenerator.updateDeploymentHistoryPages(List.of());
-        doThrow(new IllegalStateException("Confluence ancestor missing")).when(transactionRunnerMock).run(any());
-        assertThrows(IllegalStateException.class, () -> documentationGenerator.updateDeploymentHistoryPages(noEnvironments));
-        doAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get()).when(transactionRunnerMock).run(any());
+        UUID systemId = UUID.randomUUID();
+        doThrow(new IllegalStateException("Database unavailable")).when(systemRepositoryMock).getById(systemId);
+        List<SystemEnv> environments = List.of(new SystemEnv(systemId, "system", UUID.randomUUID()));
+        assertThrows(IllegalStateException.class,
+                () -> documentationGenerator.updateDeploymentHistoryPages(environments));
         documentationGenerator.updateDeploymentHistoryPages(List.of());
         verify(documentationStructureLockMock, times(2)).runLocked(any());
     }
@@ -645,6 +650,8 @@ class DocumentationGeneratorTest {
         }).when(documentationStructurePageRepositoryMock).delete(any(DocumentationStructurePage.class));
         lenient().when(documentationStructureLockMock.tryRunLocked(any()))
                 .thenAnswer(invocation -> Optional.of(invocation.<Supplier<?>>getArgument(0).get()));
+        lenient().when(documentationStructureLockMock.runWithChangesLock(any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
         lenient().when(documentationStructureLockMock.runLocked(any()))
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
         lenient().when(transactionRunnerMock.run(any()))

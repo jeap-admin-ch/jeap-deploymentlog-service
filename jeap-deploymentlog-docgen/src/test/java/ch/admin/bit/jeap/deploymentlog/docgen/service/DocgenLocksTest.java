@@ -14,6 +14,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.HashSet;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -107,6 +110,33 @@ class DocgenLocksTest {
         assertThat(lockConfiguration.getValue().getName()).isEqualTo("docgen-documentation-structure");
         assertThat(result).isEqualTo("result");
         verify(lockMock).unlock();
+    }
+
+    @Test
+    void sharedLocksDoNotReacquireTheSystemLockForCollidingSystemNames() {
+        var heldNames = new HashSet<String>();
+        LockProvider provider = configuration -> {
+            String name = configuration.getName();
+            if (!heldNames.add(name)) {
+                return Optional.empty(); // Model ShedLock's non-reentrant acquisition.
+            }
+            return Optional.of(() -> heldNames.remove(name));
+        };
+        DocgenLocks locks = new DocgenLocks(provider);
+        locks.setTryAcquireTimeout(Duration.ZERO);
+        UUID componentId = UUID.randomUUID();
+        AtomicInteger completedTasks = new AtomicInteger();
+        try {
+            for (String systemName : List.of("jira-changes", "component-" + componentId)) {
+                locks.runWithSystemLock(systemName, () ->
+                        locks.runWithChangesLock(() ->
+                                locks.runWithComponentLock(componentId, completedTasks::incrementAndGet)));
+                assertThat(heldNames).isEmpty();
+            }
+            assertThat(completedTasks.get()).isEqualTo(2);
+        } finally {
+            locks.shutdown();
+        }
     }
 
     @Test

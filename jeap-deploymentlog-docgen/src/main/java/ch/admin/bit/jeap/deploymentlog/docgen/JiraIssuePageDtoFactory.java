@@ -8,6 +8,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.jira.JiraWebClientProperties;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
@@ -17,6 +18,8 @@ import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
+// Read from the writer: page generation must see the deployment and page tracking just committed.
+@Transactional
 class JiraIssuePageDtoFactory {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

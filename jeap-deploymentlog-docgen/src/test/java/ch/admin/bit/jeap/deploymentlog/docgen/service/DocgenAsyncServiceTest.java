@@ -156,6 +156,7 @@ class DocgenAsyncServiceTest {
 
         await().until(taskDispatcher::isIdle);
         var order = inOrder(deploymentRepository, documentationGenerator, deploymentService);
+        order.verify(deploymentService).requestPageGenerationIfAbsent(deploymentId);
         order.verify(deploymentRepository).getPageGenerationRequestId(deploymentId);
         order.verify(documentationGenerator).generateDeploymentPages(deploymentId);
         order.verify(deploymentService).completePageGenerationRequest(deploymentId, requestId);

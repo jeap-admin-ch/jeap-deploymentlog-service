@@ -19,6 +19,8 @@ public interface DeploymentRepository {
 
     Optional<UUID> getPageGenerationRequestId(UUID deploymentId);
 
+    void requestPageGenerationIfAbsent(UUID deploymentId);
+
     void completePageGenerationRequest(UUID deploymentId, UUID requestId);
 
     void resumePageGeneration(UUID deploymentId);

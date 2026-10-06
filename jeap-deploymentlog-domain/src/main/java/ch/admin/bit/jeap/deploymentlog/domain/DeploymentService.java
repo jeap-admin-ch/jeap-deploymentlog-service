@@ -335,6 +335,10 @@ public class DeploymentService {
         deploymentRepository.resumePageGeneration(deploymentId);
     }
 
+    public void requestPageGenerationIfAbsent(UUID deploymentId) {
+        deploymentRepository.requestPageGenerationIfAbsent(deploymentId);
+    }
+
     public void completePageGenerationRequest(UUID deploymentId, UUID requestId) {
         deploymentRepository.completePageGenerationRequest(deploymentId, requestId);
     }

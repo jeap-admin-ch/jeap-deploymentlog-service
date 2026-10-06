@@ -134,6 +134,9 @@ public class DocgenAsyncService {
 
     private void generateDeploymentPages(UUID deploymentId, String systemName, String componentName) {
         try {
+            // Legacy repairs may have no token. Keep them eligible even if page tracking commits
+            // before a later component/Jira step fails; never replace a concurrently submitted request.
+            deploymentService.requestPageGenerationIfAbsent(deploymentId);
             UUID requestId = deploymentRepository.getPageGenerationRequestId(deploymentId).orElse(null);
             if (documentationGenerator.generateDeploymentPages(deploymentId) != null && requestId != null) {
                 // A request arriving while generation was running must remain pending for the next run.

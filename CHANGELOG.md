@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Release database transactions before Confluence and Jira calls during documentation generation.
+  Materialize render data in short transactions and persist page tracking separately; use renewable
+  distributed locks to serialize component and Jira page generation without holding database row locks.
+  Keep derived history/list-page deletes during system merges in a short write transaction.
+  Establish a pending request for tokenless repairs so partial generation failures remain retryable.
+  Isolate shared Jira/component lock names from system lock names to avoid nested lock collisions.
+
 ## [16.12.0] - 2026-10-01
 
 ### Dependencies

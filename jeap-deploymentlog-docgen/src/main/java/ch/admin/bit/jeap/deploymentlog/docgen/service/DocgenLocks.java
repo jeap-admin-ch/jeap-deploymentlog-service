@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -30,6 +31,8 @@ import java.util.function.Supplier;
 public class DocgenLocks {
 
     private static final String LOCK_NAME_PREFIX = "docgen-";
+    // System locks always start with "docgen-"; a different delimiter keeps these namespaces disjoint.
+    private static final String SHARED_LOCK_NAME_PREFIX = "docgen:";
     private static final String DOCUMENTATION_STRUCTURE_LOCK_NAME = LOCK_NAME_PREFIX + "documentation-structure";
     private static final Duration LOCK_RETRY_WAIT_DURATION = Duration.ofSeconds(3);
     // The lock is kept alive for as long as the docgen run is in progress, so this duration only has to cover the
@@ -150,9 +153,21 @@ public class DocgenLocks {
     }
 
     public <T> T runWithDocumentationStructureLock(Supplier<T> task) {
-        SimpleLock lock = tryAcquireLockWithTimeout(DOCUMENTATION_STRUCTURE_LOCK_NAME)
-                .orElseThrow(() -> new DocgenLockTimeoutException(DOCUMENTATION_STRUCTURE_LOCK_NAME));
-        return runLockedTask(task, DOCUMENTATION_STRUCTURE_LOCK_NAME, lock);
+        return runWithNamedLock(DOCUMENTATION_STRUCTURE_LOCK_NAME, task);
+    }
+
+    public <T> T runWithChangesLock(Supplier<T> task) {
+        return runWithNamedLock(SHARED_LOCK_NAME_PREFIX + "jira-changes", task);
+    }
+
+    public <T> T runWithComponentLock(UUID componentId, Supplier<T> task) {
+        return runWithNamedLock(SHARED_LOCK_NAME_PREFIX + "component:" + componentId, task);
+    }
+
+    private <T> T runWithNamedLock(String name, Supplier<T> task) {
+        SimpleLock lock = tryAcquireLockWithTimeout(name)
+                .orElseThrow(() -> new DocgenLockTimeoutException(name));
+        return runLockedTask(task, name, lock);
     }
 
     public <T> Optional<T> tryRunWithDocumentationStructureLock(Supplier<T> task) {

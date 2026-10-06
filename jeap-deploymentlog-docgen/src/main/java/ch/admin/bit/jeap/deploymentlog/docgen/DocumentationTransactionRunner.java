@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.function.Supplier;
 
 /**
- * Starts the database transaction only after a documentation lock has been acquired.
+ * Executes a short database-only unit of work. Never pass tasks that call Confluence or Jira.
  */
 @Component
 public class DocumentationTransactionRunner {

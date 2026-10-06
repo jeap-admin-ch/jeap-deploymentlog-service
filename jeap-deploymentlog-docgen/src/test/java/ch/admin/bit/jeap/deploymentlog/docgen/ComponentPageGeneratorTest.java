@@ -1,6 +1,7 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.ComponentPageDto;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLocks;
 import ch.admin.bit.jeap.deploymentlog.domain.Component;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
@@ -18,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,6 +43,11 @@ class ComponentPageGeneratorTest {
     @Mock
     private VersionDeploymentRepository versionDeploymentRepository;
 
+    @Mock
+    private DocgenLocks docgenLocks;
+    @Mock
+    private DocumentationTransactionRunner transactionRunner;
+
     private ComponentPageGenerator generator;
     private Component component;
 
@@ -48,7 +55,11 @@ class ComponentPageGeneratorTest {
     void setUp() {
         component = new Component("my-component", new System("my-system"));
         generator = new ComponentPageGenerator(confluenceAdapter, templateRenderer, dtoFactory,
-                componentPageRepository, componentRepository, versionDeploymentRepository);
+                componentPageRepository, componentRepository, versionDeploymentRepository, docgenLocks, transactionRunner);
+        lenient().when(docgenLocks.runWithComponentLock(any(), any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(1).get());
+        lenient().when(transactionRunner.run(any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
         lenient().when(versionDeploymentRepository.existsForComponent(component.getId())).thenReturn(true);
         lenient().when(dtoFactory.create(component)).thenReturn(ComponentPageDto.builder()
                 .componentName(component.getName()).flowMaxShow(50).flows(List.of()).build());
@@ -78,7 +89,7 @@ class ComponentPageGeneratorTest {
         assertThat(generator.generatePage("components-page", component)).isNull();
         assertThat(generator.generatePage("components-page", component)).isEqualTo("component-page");
 
-        verify(componentRepository).lockById(component.getId());
+        verify(componentRepository, never()).lockById(any());
         verify(componentPageRepository).save(any(ComponentPage.class));
     }
 
@@ -92,7 +103,8 @@ class ComponentPageGeneratorTest {
 
         generator.generatePage("components-page", component);
 
-        verify(componentRepository).lockById(component.getId());
+        verify(componentRepository, never()).lockById(any());
+        verify(docgenLocks).runWithComponentLock(eq(component.getId()), any());
         ArgumentCaptor<ComponentPage> pageCaptor = ArgumentCaptor.forClass(ComponentPage.class);
         verify(componentPageRepository).save(pageCaptor.capture());
         assertThat(pageCaptor.getValue().getComponentId()).isEqualTo(component.getId());
