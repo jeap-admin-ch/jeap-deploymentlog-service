@@ -37,6 +37,7 @@ public class DeploymentService {
     private final DeploymentStagingService deploymentStagingService;
     private final ApplicationEventPublisher eventPublisher;
 
+    @RetryOnAwsJdbcFailover
     @SuppressWarnings("java:S107")
     public UUID createDeployment(String externalId,
                                  String versionName,
@@ -87,6 +88,7 @@ public class DeploymentService {
                 deploymentTypes);
     }
 
+    @RetryOnAwsJdbcFailover
     @SuppressWarnings("java:S107")
     public UUID createDeploymentWithFinalEnvironments(String externalId,
                                  String versionName,
@@ -111,6 +113,11 @@ public class DeploymentService {
                                  Set<String> changelogJiraIssueKeys,
                                  String remedyChangeId,
                                  Set<DeploymentType> deploymentTypes) {
+
+        Optional<Deployment> existingDeployment = deploymentRepository.findByExternalId(externalId);
+        if (existingDeployment.isPresent()) {
+            return existingDeployment.get().getId();
+        }
 
         final ch.admin.bit.jeap.deploymentlog.domain.Component component = systemService.retrieveOrCreateComponent(systemName, componentName);
         final Environment environment = retrieveOrCreateEnvironmentByName(environmentName);

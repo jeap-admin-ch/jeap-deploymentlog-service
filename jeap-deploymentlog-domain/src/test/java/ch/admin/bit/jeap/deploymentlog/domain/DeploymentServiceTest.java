@@ -124,6 +124,26 @@ class DeploymentServiceTest {
 
 
     @Test
+    void createDeploymentReturnsExistingDeploymentWithoutSideEffects() {
+        UUID existingId = UUID.randomUUID();
+        when(deploymentRepository.findByExternalId("externalId")).thenReturn(Optional.of(deploymentMock));
+        when(deploymentMock.getId()).thenReturn(existingId);
+
+        UUID result = deploymentService.createDeployment(
+                "externalId", "1.2.3-4",
+                ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
+                true, "system", "component", "environment", "environment",
+                new DeploymentTarget("CF", "http://localhost/cf", "details"),
+                ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
+
+        assertThat(result).isEqualTo(existingId);
+        verify(deploymentRepository).findByExternalId("externalId");
+        verifyNoMoreInteractions(deploymentRepository);
+        verifyNoInteractions(systemService, environmentRepository, deploymentStagingService, eventPublisher);
+    }
+
+    @Test
     void createDeployment_envExists_deploymentCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));

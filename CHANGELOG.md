@@ -9,6 +9,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Retry deployment creation after a recoverable AWS JDBC connection failover in a fresh transaction,
+  preserving idempotency by external deployment ID.
+
 - Release database transactions before Confluence and Jira calls during documentation generation.
   Materialize render data in short transactions and persist page tracking separately; use renewable
   distributed locks to serialize component and Jira page generation without holding database row locks.
