@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.16.1] - 2026-10-14
+
+### Fixed
+
+- Escape deployment data rendered into the Confluence storage XHTML of deployment letters, undeployment letters,
+  system overview pages and deployment history pages. Deployment attributes containing XML markup characters
+  (e.g. `startedBy` values such as `CI <user@example.com>`) previously produced invalid storage XHTML, making
+  Confluence reject the affected page with `Error parsing xhtml`.
+
 ## [16.16.0] - 2026-10-12
 
 ### Dependencies

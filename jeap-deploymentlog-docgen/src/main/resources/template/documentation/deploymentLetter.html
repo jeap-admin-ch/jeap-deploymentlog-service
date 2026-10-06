@@ -18,24 +18,24 @@
         </tr>
         <tr>
             <th>Typ</th>
-            <td>[(${deploymentLetter.deploymentTypes})]</td>
+            <td>[[${deploymentLetter.deploymentTypes}]]</td>
         </tr>
         <tr>
             <th>Version</th>
             <td>
                 <strong>
                     <a th:href="${deploymentLetter.versionControlUrl}"
-                       target="_blank">[(${deploymentLetter.version})]</a>
+                       target="_blank">[[${deploymentLetter.version}]]</a>
                 </strong>
             </td>
         </tr>
         <tr>
             <th>Sequence</th>
-            <td>[(${deploymentLetter.sequence})]</td>
+            <td>[[${deploymentLetter.sequence}]]</td>
         </tr>
         <tr>
             <th>Umgebung</th>
-            <td><strong>[(${deploymentLetter.environmentName})]</strong></td>
+            <td><strong>[[${deploymentLetter.environmentName}]]</strong></td>
         </tr>
         <tr th:if="${deploymentLetter.targetType}">
             <th>Plattform</th>
@@ -44,15 +44,15 @@
                     <tbody>
                     <tr>
                         <th>Type</th>
-                        <td>[(${deploymentLetter.targetType})]</td>
+                        <td>[[${deploymentLetter.targetType}]]</td>
                     </tr>
                     <tr>
                         <th>URL</th>
-                        <td>[(${deploymentLetter.targetUrl})]</td>
+                        <td>[[${deploymentLetter.targetUrl}]]</td>
                     </tr>
                     <tr>
                         <th>Details</th>
-                        <td>[(${deploymentLetter.targetDetails})]</td>
+                        <td>[[${deploymentLetter.targetDetails}]]</td>
                     </tr>
                     </tbody>
                 </table>
@@ -81,54 +81,54 @@
 
         <tr>
             <th>Start</th>
-            <td>[(${deploymentLetter.startedAt})]</td>
+            <td>[[${deploymentLetter.startedAt}]]</td>
         </tr>
 
         <tr>
             <th>Ende</th>
-            <td>[(${deploymentLetter.endedAt})]</td>
+            <td>[[${deploymentLetter.endedAt}]]</td>
         </tr>
 
         <tr>
             <th>Dauer</th>
-            <td>[(${deploymentLetter.duration})]</td>
+            <td>[[${deploymentLetter.duration}]]</td>
         </tr>
 
         <tr>
             <th colspan="1">Gestartet durch</th>
-            <td colspan="1">[(${deploymentLetter.startedBy})]</td>
+            <td colspan="1">[[${deploymentLetter.startedBy}]]</td>
         </tr>
 
         <tr>
             <th colspan="1">Deployment Unit</th>
-            <td colspan="1">[(${deploymentLetter.deploymentUnitType})] (<a
-                    th:href="${deploymentLetter.deploymentUnitRepositoryUrl}">[(${deploymentLetter.deploymentUnitCoordinates})]</a>)
+            <td colspan="1">[[${deploymentLetter.deploymentUnitType}]] (<a
+                    th:href="${deploymentLetter.deploymentUnitRepositoryUrl}">[[${deploymentLetter.deploymentUnitCoordinates}]]</a>)
             </td>
         </tr>
 
         <tr>
             <th colspan="1">Id</th>
-            <td colspan="1">[(${deploymentLetter.externalId})]</td>
+            <td colspan="1">[[${deploymentLetter.externalId}]]</td>
         </tr>
 
         <tr th:each="aLink:${deploymentLetter.links}">
-            <th colspan="1">[(${aLink.linkLabel})]</th>
+            <th colspan="1">[[${aLink.linkLabel}]]</th>
             <td colspan="1">
-                <a th:href="${aLink.linkUrl}" target="_blank">[(${aLink.linkUrl})]</a>
+                <a th:href="${aLink.linkUrl}" target="_blank">[[${aLink.linkUrl}]]</a>
             </td>
         </tr>
 
         <tr th:each="aLink:${deploymentLetter.buildJobLinks}">
             <th colspan="1">Build Job</th>
             <td colspan="1">
-                <a th:href="${aLink}" target="_blank">[(${aLink})]</a>
+                <a th:href="${aLink}" target="_blank">[[${aLink}]]</a>
             </td>
         </tr>
 
         <tr th:if="${deploymentLetter.remedyChangeId}">
             <th colspan="1">Remedy Change</th>
             <td colspan="1">
-                <a th:href="(${deploymentLetter.remedyChangeLink})" target="_blank">[(${deploymentLetter.remedyChangeId})]</a>
+                <a th:href="(${deploymentLetter.remedyChangeLink})" target="_blank">[[${deploymentLetter.remedyChangeId}]]</a>
             </td>
         </tr>
 
@@ -144,8 +144,8 @@
     </table>
 
     <th:block th:if="${deploymentLetter.changeComparedToVersion} != ''">
-        <h2>Änderungen zu Version [(${deploymentLetter.changeComparedToVersion})]</h2>
-        <p>[(${deploymentLetter.changeComment})]</p>
+        <h2>Änderungen zu Version [[${deploymentLetter.changeComparedToVersion}]]</h2>
+        <p>[[${deploymentLetter.changeComment}]]</p>
         <table class="wrapped">
             <colgroup>
                 <col/>
@@ -159,9 +159,9 @@
                                                  ac:schema-version="1">
                                 <ac:parameter ac:name="server">Jira</ac:parameter>
                                 <ac:parameter ac:name="serverId">edb5d89c-a7c0-3ad9-8d19-5c4797a2779f</ac:parameter>
-                                <ac:parameter ac:name="key">[(${jiraIssueKey})]</ac:parameter>
+                                <ac:parameter ac:name="key">[[${jiraIssueKey}]]</ac:parameter>
                             </ac:structured-macro>
-                            <span style="color: rgb(255,255,255);">[(${jiraIssueKey})]</span>
+                            <span style="color: rgb(255,255,255);">[[${jiraIssueKey}]]</span>
                         </p>
                     </div>
                 </td>

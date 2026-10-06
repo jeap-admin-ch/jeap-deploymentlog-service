@@ -1,7 +1,7 @@
 <th:block xmlns:th="http://www.thymeleaf.org">
     <div th:replace="~{fragment/generated-infoblock :: generated-infoblock}"></div>
 
-    <h2>Deployment auf [(${deploymentHistoryOverview.environmentName})]</h2>
+    <h2>Deployment auf [[${deploymentHistoryOverview.environmentName}]]</h2>
     <table class="wrapped">
         <tbody>
         <tr>
@@ -54,14 +54,14 @@
                 <span th:unless="${deployment.componentPageUrl != null}" th:text="${deployment.component}"></span>
             </td>
             <td>
-                <a th:href="${deployment.versionControlUrl}" th:if="${deployment.version} != '(undeployed)'" target="_blank">[(${deployment.version})]</a>
+                <a th:href="${deployment.versionControlUrl}" th:if="${deployment.version} != '(undeployed)'" target="_blank">[[${deployment.version}]]</a>
                 <span th:if="${deployment.version} == '(undeployed)'"><i>(Undeployed)</i></span>
             </td>
             <td colspan="1" th:text="${deployment.startedBy}"></td>
         </tr>
         </tbody>
     </table>
-    <p>Zeigt nur die Deployments seit dem [(${deploymentHistoryOverview.deploymentHistoryOverviewMinStartedAt})] (maximal [(${deploymentHistoryOverview.deploymentHistoryMaxShow})] Deployments)</p>
+    <p>Zeigt nur die Deployments seit dem [[${deploymentHistoryOverview.deploymentHistoryOverviewMinStartedAt}]] (maximal [[${deploymentHistoryOverview.deploymentHistoryMaxShow}]] Deployments)</p>
 
     <div th:replace="~{fragment/legend-status :: legend-status}"></div>
 

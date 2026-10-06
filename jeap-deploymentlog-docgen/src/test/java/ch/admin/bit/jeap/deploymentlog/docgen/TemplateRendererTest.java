@@ -33,6 +33,27 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderSystemPage_escapesEnvironmentAndVersionNames() {
+        SystemPageDto systemPageDto = SystemPageDto.builder()
+                .name("SYSTEM A")
+                .environmentNamesArrayList(List.of("DEV<&>"))
+                .componentList(List.of(ComponentDto.builder()
+                        .componentName("component")
+                        .componentEnvDtoList(List.of(ComponentEnvDto.builder()
+                                .versionName("1.0.0<&>")
+                                .color(Color.NONE)
+                                .build()))
+                        .build()))
+                .build();
+
+        String content = templateRenderer.renderSystemPage(systemPageDto);
+        assertThat(content)
+                .contains("DEV&lt;&amp;&gt;")
+                .contains("1.0.0&lt;&amp;&gt;")
+                .doesNotContain("DEV<&>", "1.0.0<&>");
+    }
+
+    @Test
     void renderComponentPageWithoutFlows() {
         String content = templateRenderer.renderComponentPage(ComponentPageDto.builder()
                 .componentName("component")
@@ -192,7 +213,7 @@ class TemplateRendererTest {
         DeploymentDto deploymentDto = DeploymentDto.builder()
                 .component("service<&>")
                 .system("SYSTEM A")
-                .version("0.0.1")
+                .version("0.0.1<&>")
                 .versionControlUrl("https://somewere.com")
                 .startedBy("John Doe")
                 .deploymentLetterLink("01.01.2022 - 12:00:00 Deployment Letter 123")
@@ -203,14 +224,16 @@ class TemplateRendererTest {
 
         DeploymentHistoryPageDto deploymentHistoryPageDto = DeploymentHistoryPageDto.builder()
                 .deploymentHistoryMaxShow(1)
-                .environmentName("ENV")
+                .environmentName("ENV<&>")
                 .systemName("SYSTEM A")
                 .deployments(List.of(deploymentDto))
                 .build();
 
         String content = templateRenderer.renderDeploymentHistoryPage(deploymentHistoryPageDto);
         assertThat(content).contains("<span>service&lt;&amp;&gt;</span>")
-                .doesNotContain("ri:content-title=\"service", "service<&>");
+                .contains("Deployment auf ENV&lt;&amp;&gt;")
+                .contains(">0.0.1&lt;&amp;&gt;</a>")
+                .doesNotContain("ri:content-title=\"service", "service<&>", "ENV<&>", "0.0.1<&>");
 
         DeploymentDto linked = DeploymentDto.builder().component("service<&>")
                 .componentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42").build();
@@ -447,11 +470,100 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderDeploymentLetterPage_escapesDeploymentData() {
+        DeploymentLetterPageDto deploymentLetterPageDto = DeploymentLetterPageDto.builder()
+                .deploymentId("123")
+                .startedAt("01.01.2022 - 12:00:00")
+                .componentName("Microservice A")
+                .environmentName("PROD<&>")
+                .startedBy("CI <ci@example.com> & Jenkins")
+                .state("SUCCESS")
+                .version("1.0.0<&>")
+                .externalId("deploy<123>&ext")
+                .targetType("CF<&>")
+                .targetUrl("https://target.example.com/cf?org=a&space=b")
+                .targetDetails("details <with@special> & chars")
+                .deploymentUnitType("K8S<&>")
+                .deploymentUnitCoordinates("registry.example.com/repo/image<tag>")
+                .links(List.of(LinkDto.builder()
+                        .linkLabel("theLabel<&>")
+                        .linkUrl("https://link.example.com/a?b=1&c=2")
+                        .build()))
+                .buildJobLinks(Set.of("https://ci.example.com/job/123?token=x&y=1"))
+                .remedyChangeId("CHG<123>&")
+                .remedyChangeLink("https://remedy.example.com")
+                .changeComparedToVersion("1.2.3<&>")
+                .changeJiraIssueKeys(Set.of("JEAP-1<&>"))
+                .changeComment("comment with <tag> & ampersand")
+                .sequence("NEW")
+                .deploymentTypes("CODE, CONFIG<&>")
+                .build();
+
+        String content = templateRenderer.renderDeploymentLetterPage(deploymentLetterPageDto);
+        assertNotNull(content);
+        assertThat(content)
+                .contains("CI &lt;ci@example.com&gt; &amp; Jenkins")
+                .contains("1.0.0&lt;&amp;&gt;")
+                .contains("PROD&lt;&amp;&gt;")
+                .contains("deploy&lt;123&gt;&amp;ext")
+                .contains("CF&lt;&amp;&gt;")
+                .contains("https://target.example.com/cf?org=a&amp;space=b")
+                .contains("details &lt;with@special&gt; &amp; chars")
+                .contains("K8S&lt;&amp;&gt;")
+                .contains("registry.example.com/repo/image&lt;tag&gt;")
+                .contains("theLabel&lt;&amp;&gt;")
+                .contains("https://link.example.com/a?b=1&amp;c=2")
+                .contains("https://ci.example.com/job/123?token=x&amp;y=1")
+                .contains("CHG&lt;123&gt;&amp;")
+                .contains("Änderungen zu Version 1.2.3&lt;&amp;&gt;")
+                .contains("comment with &lt;tag&gt; &amp; ampersand")
+                .contains("JEAP-1&lt;&amp;&gt;")
+                .contains("CODE, CONFIG&lt;&amp;&gt;")
+                .doesNotContain("CI <ci@example.com>", "1.0.0<&>", "PROD<&>", "deploy<123>", "CF<&>",
+                        "details <with@special>", "K8S<&>", "image<tag>", "theLabel<&>", "CHG<123>",
+                        "1.2.3<&>", "comment with <tag>", "JEAP-1<&>", "CONFIG<&>");
+    }
+
+    @Test
+    void renderUndeploymentLetterPage_escapesDeploymentData() {
+        DeploymentLetterPageDto deploymentLetterPageDto = DeploymentLetterPageDto.builder()
+                .deploymentId("123")
+                .startedAt("01.01.2022 - 12:00:00")
+                .componentName("Microservice A")
+                .environmentName("PROD<&>")
+                .startedBy("CI <ci@example.com> & Jenkins")
+                .state("SUCCESS")
+                .externalId("undeploy<123>&ext")
+                .targetType("CF<&>")
+                .targetUrl("https://target.example.com/cf?org=a&space=b")
+                .targetDetails("details <with@special> & chars")
+                .links(List.of(LinkDto.builder()
+                        .linkLabel("theLabel<&>")
+                        .linkUrl("https://link.example.com/a?b=1&c=2")
+                        .build()))
+                .sequence("UNDEPLOYED")
+                .build();
+
+        String content = templateRenderer.renderUndeploymentLetterPage(deploymentLetterPageDto);
+        assertNotNull(content);
+        assertThat(content)
+                .contains("CI &lt;ci@example.com&gt; &amp; Jenkins")
+                .contains("PROD&lt;&amp;&gt;")
+                .contains("undeploy&lt;123&gt;&amp;ext")
+                .contains("CF&lt;&amp;&gt;")
+                .contains("https://target.example.com/cf?org=a&amp;space=b")
+                .contains("details &lt;with@special&gt; &amp; chars")
+                .contains("theLabel&lt;&amp;&gt;")
+                .doesNotContain("CI <ci@example.com>", "PROD<&>", "undeploy<123>", "CF<&>",
+                        "details <with@special>", "theLabel<&>");
+    }
+
+    @Test
     void renderDeploymentHistoryOverviewPage() {
         DeploymentDto deploymentDto = DeploymentDto.builder()
                 .component("service<&>")
                 .system("SYSTEM A")
-                .version("0.0.1")
+                .version("0.0.1<&>")
                 .versionControlUrl("https://somewere.com")
                 .startedBy("John Doe")
                 .deploymentLetterLink("01.01.2022 - 12:00:00 Deployment Letter 123")
@@ -464,7 +576,7 @@ class TemplateRendererTest {
         DeploymentHistoryOverviewPageDto dto = DeploymentHistoryOverviewPageDto.builder()
                 .deploymentHistoryMaxShow(1)
                 .deploymentHistoryOverviewMinStartedAt("22.08.2023")
-                .environmentName("ENV")
+                .environmentName("ENV<&>")
                 .deployments(List.of(deploymentDto))
                 .build();
 
@@ -472,9 +584,11 @@ class TemplateRendererTest {
         assertThat(content)
                 .isNotNull()
                 .contains(dto.getDeploymentHistoryOverviewMinStartedAt())
+                .contains("Deployment auf ENV&lt;&amp;&gt;")
+                .contains(">0.0.1&lt;&amp;&gt;</a>")
                 .contains("CODE, CONFIG")
                 .contains("<span>service&lt;&amp;&gt;</span>")
-                .doesNotContain("ri:content-title=\"service", "service<&>");
+                .doesNotContain("ri:content-title=\"service", "service<&>", "ENV<&>", "0.0.1<&>");
 
         DeploymentDto linked = DeploymentDto.builder().component("service<&>")
                 .componentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42").build();

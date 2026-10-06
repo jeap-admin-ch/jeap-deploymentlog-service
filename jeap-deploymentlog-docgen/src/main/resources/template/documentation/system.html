@@ -7,7 +7,7 @@
         <tr>
             <th>Komponente</th>
             <th:block th:each="envName: ${system.environmentNamesArrayList}">
-                <th style="text-align: center;"> [(${envName})]</th>
+                <th style="text-align: center;"> [[${envName}]]</th>
             </th:block>
         </tr>
         <tr th:each="component: ${system.componentList}">
@@ -21,7 +21,7 @@
                 <td th:class="${componentEnv.colorClass}">
                     <p style="text-align: center;" title="">
                         <a th:href="${componentEnv.versionControlUrl}"
-                           target="_blank">[(${componentEnv.versionName})]</a>
+                           target="_blank">[[${componentEnv.versionName}]]</a>
                     </p>
                     <p style="text-align: center;" title="">
                         <ac:link th:if="${componentEnv.deploymentLetterUrl}">
