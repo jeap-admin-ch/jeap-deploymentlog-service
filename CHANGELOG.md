@@ -9,6 +9,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Preserve pending page-generation requests during full and per-system regeneration, including migration.
+  Complete only the captured requests after all pages succeed, keeping partial failures repairable.
+  Refresh system overviews after token capture and history links after component-page generation.
+
 - Return HTTP 200 without enqueueing documentation when deployment creation reuses an existing deployment.
   Defer retention-refresh lock contention without warning logs or generation-error metrics.
 

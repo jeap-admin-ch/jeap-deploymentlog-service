@@ -114,7 +114,7 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPages();
 
         // then
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
     }
 
     @Test
@@ -175,7 +175,7 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPagesForSystem(systemName, null);
 
         // then
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
     }
 
     @ParameterizedTest
@@ -264,8 +264,8 @@ class DocumentationGeneratorTest {
         documentationGenerator.migrateSystem(system);
 
         // then
-        verify(confluenceAdapterMock, times(1)).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
-        verify(confluenceAdapterMock).updatePageById(eq("existing-stage-page"),
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(eq(rootPageId + "/Systems"), eq(systemName), any());
+        verify(confluenceAdapterMock, times(2)).updatePageById(eq("existing-stage-page"),
                 eq(rootPageId + "/Systems/" + systemName + "/Deployments (" + systemName + ")"),
                 eq("Deployment History REF (SYSTEM A)"), any(), eq(true));
     }
@@ -398,7 +398,7 @@ class DocumentationGeneratorTest {
         generator.generateAllPages();
 
         // then - the top-level system page is created under exactly the configured root page id
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(eq(configuredRootPageId + "/Systems"), eq(systemName), any());
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(eq(configuredRootPageId + "/Systems"), eq(systemName), any());
     }
 
     @Test
@@ -484,9 +484,9 @@ class DocumentationGeneratorTest {
         String groupPageId = systemsPageId + "/" + group.getName() + " (Group)";
         verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
                 eq(systemsPageId), eq(group.getName() + " (Group)"), any());
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(
                 eq(groupPageId), eq(groupedSystem.getName()), any());
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(
                 eq(systemsPageId), eq(ungroupedSystem.getName()), any());
     }
 
@@ -511,7 +511,7 @@ class DocumentationGeneratorTest {
 
         verify(confluenceAdapterMock).updatePageById(eq("legacy-group-page"), eq(systemsPageId),
                 eq("Example Group (Group)"), any(), eq(false));
-        verify(confluenceAdapterMock).addOrUpdatePageUnderAncestor(
+        verify(confluenceAdapterMock, times(2)).addOrUpdatePageUnderAncestor(
                 eq("legacy-group-page"), eq("SYSTEM A"), any());
     }
 
@@ -539,9 +539,9 @@ class DocumentationGeneratorTest {
         documentationGenerator.generateAllPages();
 
         String groupPageId = ROOT_PAGE_ID + "/Systems/" + group.getName() + " (Group)";
-        verify(confluenceAdapterMock).updatePageById(eq("existing-system-page"), eq(groupPageId),
+        verify(confluenceAdapterMock, times(2)).updatePageById(eq("existing-system-page"), eq(groupPageId),
                 eq(system.getName()), any(), eq(true));
-        verify(generatorServiceMock).persistSystemPage(system, "existing-system-page", groupPageId);
+        verify(generatorServiceMock, times(2)).persistSystemPage(system, "existing-system-page", groupPageId);
     }
 
     @Test
@@ -671,6 +671,10 @@ class DocumentationGeneratorTest {
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
         lenient().when(documentationStructureLockMock.runLocked(any()))
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
+        lenient().when(systemRepositoryMock.getById(any())).thenAnswer(invocation ->
+                systemRepositoryMock.findAllWithSystemGroup().stream()
+                        .filter(system -> system.getId().equals(invocation.getArgument(0)))
+                        .findFirst().orElseThrow());
         lenient().when(transactionRunnerMock.run(any()))
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
 

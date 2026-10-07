@@ -1,6 +1,9 @@
 package ch.admin.bit.jeap.deploymentlog.web;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.ConfluenceAdapter;
+import ch.admin.bit.jeap.deploymentlog.docgen.ComponentPageGenerator;
+import ch.admin.bit.jeap.deploymentlog.domain.ComponentPage;
+import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
 import ch.admin.bit.jeap.deploymentlog.docgen.JiraAdapter;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
@@ -16,6 +19,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -27,11 +33,14 @@ import org.hibernate.engine.spi.SessionImplementor;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doAnswer;
 
@@ -42,6 +51,10 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     private ConfluenceAdapter confluence;
     @MockitoSpyBean
     private JiraAdapter jira;
+    @MockitoSpyBean
+    private ComponentPageGenerator componentPageGenerator;
+    @Autowired
+    private ComponentPageRepository componentPages;
     @Autowired
     private DocumentationGenerator generator;
     @Autowired
@@ -184,6 +197,146 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         deploymentService.requestPageGenerationIfAbsent(id);
         assertThat(deploymentRepository.getPageGenerationRequestId(id)).isEmpty();
         assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isFalse();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"all,false", "system,false", "migration,false", "system,true"})
+    void bulkRepairRemainsPendingUntilAllPagesSucceed(String scope, boolean concurrentRequest) {
+        failProjectPage.set(true);
+        var dto = createDeploymentDto();
+        dto.setStartedAt(ZonedDateTime.now().minusMinutes(10));
+        postDeployment(dto, "bulk-repair");
+        awaitUntilAsyncTasksCompleted();
+        var id = deploymentRepository.findByExternalId("bulk-repair").orElseThrow().getId();
+        var initialRequest = deploymentRepository.getPageGenerationRequestId(id).orElseThrow();
+        deploymentService.completePageGenerationRequest(id, initialRequest);
+        pageRepository.delete(pageRepository.findDeploymentPageByDeploymentId(id).orElseThrow());
+        assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
+
+        doAnswer(invocation -> {
+            var trackedPage = new TransactionTemplate(transactionManager).execute(
+                    status -> pageRepository.findDeploymentPageByDeploymentId(id));
+            assertThat(trackedPage)
+                    .as("Deployment links must be persisted before rendering component pages")
+                    .isPresent();
+            return invocation.callRealMethod();
+        }).when(componentPageGenerator).generatePages(anyString(), anyCollection());
+
+        assertThatThrownBy(() -> regenerate(scope))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(pageRepository.findDeploymentPageByDeploymentId(id)).isPresent();
+        assertThat(deploymentRepository.getPageGenerationRequestId(id)).isPresent();
+        assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
+        assertThat(deploymentService.getMissingDeploymentPages(100, 0, 60)).contains(id);
+
+        failProjectPage.set(false);
+        var nextRequest = new AtomicReference<UUID>();
+        if (concurrentRequest) {
+            doAnswer(invocation -> {
+                assertNoDatabaseTransaction();
+                nextRequest.set(new TransactionTemplate(transactionManager).execute(status -> {
+                    deploymentService.resumePageGeneration(id);
+                    return deploymentRepository.getPageGenerationRequestId(id).orElseThrow();
+                }));
+                return invocation.callRealMethod();
+            }).when(jira).updateIssuePageRemoteLink(anyString(), anyString());
+        }
+        regenerate(scope);
+
+        if (concurrentRequest) {
+            assertThat(nextRequest.get()).isNotNull();
+            assertThat(deploymentRepository.getPageGenerationRequestId(id)).contains(nextRequest.get());
+            assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
+        } else {
+            assertThat(deploymentRepository.getPageGenerationRequestId(id)).isEmpty();
+            assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isFalse();
+            assertThat(deploymentService.getMissingDeploymentPages(100, 0, 60)).doesNotContain(id);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"all", "system", "migration"})
+    void bulkRefreshesOverviewForRequestArrivingDuringStructureSync(String scope) {
+        var dto = createDeploymentDto();
+        dto.setStartedAt(ZonedDateTime.now().minusMinutes(10));
+        postDeployment(dto, "overview-race");
+        awaitUntilAsyncTasksCompleted();
+        var id = deploymentRepository.findByExternalId("overview-race").orElseThrow().getId();
+        pageRepository.delete(pageRepository.findDeploymentPageByDeploymentId(id).orElseThrow());
+        var firstOverview = new AtomicReference<String>();
+        var finalOverview = new AtomicReference<String>();
+        doAnswer(invocation -> {
+            assertNoDatabaseTransaction();
+            String content = invocation.<Supplier<String>>getArgument(3).get();
+            finalOverview.set(content);
+            if (firstOverview.compareAndSet(null, content)) {
+                deploymentService.updateState("overview-race", DeploymentState.SUCCESS, "completed",
+                        ZonedDateTime.now(), Map.of());
+                deploymentService.resumePageGeneration(id);
+            }
+            assertNoDatabaseTransaction();
+            return true;
+        }).when(confluence).updatePageById(anyString(), anyString(), eq("TestSystem"), any(), anyBoolean());
+
+        regenerate(scope);
+
+        String version = dto.getComponentVersion().getVersionName();
+        assertThat(firstOverview.get()).doesNotContain(version);
+        assertThat(pageRepository.findDeploymentPageByDeploymentId(id)).isPresent();
+        assertThat(finalOverview.get()).contains(version, "test (DEV)\"");
+        assertThat(deploymentRepository.getPageGenerationRequestId(id)).isEmpty();
+        assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"all", "system", "migration"})
+    void bulkRefreshesHistoryWithRecreatedComponentPageLink(String scope) throws Exception {
+        var dto = createDeploymentDto();
+        dto.setStartedAt(ZonedDateTime.now().minusMinutes(10));
+        postDeployment(dto, "component-link");
+        awaitUntilAsyncTasksCompleted();
+        deploymentService.updateState("component-link", DeploymentState.SUCCESS, "completed",
+                ZonedDateTime.now(), Map.of());
+        var componentId = new TransactionTemplate(transactionManager).execute(status ->
+                deploymentRepository.findByExternalId("component-link").orElseThrow()
+                        .getComponentVersion().getComponent().getId());
+        componentPages.save(ComponentPage.create(componentId, "deleted-component-page", "old-parent"));
+        doAnswer(invocation -> {
+            assertNoDatabaseTransaction();
+            return false;
+        }).when(confluence).updatePageById(eq("deleted-component-page"), anyString(), anyString(), any(), anyBoolean());
+        var finalHistory = new AtomicReference<String>();
+        doAnswer(invocation -> {
+            assertNoDatabaseTransaction();
+            finalHistory.set(invocation.<Supplier<String>>getArgument(3).get());
+            assertNoDatabaseTransaction();
+            return true;
+        }).when(confluence).updatePageById(anyString(), anyString(),
+                eq("Deployment History DEV (TestSystem)"), any(), anyBoolean());
+
+        regenerate(scope);
+
+        var trackedPage = componentPages.findByComponentId(componentId).orElseThrow();
+        assertThat(trackedPage.getPageId()).isNotEqualTo("deleted-component-page");
+        assertThat(finalHistory.get()).contains("viewpage.action?pageId=" + trackedPage.getPageId())
+                .doesNotContain("deleted-component-page");
+    }
+
+    private void regenerate(String scope) {
+        switch (scope) {
+            case "all" -> generator.generateAllPages();
+            case "system" -> generator.generateAllPagesForSystem("TestSystem", ZonedDateTime.now().getYear());
+            case "migration" -> {
+                var system = new TransactionTemplate(transactionManager).execute(status -> {
+                    var loaded = systemRepository.findByNameIgnoreCase("TestSystem").orElseThrow();
+                    loaded.getComponents().size();
+                    return loaded;
+                });
+                generator.migrateSystem(system);
+            }
+            default -> throw new IllegalArgumentException(scope);
+        }
     }
 
     @Test

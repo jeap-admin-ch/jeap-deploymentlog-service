@@ -97,12 +97,12 @@ public class DocumentationGenerator {
     }
 
     private void migrateSystem(System system, DocumentationStructure structure) {
-        SystemStructure systemStructure = structure.systems().get(system.getId());
-        componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
-        recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
+        Map<UUID, UUID> requests = prepareGenerationRequests(system, null);
+        regenerateSystemPages(system, null, structure);
         environmentRepository.findAll().forEach(environment ->
                 generateDeploymentHistoryOverviewPageForEnvironment(structure.stagesPageId(), environment, null));
         generateAllJiraProjectPages(structure);
+        completeGenerationRequests(requests);
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -277,15 +277,16 @@ public class DocumentationGenerator {
     }
 
     private void generateAllPages(DocumentationStructure structure) {
+        Map<UUID, UUID> requests = new HashMap<>();
         findOrderedSystems(true).forEach(system -> {
-            SystemStructure systemStructure = structure.systems().get(system.getId());
-            componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
-            recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, null);
+            requests.putAll(prepareGenerationRequests(system, null));
+            regenerateSystemPages(system, null, structure);
         });
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
         generateAllJiraProjectPages(structure);
+        completeGenerationRequests(requests);
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -299,13 +300,13 @@ public class DocumentationGenerator {
 
     private void generateAllPagesForSystem(String systemName, Integer year, DocumentationStructure structure) {
         System system = transactionRunner.run(() -> initializeSystem(systemRepository.findByNameIgnoreCase(systemName).orElseThrow()));
-        SystemStructure systemStructure = structure.systems().get(system.getId());
-        componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
-        recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, year);
+        Map<UUID, UUID> requests = prepareGenerationRequests(system, year);
+        regenerateSystemPages(system, year, structure);
         Iterable<Environment> environmentList = environmentRepository.findAll();
         environmentList.forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                 structure.stagesPageId(), environment, null));
         generateAllJiraProjectPages(structure);
+        completeGenerationRequests(requests);
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -321,6 +322,45 @@ public class DocumentationGenerator {
             return result;
         });
         links.forEach(jiraAdapter::updateIssuePageRemoteLink);
+    }
+
+    private void regenerateSystemPages(System capturedSystem, Integer year, DocumentationStructure structure) {
+        System system = transactionRunner.run(() -> initializeSystem(systemRepository.getById(capturedSystem.getId())));
+        SystemStructure systemStructure = structure.systems().get(system.getId());
+        recursivelyGenerateDeploymentHistory(systemStructure.deploymentsPageId(), system, year);
+        componentPageGenerator.generatePages(systemStructure.componentsPageId(), system.getComponents());
+        // History links depend on the component tracking saved by the preceding step.
+        generatorService.getEnvironmentsForSystem(system).forEach(environment ->
+                generateDeploymentHistoryPageForEnvironment(systemStructure.deploymentsPageId(), environment, system));
+        refreshAffectedSystem(structure, system);
+    }
+
+    // Capture tokens before rendering so completion cannot acknowledge requests for newer deployment data.
+    private Map<UUID, UUID> prepareGenerationRequests(System system, Integer year) {
+        Map<UUID, UUID> requests = new HashMap<>();
+        for (Environment environment : generatorService.getEnvironmentsForSystem(system)) {
+            List<UUID> deploymentIds = transactionRunner.run(() -> deploymentRepository
+                    .findAllDeploymentForSystemAndEnv(system, environment).stream()
+                    .filter(deployment -> year == null || deployment.getStartedAt().getYear() == year)
+                    .map(Deployment::getId)
+                    .toList());
+            for (UUID deploymentId : deploymentIds) {
+                transactionRunner.run(() -> {
+                    deploymentRepository.requestPageGenerationIfAbsent(deploymentId);
+                    deploymentRepository.getPageGenerationRequestId(deploymentId)
+                            .ifPresent(requestId -> requests.put(deploymentId, requestId));
+                    return null;
+                });
+            }
+        }
+        return requests;
+    }
+
+    private void completeGenerationRequests(Map<UUID, UUID> requests) {
+        requests.forEach((deploymentId, requestId) -> transactionRunner.run(() -> {
+            deploymentRepository.completePageGenerationRequest(deploymentId, requestId);
+            return null;
+        }));
     }
 
     private void recursivelyGenerateDeploymentHistory(String deploymentsPageId, System system, Integer year) {
