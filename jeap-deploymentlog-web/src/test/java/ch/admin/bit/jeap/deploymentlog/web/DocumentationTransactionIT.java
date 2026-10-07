@@ -24,6 +24,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -46,6 +48,13 @@ import static org.mockito.Mockito.doAnswer;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class DocumentationTransactionIT extends IntegrationTestBase {
+
+    @DynamicPropertySource
+    static void isolatedDatabase(DynamicPropertyRegistry registry) {
+        // Other cached test contexts can keep the shared H2 database alive after @DirtiesContext.
+        String url = "jdbc:h2:mem:documentation-transactions-" + UUID.randomUUID() + ";MODE=PostgreSQL";
+        registry.add("spring.datasource.url", () -> url);
+    }
 
     @MockitoSpyBean
     private ConfluenceAdapter confluence;
