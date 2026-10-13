@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionStateRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRefreshTask;
@@ -53,6 +54,7 @@ public class SchedulingService {
     private final DataRetentionRepository dataRetentionRepository;
     private final ComponentPageRepository componentPageRepository;
     private final VersionDeploymentRepository versionDeploymentRepository;
+    private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
     private AtomicLong deploymentPageGenerationLagCounter;
@@ -114,6 +116,9 @@ public class SchedulingService {
             if (housekeepingConfig.getComponentPages().isEnabled()) {
                 runHousekeepingStep("component-page reconciliation", this::componentPageHousekeeping);
             }
+            if (housekeepingConfig.getUndeployedComponents().isEnabled()) {
+                runHousekeepingStep("undeployed-component cleanup", this::undeployedComponentHousekeeping);
+            }
         } finally {
             retryPendingDataRetentionRefreshes();
         }
@@ -124,6 +129,20 @@ public class SchedulingService {
             step.run();
         } catch (RuntimeException ex) {
             log.error("Housekeeping step '{}' failed", name, ex);
+        }
+    }
+
+    /**
+     * Deletes the tombstones of components undeployed longer ago than the retention, so an environment stops
+     * reporting them as undeployed. No page needs regenerating: the system page already omits an undeployed
+     * component on that environment.
+     */
+    private void undeployedComponentHousekeeping() {
+        int retentionDays = housekeepingConfig.getUndeployedComponents().getRetentionDays();
+        ZonedDateTime cutoff = ZonedDateTime.now().minusDays(retentionDays);
+        int deleted = environmentComponentVersionStateRepository.deleteUndeployedBefore(cutoff);
+        if (deleted > 0) {
+            log.info("Deleted {} tombstones of components undeployed before {}", deleted, cutoff);
         }
     }
 

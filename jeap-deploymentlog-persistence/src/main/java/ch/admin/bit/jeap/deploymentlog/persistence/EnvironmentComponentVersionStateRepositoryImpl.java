@@ -3,7 +3,9 @@ package ch.admin.bit.jeap.deploymentlog.persistence;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,12 +37,13 @@ public class EnvironmentComponentVersionStateRepositoryImpl implements Environme
     }
 
     @Override
-    public void deleteByComponentEqualsAndEnvironmentEquals(Component component, Environment environment) {
-        jpaEnvironmentComponentVersionStateRepository.deleteByComponentEqualsAndEnvironmentEquals(component, environment);
+    public List<ComponentVersionSummary> getDeployedComponentsOnEnvironment(Environment environment, boolean includeUndeployed) {
+        return jpaEnvironmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environment.getId(), includeUndeployed);
     }
 
     @Override
-    public List<ComponentVersionSummary> getDeployedComponentsOnEnvironment(Environment environment) {
-        return jpaEnvironmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environment.getId());
+    @Transactional
+    public int deleteUndeployedBefore(ZonedDateTime undeployedBefore) {
+        return jpaEnvironmentComponentVersionStateRepository.deleteUndeployedBefore(undeployedBefore);
     }
 }

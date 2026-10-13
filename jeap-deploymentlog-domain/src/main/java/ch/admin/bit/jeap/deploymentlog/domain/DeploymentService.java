@@ -207,7 +207,7 @@ public class DeploymentService {
     }
 
     @SuppressWarnings("java:S107")
-    public UUID createUndeployment(Deployment previousDeployment,
+    public Deployment createUndeployment(Deployment previousDeployment,
                                    String externalId,
                                    String systemName,
                                    String componentName,
@@ -241,11 +241,14 @@ public class DeploymentService {
                 .remedyChangeId(remedyChangeId)
                 .build();
 
-        return deploymentRepository.save(deployment).getId();
+        return deploymentRepository.save(deployment);
     }
 
     private DeploymentSequence getDeploymentSequence(ch.admin.bit.jeap.deploymentlog.domain.Component component, Environment environment, String versionName) {
-        final Optional<EnvironmentComponentVersionState> currentDeploymentState = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component);
+        // A tombstoned state is not a live deployment to compare against: a redeploy after an undeploy is a
+        // first deployment on this environment again, not a new version of one that is still running.
+        final Optional<EnvironmentComponentVersionState> currentDeploymentState = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)
+                .filter(state -> !state.isUndeployed());
         if (currentDeploymentState.isEmpty()) {
             return DeploymentSequence.FIRST;
         }

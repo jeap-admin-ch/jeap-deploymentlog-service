@@ -22,15 +22,27 @@ public class SystemService {
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     private final SystemAliasRepository systemAliasRepository;
 
+    /**
+     * Marks a component as undeployed on an environment. The environment's snapshot row is kept - pointing at the
+     * undeployment - rather than deleted, so a consumer can still tell that the component was deployed there and
+     * learn when it was undeployed, instead of the component simply disappearing from the snapshot.
+     */
     @Transactional
-    public void deleteComponent(String systemName, String componentName, String environmentName) throws SystemNotFoundException, EnvironmentNotFoundException, ComponentNotFoundException {
+    public void markComponentUndeployed(String systemName, String componentName, String environmentName, Deployment undeployment) throws SystemNotFoundException, EnvironmentNotFoundException, ComponentNotFoundException {
         final System system = retrieveSystemByName(systemName);
         final Component component = retrieveComponentByName(system, componentName);
         final Environment environment = retrieveEnvironmentByName(environmentName);
 
-        environmentComponentVersionStateRepository.deleteByComponentEqualsAndEnvironmentEquals(component, environment);
-        boolean componentNotDeployedAnywhere = environmentComponentVersionStateRepository.findByComponentIn(singleton(component)).isEmpty();
-        if (componentNotDeployedAnywhere) {
+        // Serialize with DeploymentService.updateEnvironmentComponentVersionState, even for the first creation of the snapshot
+        componentRepository.lockById(component.getId());
+        environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)
+                .ifPresentOrElse(
+                        state -> state.updateVersion(undeployment.getComponentVersion(), undeployment),
+                        () -> environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(undeployment)));
+
+        boolean componentNotActivelyDeployedAnywhere = environmentComponentVersionStateRepository.findByComponentIn(singleton(component)).stream()
+                .allMatch(state -> state.getDeployment().getSequence() == DeploymentSequence.UNDEPLOYED);
+        if (componentNotActivelyDeployedAnywhere) {
             component.inactive();
         }
     }
@@ -63,6 +75,7 @@ public class SystemService {
         Environment environment = retrieveEnvironmentByName(environmentName);
 
         return environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)
+                .filter(envState -> !envState.isUndeployed())
                 .map(envState -> envState.getComponentVersion().getVersionName());
     }
 
@@ -72,6 +85,7 @@ public class SystemService {
         Environment environment = retrieveEnvironmentByName(environmentName);
 
         return environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)
+                .filter(envState -> !envState.isUndeployed())
                 .map(EnvironmentComponentVersionState::getDeployment);
     }
 

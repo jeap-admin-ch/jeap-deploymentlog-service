@@ -80,9 +80,9 @@ public class SystemController {
 
         log.debug("Delete the component '{}' from system '{}' on environment '{}'", componentName, systemName, environmentName);
 
-        systemService.deleteComponent(systemName, componentName, environmentName);
-        UUID undeploymentId = deploymentService.createUndeployment(previousDeployment, externalId, systemName, componentName, environmentName, undeploymentCreateDto.getStartedAt(), undeploymentCreateDto.getStartedBy(), undeploymentCreateDto.getRemedyChangeId());
-        triggerDocgenForUndeployment(systemName, undeploymentId);
+        Deployment undeployment = deploymentService.createUndeployment(previousDeployment, externalId, systemName, componentName, environmentName, undeploymentCreateDto.getStartedAt(), undeploymentCreateDto.getStartedBy(), undeploymentCreateDto.getRemedyChangeId());
+        systemService.markComponentUndeployed(systemName, componentName, environmentName, undeployment);
+        triggerDocgenForUndeployment(systemName, undeployment.getId());
     }
 
     @GetMapping(value = "/{systemName}/component/{componentName}/currentVersion/{environment}", produces = "text/plain")

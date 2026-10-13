@@ -65,8 +65,8 @@ therefore repaired along with the deployment, without being tracked separately.
 
 ### Housekeeping
 
-The common housekeeping run performs three independent cleanup steps in this order: Confluence deployment-page
-cleanup, persistent data retention and component-page reconciliation. Each step can be disabled without disabling
+The common housekeeping run performs four independent cleanup steps in this order: Confluence deployment-page
+cleanup, persistent data retention, component-page reconciliation and undeployed-component cleanup. Each step can be disabled without disabling
 the others. The run uses one ShedLock lock, so multiple service instances cannot execute it concurrently.
 
 ```properties
@@ -82,6 +82,9 @@ jeap.deploymentlog.housekeeping.data-retention.batch-size=500
 
 jeap.deploymentlog.housekeeping.component-pages.enabled=true
 jeap.deploymentlog.housekeeping.component-pages.batch-size=100
+
+jeap.deploymentlog.housekeeping.undeployed-components.enabled=true
+jeap.deploymentlog.housekeeping.undeployed-components.retention-days=730
 ```
 
 The defaults and validation rules for all properties are listed in
@@ -141,6 +144,20 @@ runs between them without an open database transaction. If Confluence deletion f
 later housekeeping run retries it while continuing with other candidates. If a concurrent relevant deployment appears, the recheck
 or final conditional deletion preserves the tracking as far as the HTTP/database boundary permits; normal
 component-page generation recreates a deleted page when required.
+
+#### Undeployed-component cleanup
+
+An undeployment does not delete a component's state on the environment; it keeps it as a tombstone pointing at the
+`UNDEPLOYED` deployment, so `GET /api/system/{systemName}` and `GET /api/environment/{environmentName}/components`
+(with `includeUndeployed=true`) can still report that, and when, the component was undeployed. This step deletes
+the tombstones of components undeployed more than `undeployed-components.retention-days` (default 730, two years)
+ago, after which the component is no longer reported on that environment at all. A consumer that tombstones on
+its own side, such as the architecture repository, removes the component once it is no longer reported.
+
+The selection is made on the deployment a tombstone points at when the delete runs, so a component redeployed in the
+meantime is left alone. Only the state row is deleted: the undeployment, the component and its system remain, and
+no Confluence page needs regenerating because the system page already omits a component on an environment it was
+undeployed from.
 
 #### Retrying documentation refreshes
 

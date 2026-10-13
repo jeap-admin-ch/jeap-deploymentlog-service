@@ -18,6 +18,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -133,6 +137,40 @@ class SystemControllerIT extends IntegrationTestBase {
         DeploymentSnapshotDto deploymentSnapshotDto = dto.getComponents().getFirst().getDeployments().getFirst();
         assertEquals("DEV", deploymentSnapshotDto.getEnv());
         assertEquals("1.2.3-4", deploymentSnapshotDto.getVersion());
+        assertFalse(deploymentSnapshotDto.isUndeployed());
+        assertNull(deploymentSnapshotDto.getUndeployedAt());
+    }
+
+    @Test
+    @SneakyThrows
+    void getSystem_reportsAnUndeployedComponentAsUndeployed() {
+        String externalId = "external-id-20";
+        postDeployment(createDeploymentDto(), externalId);
+        putDeploymentState(externalId, DeploymentState.SUCCESS);
+
+        UndeploymentCreateDto undeploymentCreateDto = TestData.getUndeploymentCreateDto();
+        undeploymentCreateDto.setSystemName("TestSystem");
+        undeploymentCreateDto.setEnvironmentName("DEV");
+        undeploymentCreateDto.setComponentName("test");
+        mockMvc.perform(put("/api/system/undeployment-id/undeploy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Basic " + Base64.getEncoder().encodeToString(("write:secret").getBytes()))
+                        .content(objectMapper.writeValueAsString(undeploymentCreateDto)))
+                .andExpect(status().is2xxSuccessful());
+
+        String responseBody = mockMvc.perform(get("/api/system/TestSystem")
+                        .header("Authorization", "Basic " + Base64.getEncoder().encodeToString(("read:secret").getBytes())))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        EnvironmentComponentVersionStateDto dto = objectMapper.readValue(
+                responseBody, EnvironmentComponentVersionStateDto.class);
+        DeploymentSnapshotDto deploymentSnapshotDto = dto.getComponents().getFirst().getDeployments().getFirst();
+        assertEquals("DEV", deploymentSnapshotDto.getEnv());
+        assertTrue(deploymentSnapshotDto.isUndeployed());
+        assertNotNull(deploymentSnapshotDto.getUndeployedAt());
     }
 
     @Test

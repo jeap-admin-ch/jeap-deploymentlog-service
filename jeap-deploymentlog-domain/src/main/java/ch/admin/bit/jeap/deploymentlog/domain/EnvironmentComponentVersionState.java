@@ -59,6 +59,14 @@ public class EnvironmentComponentVersionState {
         this.deployment = deployment;
     }
 
+    /**
+     * Whether this row is a tombstone: the component was undeployed from the environment, and the row is kept
+     * rather than deleted so a consumer can still learn when that happened - but it is not a live deployment.
+     */
+    public boolean isUndeployed() {
+        return deployment.getSequence() == DeploymentSequence.UNDEPLOYED;
+    }
+
     @Override
     public String toString() {
         return """

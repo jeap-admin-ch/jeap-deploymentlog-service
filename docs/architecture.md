@@ -79,7 +79,9 @@ flowchart LR
   a nullable foreign key on `System` enforces that it belongs to at most one group.
 - **`EnvironmentComponentVersionState`** holds the current state of an environment: which version of which
   component is deployed there. It is updated when a deployment is reported as `SUCCESS`, and it is what the
-  system and environment query endpoints read.
+  system and environment query endpoints read. An undeployment does not delete the row; it points it at the
+  `UNDEPLOYED` deployment instead, so the state is kept as a tombstone recording when and that the component
+  was undeployed, rather than silently disappearing.
 - **`ArtifactVersion` and `Reference`** link a deployment back to the build that produced the artefact.
   They can be published before the deployment happens and are resolved at page-generation time — via the
   deployment-unit coordinates for artifact versions, and via the reference identifiers of the deployment

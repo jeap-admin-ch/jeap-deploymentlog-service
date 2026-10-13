@@ -199,13 +199,18 @@ component of the system:
     {
       "name": "my-component",
       "deployments": [
-        { "env": "DEV", "version": "1.15.2", "deployedAt": "2026-03-18T08:16:15+01:00" },
-        { "env": "PROD", "version": "1.15.1", "deployedAt": "2026-03-10T19:02:41+01:00" }
+        { "env": "DEV", "version": "1.15.2", "deployedAt": "2026-03-18T08:16:15+01:00", "undeployed": false, "undeployedAt": null },
+        { "env": "REF", "version": null, "deployedAt": null, "undeployed": true, "undeployedAt": "2026-03-15T10:12:03+01:00" },
+        { "env": "PROD", "version": "1.15.1", "deployedAt": "2026-03-10T19:02:41+01:00", "undeployed": false, "undeployedAt": null }
       ]
     }
   ]
 }
 ```
+
+A component undeployed from an environment is still listed for it, with `undeployed` set to `true`,
+`undeployedAt` set to when the undeployment was recorded, and `version` and `deployedAt` both `null`, until housekeeping
+deletes the tombstone (see [Operations](operations.md#undeployed-component-cleanup)).
 
 `404` if the system is unknown.
 
@@ -215,9 +220,12 @@ Role `deploymentlog-write`. `{id}` is the external id of the undeployment. Body 
 `systemName`, `componentName`, `environmentName` (upper-cased), `startedAt`, `startedBy` and an optional
 `remedyChangeId`.
 
-Removes the component from the environment state, marks it inactive when it is no longer deployed anywhere,
-records an undeployment derived from the component's last deployment, and triggers the generation of an
-undeployment page. Returns `200 OK`, or `404` if the system, component or environment is unknown.
+Records an undeployment derived from the component's last deployment and marks the component's environment
+state as undeployed — the state row is kept as a tombstone rather than deleted, so `GET
+/api/environment/{environmentName}/components` excludes it by default but can still report it on request (see
+below). The component itself is marked inactive once every environment it was ever deployed to is in this
+undeployed state. Triggers the generation of an undeployment page. Returns `200 OK`, or `404` if the system,
+component or environment is unknown.
 
 ### `GET /api/system/{systemName}/component/{componentName}/currentVersion/{environment}`
 
@@ -302,8 +310,11 @@ The API uses the stable error codes `INVALID_SYSTEM_GROUP_NAME`, `SYSTEM_GROUP_N
 ### `GET /api/environment/{environmentName}/components`
 
 Roles `deploymentlog-read` or `deploymentlog-write`. Returns the components currently deployed on that
-environment across all systems, as a list of `componentName` / `version` pairs. The environment name is
-upper-cased before the lookup.
+environment across all systems, as a list of `componentName` / `version` / `undeployed` / `undeployedAt`
+entries. The environment name is upper-cased before the lookup. Undeployed components are excluded by
+default; pass `includeUndeployed=true` to have them included, with `undeployed` set to `true` and
+`undeployedAt` set to when the undeployment was recorded and `version` `null`. Existing callers that do not pass the parameter see
+no change in behaviour.
 
 ## Artifact versions and references
 

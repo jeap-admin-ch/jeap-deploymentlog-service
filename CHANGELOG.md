@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.17.0] - 2026-10-15
+
+### Dependencies
+- **ch.admin.bit.jeap:jeap-spring-boot-parent**: 41.19.0 → 41.20.0 (minor)
+
+### Changed
+
+- An undeployment no longer deletes the component's `EnvironmentComponentVersionState` row; it keeps it as a
+  tombstone pointing at the `UNDEPLOYED` deployment instead, recording when the component was undeployed.
+- `GET /api/environment/{environmentName}/components` now also returns `undeployed` and `undeployedAt` for
+  each component, and accepts an `includeUndeployed` query parameter (default `false`) to opt in to seeing
+  undeployed components. Existing callers that do not pass the parameter see no change in behaviour.
+- `GET /api/system/{systemName}` still lists a component undeployed from an environment, now with `undeployed`
+  and `undeployedAt` set for that environment; `version` and `deployedAt` are `null` for such an entry.
+- The system page in Confluence no longer lists a component once it is undeployed from every environment.
+
+### Added
+
+- Housekeeping deletes the tombstones of components undeployed more than
+  `jeap.deploymentlog.housekeeping.undeployed-components.retention-days` (default 730) ago, so they are no longer
+  reported at all. It runs with the common housekeeping job and can be switched off with
+  `jeap.deploymentlog.housekeeping.undeployed-components.enabled=false`.
+
+### Downgrade note
+
+- This only concerns downgrading the deployment log service itself to a version before this one. Deploying,
+  undeploying and redeploying components is not affected. An earlier version does not know about tombstones and
+  reports every component undeployed in the meantime as still deployed. Before downgrading, delete the
+  tombstones:
+  ```sql
+  delete from environment_component_version_state
+  where deployment_id in (select id from deployment where sequence = 'UNDEPLOYED');
+  ```
+
 ## [16.16.1] - 2026-10-14
 
 ### Fixed

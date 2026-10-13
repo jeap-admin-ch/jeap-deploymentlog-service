@@ -131,7 +131,7 @@ not set.
 
 | Property | Default | Description |
 | --- | --- | --- |
-| `jeap.deploymentlog.housekeeping.cron` | legacy cron property | Cron expression for the common page cleanup, data retention and component-page reconciliation run. The new property takes precedence. |
+| `jeap.deploymentlog.housekeeping.cron` | legacy cron property | Cron expression for the common page cleanup, data retention, component-page reconciliation and undeployed-component cleanup run. The new property takes precedence. |
 | `jeap.deploymentlog.housekeeping.confluence-pages.enabled` | `true` | Enables only cleanup of old Confluence deployment pages. |
 | `jeap.deploymentlog.housekeeping.confluence-pages.min-age` | `7d` | Minimum page age before it may be removed. Must be positive. |
 | `jeap.deploymentlog.housekeeping.confluence-pages.keep-per-environment` | `200` | Number of deployment pages retained per system and non-productive environment regardless of age. |
@@ -140,6 +140,8 @@ not set.
 | `jeap.deploymentlog.housekeeping.data-retention.batch-size` | `500` | Maximum number of deployment candidates selected in one run. |
 | `jeap.deploymentlog.housekeeping.component-pages.enabled` | `true` | Reconciles tracked component pages and removes pages whose component has no relevant CODE deployment. |
 | `jeap.deploymentlog.housekeeping.component-pages.batch-size` | `100` | Maximum number of obsolete tracked component pages reconciled in one run. Must be positive. |
+| `jeap.deploymentlog.housekeeping.undeployed-components.enabled` | `true` | Deletes the tombstones of components undeployed longer ago than the retention, so they are no longer reported as undeployed. |
+| `jeap.deploymentlog.housekeeping.undeployed-components.retention-days` | `730` | How many days an undeployed component is still reported as undeployed on an environment. Must be positive. |
 
 Data retention uses `Deployment.started_at`. It deletes `SUCCESS`, `FAILURE` and `CANCELLED` deployments, and protects
 `STARTED` deployments and deployments referenced as the current component version

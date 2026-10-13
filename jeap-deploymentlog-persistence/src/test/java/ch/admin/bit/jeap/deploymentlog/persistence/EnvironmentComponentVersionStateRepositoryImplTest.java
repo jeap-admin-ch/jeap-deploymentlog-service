@@ -106,6 +106,59 @@ class EnvironmentComponentVersionStateRepositoryImplTest {
     }
 
     @Test
+    void findComponentsBySystem_leavesOutAComponentUndeployedEverywhere() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        deploymentDevAA.success(ZonedDateTime.now(), "great success");
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(deploymentDevAA));
+        Deployment undeploymentRef = deploymentRepository.save(TestDataFactory.createDeployment(environmentRef, systemAMicroserviceA,
+                ZonedDateTime.now(), "(undeployed)", deploymentTarget, DeploymentSequence.UNDEPLOYED));
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(undeploymentRef));
+        entityManager.flush();
+
+        assertThat(environmentComponentVersionStateRepository.findComponentsBySystem(systemA))
+                .as("still deployed on DEV")
+                .extracting(Component::getName)
+                .containsExactly("Microservice A");
+
+        Deployment undeploymentDev = deploymentRepository.save(TestDataFactory.createDeployment(environmentDev, systemAMicroserviceA,
+                ZonedDateTime.now(), "(undeployed)", deploymentTarget, DeploymentSequence.UNDEPLOYED));
+        environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environmentDev, systemAMicroserviceA).orElseThrow()
+                .updateVersion(undeploymentDev.getComponentVersion(), undeploymentDev);
+        entityManager.flush();
+
+        assertThat(environmentComponentVersionStateRepository.findComponentsBySystem(systemA))
+                .as("undeployed from every environment")
+                .isEmpty();
+    }
+
+    @Test
+    void deleteUndeployedBefore_deletesOnlyTombstonesOlderThanTheCutoff() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        ZonedDateTime cutoff = ZonedDateTime.now().minusDays(730);
+        Deployment oldUndeployment = deploymentRepository.save(TestDataFactory.createDeployment(environmentDev, systemAMicroserviceA,
+                cutoff.minusDays(1), "(undeployed)", deploymentTarget, DeploymentSequence.UNDEPLOYED));
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(oldUndeployment));
+        Deployment recentUndeployment = deploymentRepository.save(TestDataFactory.createDeployment(environmentDev, systemBMicroserviceB,
+                cutoff.plusDays(1), "(undeployed)", deploymentTarget, DeploymentSequence.UNDEPLOYED));
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(recentUndeployment));
+        Deployment oldDeployment = deploymentRepository.save(TestDataFactory.createDeployment(environmentRef, systemAMicroserviceA,
+                cutoff.minusDays(1), deploymentTarget));
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(oldDeployment));
+        entityManager.flush();
+
+        int deleted = environmentComponentVersionStateRepository.deleteUndeployedBefore(cutoff);
+        entityManager.clear();
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environmentDev, systemAMicroserviceA))
+                .as("old tombstone").isEmpty();
+        assertThat(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environmentDev, systemBMicroserviceB))
+                .as("recent tombstone").isPresent();
+        assertThat(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environmentRef, systemAMicroserviceA))
+                .as("old but live deployment").isPresent();
+    }
+
+    @Test
     void findByComponentIn() {
         deploymentDevAA.success(ZonedDateTime.now(), "great success");
         deploymentRefAA.success(ZonedDateTime.now(), "great success");
@@ -126,10 +179,31 @@ class EnvironmentComponentVersionStateRepositoryImplTest {
         environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(deploymentRefAA));
         entityManager.flush();
 
-        List<ComponentVersionSummary> components = environmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environmentDev);
+        List<ComponentVersionSummary> components = environmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environmentDev, false);
 
         assertThat(components)
                 .hasSize(1)
-                .allMatch(componentVersionSummary -> componentVersionSummary.getComponentName().equals("Microservice A"));
+                .allMatch(componentVersionSummary -> componentVersionSummary.getComponentName().equals("Microservice A"))
+                .allMatch(componentVersionSummary -> !componentVersionSummary.getUndeployed());
+    }
+
+    @Test
+    void getDeployedComponentsOnEnvironment_excludesUndeployedComponentsUnlessIncluded() {
+        DeploymentTarget deploymentTarget = TestDataFactory.createDeploymentTarget();
+        Deployment undeployment = deploymentRepository.save(TestDataFactory.createDeployment(environmentDev, systemBMicroserviceB, ZonedDateTime.now(),
+                "(undeployed)", deploymentTarget, DeploymentSequence.UNDEPLOYED));
+        environmentComponentVersionStateRepository.save(EnvironmentComponentVersionState.fromDeployment(undeployment));
+        entityManager.flush();
+
+        List<ComponentVersionSummary> withoutUndeployed = environmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environmentDev, false);
+        assertThat(withoutUndeployed).isEmpty();
+
+        List<ComponentVersionSummary> withUndeployed = environmentComponentVersionStateRepository.getDeployedComponentsOnEnvironment(environmentDev, true);
+        assertThat(withUndeployed)
+                .hasSize(1)
+                .allMatch(componentVersionSummary -> componentVersionSummary.getComponentName().equals("Microservice B"))
+                .allMatch(ComponentVersionSummary::getUndeployed)
+                .allMatch(componentVersionSummary -> componentVersionSummary.getVersion() == null)
+                .allMatch(componentVersionSummary -> componentVersionSummary.getUndeployedAt() != null);
     }
 }

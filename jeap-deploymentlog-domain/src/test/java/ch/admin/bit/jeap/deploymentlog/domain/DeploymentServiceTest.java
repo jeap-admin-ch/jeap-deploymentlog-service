@@ -672,6 +672,32 @@ class DeploymentServiceTest {
 
     }
 
+    /**
+     * A tombstoned state from an earlier undeploy is not a live deployment to compare against: a redeploy on
+     * the same environment is a first deployment again, not a new version of one that is still running.
+     */
+    @Test
+    void createDeployment_afterUndeploymentTombstone_sequenceIsFirst() {
+        when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));
+        when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(new Environment("test")));
+        when(deploymentRepository.save(any(Deployment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        EnvironmentComponentVersionState snapshot = mock(EnvironmentComponentVersionState.class);
+        when(snapshot.isUndeployed()).thenReturn(true);
+        when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(any(Environment.class), any(Component.class))).thenReturn(Optional.of(snapshot));
+
+        deploymentService.createDeployment(
+                "externalId", "1.2.3-4",
+                ZonedDateTime.now(), "test", "test", ZonedDateTime.now(),
+                true, "system", "component", "environment", "environment",
+                new DeploymentTarget("CF", "http://localhost/cf", "details"),
+                ZonedDateTime.now(), "user", getDeploymentUnit(), Collections.emptySet(), Map.of(), Set.of(),
+                "comment", "1.1.0", Set.of("PROJ-123"), null, null);
+
+        verify(deploymentRepository).save(deploymentCaptor.capture());
+        assertThat(deploymentCaptor.getValue().getSequence()).isEqualTo(DeploymentSequence.FIRST);
+        verify(snapshot, never()).getComponentVersion();
+    }
+
     @Test
     void createUndeployment_deploymentExists_undeploymentCreated() {
         when(systemService.retrieveOrCreateComponent(anyString(), anyString())).thenReturn(new Component("component", getSystem()));

@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.domain;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -10,7 +11,8 @@ import java.util.Set;
 public interface EnvironmentComponentVersionStateRepository {
 
     /**
-     * Get all Compenents of a System, which have Successful-Deployments
+     * Get all Compenents of a System, which have Successful-Deployments. A component undeployed from every
+     * environment it was deployed to is left out.
      * @param system as System
      * @return List of Componentsd
      */
@@ -22,7 +24,16 @@ public interface EnvironmentComponentVersionStateRepository {
 
     EnvironmentComponentVersionState save(EnvironmentComponentVersionState environmentComponentVersionState);
 
-    void deleteByComponentEqualsAndEnvironmentEquals(Component component, Environment environment);
+    /**
+     * Component version summaries of what is deployed on an environment. Undeployed components are excluded
+     * unless {@code includeUndeployed} is set, which also fills in {@link ComponentVersionSummary#getUndeployed()}
+     * and {@link ComponentVersionSummary#getUndeployedAt()}.
+     */
+    List<ComponentVersionSummary> getDeployedComponentsOnEnvironment(Environment environmentName, boolean includeUndeployed);
 
-    List<ComponentVersionSummary> getDeployedComponentsOnEnvironment(Environment environmentName);
+    /**
+     * Deletes the tombstones of components undeployed before the given instant, so they are no longer reported
+     * as undeployed at all. Returns the number of tombstones deleted.
+     */
+    int deleteUndeployedBefore(ZonedDateTime undeployedBefore);
 }

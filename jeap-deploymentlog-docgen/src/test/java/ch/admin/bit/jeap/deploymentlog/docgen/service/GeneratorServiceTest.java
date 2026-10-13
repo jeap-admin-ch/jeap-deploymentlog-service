@@ -133,6 +133,51 @@ class GeneratorServiceTest {
         assertEquals(Color.ALL_IDENTICAL, comEnvDtoList.get(2).getColor());
     }
 
+    /**
+     * A tombstoned state - the component was undeployed from the environment - is not a current deployment:
+     * the page must show it as blank, the same as an environment nothing was ever deployed to, rather than as
+     * a live deployment of the placeholder version "(undeployed)".
+     */
+    @Test
+    void createSystemPageDto_componentUndeployedOnOneEnvironment_thenShownBlank() {
+        System systemA = new System("Some System Name");
+        Environment environmentDEV = new Environment("DEV");
+        Component componentA = new Component("Component A", systemA);
+
+        ComponentVersion undeployedVersion = ComponentVersion.builder()
+                .versionName("(undeployed)")
+                .versionControlUrl("https://linktobitbucket.ch")
+                .commitRef("commit")
+                .component(componentA)
+                .committedAt(ZonedDateTime.now())
+                .deploymentUnit(DeploymentUnit.builder()
+                        .coordinates("xy")
+                        .artifactRepositoryUrl("")
+                        .type(DeploymentUnitType.MAVEN_JAR)
+                        .build())
+                .build();
+        Deployment undeployment = Deployment.builder()
+                .componentVersion(undeployedVersion)
+                .environment(environmentDEV)
+                .startedAt(ZonedDateTime.now())
+                .startedBy("TestDeploy")
+                .externalId("1")
+                .sequence(DeploymentSequence.UNDEPLOYED)
+                .build();
+        EnvironmentComponentVersionState tombstone = EnvironmentComponentVersionState.fromDeployment(undeployment);
+
+        doReturn(List.of(environmentDEV)).when(environmentRepositoryMock).findEnvironmentsForSystem(systemA);
+        doReturn(List.of(componentA)).when(environmentComponentVersionStateRepositoryMock).findComponentsBySystem(systemA);
+        doReturn(Optional.of(tombstone)).when(environmentComponentVersionStateRepositoryMock)
+                .findByEnvironmentAndComponent(environmentDEV, componentA);
+
+        SystemPageDto systemPageDto = generatorService.createSystemPageDto(systemA);
+
+        ComponentEnvDto componentEnvDto = systemPageDto.getComponentList().get(0).getComponentEnvDtoList().get(0);
+        assertThat(componentEnvDto.getVersionName()).isNull();
+        assertEquals(Color.NONE, componentEnvDto.getColor());
+    }
+
     private List<ComponentEnvDto> createDtosForVersions(String versionDEV, String versionREF, String versionPROD) {
         String systemName = "Some System Name";
         System systemA = new System(systemName);

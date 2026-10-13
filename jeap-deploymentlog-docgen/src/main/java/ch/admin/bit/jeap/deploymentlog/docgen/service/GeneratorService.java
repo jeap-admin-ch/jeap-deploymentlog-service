@@ -72,7 +72,10 @@ public class GeneratorService {
         List<ComponentEnvDto> componentEnvDtoList = new ArrayList<>();
 
         environmentList.forEach(environment -> {
-            Optional<EnvironmentComponentVersionState> envCompOpt = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component);
+            // A tombstoned state is not a current deployment: the component no longer runs on this
+            // environment, and the page must show it as absent rather than as still deployed "(undeployed)".
+            Optional<EnvironmentComponentVersionState> envCompOpt = environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)
+                    .filter(state -> !state.isUndeployed());
             if (envCompOpt.isPresent()) {
                 EnvironmentComponentVersionState envCompVersionState = envCompOpt.get();
                 ComponentEnvDto componentEnvDto = ComponentEnvDto.builder()

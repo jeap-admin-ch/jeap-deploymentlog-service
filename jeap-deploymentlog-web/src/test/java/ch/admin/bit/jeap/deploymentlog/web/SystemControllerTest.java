@@ -103,14 +103,15 @@ class SystemControllerTest {
         when(systemService.retrieveComponentByName(systemName, componentName)).thenReturn(component);
         when(systemService.retrieveEnvironmentByName(any())).thenReturn(refEnvironment);
         when(deploymentService.getLastDeploymentForComponent(any(Component.class), any(Environment.class))).thenReturn(TestData.getDeployment());
-        doNothing().when(systemService).deleteComponent(anyString(), anyString(), anyString());
+        when(deploymentService.createUndeployment(any(), anyString(), anyString(), anyString(), anyString(), any(), anyString(), any())).thenReturn(TestData.getDeployment());
+        doNothing().when(systemService).markComponentUndeployed(anyString(), anyString(), anyString(), any());
         mockMvc.perform(
                         put("/api/system/deployment-id/undeploy")
                                 .content(objectMapper.writeValueAsString(TestData.getUndeploymentCreateDto()))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .with(httpBasic("write", "secret")))
                 .andExpect(status().isOk());
-        verify(systemService, times(1)).deleteComponent(systemName, componentName, "REF");
+        verify(systemService, times(1)).markComponentUndeployed(eq(systemName), eq(componentName), eq("REF"), any());
         verify(deploymentService).createUndeployment(any(), eq("deployment-id"), eq(systemName), eq(componentName), eq("REF"), any(), anyString(), anyString());
     }
 

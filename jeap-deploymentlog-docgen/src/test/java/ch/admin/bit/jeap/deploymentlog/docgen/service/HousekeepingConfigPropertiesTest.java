@@ -22,6 +22,17 @@ class HousekeepingConfigPropertiesTest {
         assertThat(properties.getDataRetention().getDuration()).isNull();
         assertThat(properties.getComponentPages().isEnabled()).isTrue();
         assertThat(properties.getComponentPages().getBatchSize()).isEqualTo(100);
+        assertThat(properties.getUndeployedComponents().isEnabled()).isTrue();
+        assertThat(properties.getUndeployedComponents().getRetentionDays()).isEqualTo(730);
+    }
+
+    @Test
+    void undeployedComponentCleanupRequiresPositiveRetentionDays() {
+        HousekeepingConfigProperties properties = new HousekeepingConfigProperties();
+
+        properties.getUndeployedComponents().setRetentionDays(0);
+        assertThatIllegalArgumentException().isThrownBy(properties::validate)
+                .withMessageContaining("undeployed-components.retention-days");
     }
 
     @Test

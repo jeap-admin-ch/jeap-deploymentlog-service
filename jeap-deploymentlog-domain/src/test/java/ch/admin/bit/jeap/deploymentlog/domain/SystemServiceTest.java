@@ -41,7 +41,7 @@ class SystemServiceTest {
     ArgumentCaptor<SystemAlias> systemAliasCaptor;
 
     @Test
-    void deleteComponent_withoutEnvironment_componentDeactivated() {
+    void markComponentUndeployed_withoutEnvironment_throwsEnvironmentNotFoundException() {
 
         System system = getSystem();
         Component component = new Component("component", system);
@@ -50,11 +50,12 @@ class SystemServiceTest {
 
         when(systemRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.of(system));
 
-        assertThrows(EnvironmentNotFoundException.class, () -> systemService.deleteComponent("system", "component", null));
+        Deployment undeployment = getDeployment(component, new Environment("test"), DeploymentSequence.UNDEPLOYED);
+        assertThrows(EnvironmentNotFoundException.class, () -> systemService.markComponentUndeployed("system", "component", null, undeployment));
     }
 
     @Test
-    void deleteComponent_withEnvironment_componentInEnvDeletedAndComponentIsSetInactive() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
+    void markComponentUndeployed_withEnvironment_stateIsKeptAsUndeployedTombstoneAndComponentIsSetInactive() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
 
         System system = getSystem();
         Component component = new Component("component", system);
@@ -66,14 +67,21 @@ class SystemServiceTest {
         Environment environment = new Environment("test");
         when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(environment));
 
-        systemService.deleteComponent("system", "component", "test");
+        Deployment undeployment = getDeployment(component, environment, DeploymentSequence.UNDEPLOYED);
+        EnvironmentComponentVersionState existingState = EnvironmentComponentVersionState.fromDeployment(getDeployment(component, environment));
+        when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component)).thenReturn(Optional.of(existingState));
+        when(environmentComponentVersionStateRepository.findByComponentIn(singleton(component))).thenReturn(singletonList(existingState));
 
-        verify(environmentComponentVersionStateRepository, times(1)).deleteByComponentEqualsAndEnvironmentEquals(component, environment);
+        systemService.markComponentUndeployed("system", "component", "test", undeployment);
+
+        assertThat(existingState.getDeployment()).isEqualTo(undeployment);
+        assertThat(existingState.getComponentVersion()).isEqualTo(undeployment.getComponentVersion());
+        verify(environmentComponentVersionStateRepository, never()).save(any());
         assertThat(component.isActive()).isFalse();
     }
 
     @Test
-    void deleteComponent_withEnvironment_componentInEnvDeleted() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
+    void markComponentUndeployed_whenNoStateYetOnThisEnvironment_newTombstoneStateIsSaved() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
 
         System system = getSystem();
         Component component = new Component("component", system);
@@ -86,14 +94,56 @@ class SystemServiceTest {
 
         when(environmentRepository.findByName("test")).thenReturn(Optional.of(testEnvironment));
 
+        Deployment undeployment = getDeployment(component, testEnvironment, DeploymentSequence.UNDEPLOYED);
+
         Deployment deployment = getDeployment(component, new Environment("dev"));
         EnvironmentComponentVersionState environmentComponentVersionState = EnvironmentComponentVersionState.fromDeployment(deployment);
         when(environmentComponentVersionStateRepository.findByComponentIn(singleton(component))).thenReturn(singletonList(environmentComponentVersionState));
 
-        systemService.deleteComponent("system", "component", "test");
+        systemService.markComponentUndeployed("system", "component", "test", undeployment);
 
-        verify(environmentComponentVersionStateRepository, times(1)).deleteByComponentEqualsAndEnvironmentEquals(component, testEnvironment);
+        verify(environmentComponentVersionStateRepository, times(1)).save(any(EnvironmentComponentVersionState.class));
+        // Still actively deployed on "dev", so the component as a whole is not inactive yet
         assertThat(component.isActive()).isTrue();
+    }
+
+    /**
+     * A tombstoned state is not a current deployment: the component no longer runs on this environment, even
+     * though the row naming its last deployment is kept rather than deleted.
+     */
+    @Test
+    void getCurrentVersionOfComponent_stateIsUndeployedTombstone_returnEmpty() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
+        System system = getSystem();
+        Component component = new Component("component", system);
+        system.getComponents().add(component);
+        when(systemRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.of(system));
+        Environment environment = new Environment("test");
+        when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(environment));
+
+        EnvironmentComponentVersionState tombstone = EnvironmentComponentVersionState.fromDeployment(
+                getDeployment(component, environment, DeploymentSequence.UNDEPLOYED));
+        when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component))
+                .thenReturn(Optional.of(tombstone));
+
+        assertThat(systemService.getCurrentVersionOfComponent("system", "component", "test")).isEmpty();
+    }
+
+    /** Same tombstone, through the deployment-returning sibling method. */
+    @Test
+    void getCurrentDeploymentOfComponent_stateIsUndeployedTombstone_returnEmpty() throws ComponentNotFoundException, SystemNotFoundException, EnvironmentNotFoundException {
+        System system = getSystem();
+        Component component = new Component("component", system);
+        system.getComponents().add(component);
+        when(systemRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.of(system));
+        Environment environment = new Environment("test");
+        when(environmentRepository.findByName(anyString())).thenReturn(Optional.of(environment));
+
+        EnvironmentComponentVersionState tombstone = EnvironmentComponentVersionState.fromDeployment(
+                getDeployment(component, environment, DeploymentSequence.UNDEPLOYED));
+        when(environmentComponentVersionStateRepository.findByEnvironmentAndComponent(environment, component))
+                .thenReturn(Optional.of(tombstone));
+
+        assertThat(systemService.getCurrentDeploymentOfComponent("system", "component", "test")).isEmpty();
     }
 
     @Test
@@ -471,6 +521,10 @@ class SystemServiceTest {
     }
 
     private static Deployment getDeployment(Component component, Environment devEnvironment) {
+        return getDeployment(component, devEnvironment, DeploymentSequence.FIRST);
+    }
+
+    private static Deployment getDeployment(Component component, Environment devEnvironment, DeploymentSequence sequence) {
         DeploymentUnit deploymentUnit = DeploymentUnit.builder()
                 .artifactRepositoryUrl("repoUrl")
                 .coordinates("coord")
@@ -490,7 +544,7 @@ class SystemServiceTest {
                 .componentVersion(componentVersion)
                 .startedAt(ZonedDateTime.now())
                 .startedBy("Hans")
-                .sequence(DeploymentSequence.FIRST)
+                .sequence(sequence)
                 .build();
     }
 
