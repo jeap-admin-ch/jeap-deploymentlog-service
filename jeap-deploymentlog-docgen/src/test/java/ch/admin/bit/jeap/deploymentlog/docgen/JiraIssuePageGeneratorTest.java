@@ -69,6 +69,52 @@ class JiraIssuePageGeneratorTest {
     }
 
     @Test
+    void skipsRemoteLinkAlreadyWrittenForTheSamePage() {
+        JiraIssuePage tracked = JiraIssuePage.create("JEAP-1", "JEAP", "issue-page", "project-page");
+        tracked.remoteLinkWritten();
+        when(pageRepository.findByIssueKey("JEAP-1")).thenReturn(Optional.of(tracked));
+        when(confluenceAdapter.updatePageById(eq("issue-page"), eq("project-page"), eq("JEAP-1"),
+                any(), eq(false))).thenReturn(true);
+
+        generator.generatePages("project-page", "JEAP", List.of("JEAP-1"));
+
+        verifyNoInteractions(jiraAdapter);
+    }
+
+    @Test
+    void writesRemoteLinkAgainForARecreatedPage() {
+        JiraIssuePage tracked = JiraIssuePage.create("JEAP-1", "JEAP", "deleted-page", "project-page");
+        tracked.remoteLinkWritten();
+        when(pageRepository.findByIssueKey("JEAP-1")).thenReturn(Optional.of(tracked));
+        when(confluenceAdapter.updatePageById(eq("deleted-page"), eq("project-page"), eq("JEAP-1"),
+                any(), eq(false))).thenReturn(false);
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("project-page"), eq("JEAP-1"), any()))
+                .thenReturn("issue-page");
+        when(jiraAdapter.updateIssuePageRemoteLink("JEAP-1", "issue-page")).thenReturn(true);
+
+        generator.generatePages("project-page", "JEAP", List.of("JEAP-1"));
+
+        assertThat(tracked.getRemoteLinkPageId()).isEqualTo("issue-page");
+        assertThat(tracked.isRemoteLinkUpToDate()).isTrue();
+        verify(pageRepository, times(2)).save(tracked);
+    }
+
+    @Test
+    void retriesRemoteLinkThatJiraDidNotAccept() {
+        when(pageRepository.findByIssueKey("JEAP-1")).thenReturn(Optional.empty());
+        when(confluenceAdapter.findPageByTitle("project-page", "JEAP-1")).thenReturn(Optional.empty());
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("project-page"), eq("JEAP-1"), any()))
+                .thenReturn("issue-page");
+        when(jiraAdapter.updateIssuePageRemoteLink("JEAP-1", "issue-page")).thenReturn(false);
+
+        generator.generatePages("project-page", "JEAP", List.of("JEAP-1"));
+
+        ArgumentCaptor<JiraIssuePage> captor = ArgumentCaptor.forClass(JiraIssuePage.class);
+        verify(pageRepository).save(captor.capture());
+        assertThat(captor.getValue().isRemoteLinkUpToDate()).isFalse();
+    }
+
+    @Test
     void doesNotTrackOrLinkWhenConfluenceFails() {
         when(pageRepository.findByIssueKey("JEAP-1")).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("project-page", "JEAP-1")).thenReturn(Optional.empty());

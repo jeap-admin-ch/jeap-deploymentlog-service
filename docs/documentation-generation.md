@@ -229,10 +229,11 @@ The following safeguards keep concurrent runs from corrupting the tree:
 After a DeploymentLog issue page has been generated, the service writes one stable remote link ("mentioned in") from
 the Jira issue to that page. Its `globalId` is built from the configured `app-id` and normalized Issue Key, not the
 Confluence Page ID. Repeated content updates therefore reuse the link, while recreating a missing Confluence page
-updates its URL.
+updates its URL. The issue page tracking remembers the page ID the link was last written for, so Jira is only called
+when an issue page is new or was recreated; the first generation after upgrading writes each link once more.
 
 Failures are retried by the Jira client, then logged and counted without rolling back valid page tracking or failing
-the deployment request. A later page generation retries the link, and
+the deployment request. A link that Jira did not accept is not remembered, so a later page generation retries it, and
 `POST /api/jobs/docgen/system/{systemName}/repairJiraLinks` repairs stable links for already tracked issue pages in a
 date range, see [REST API](rest-api.md#jobs).
 

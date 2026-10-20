@@ -24,14 +24,18 @@ class JiraIssuePageGenerator {
     Map<String, String> generatePages(String projectPageId, String projectKey, Collection<String> issueKeys) {
         Map<String, String> generatedPageUrls = new TreeMap<>();
         for (JiraIssuePageDto issue : dtoFactory.create(issueKeys)) {
-            String pageId = generatePage(projectPageId, projectKey, issue);
-            generatedPageUrls.put(issue.getIssueKey(), dtoFactory.confluencePageUrl(pageId));
-            jiraAdapter.updateIssuePageRemoteLink(issue.getIssueKey(), pageId);
+            JiraIssuePage page = generatePage(projectPageId, projectKey, issue);
+            generatedPageUrls.put(issue.getIssueKey(), dtoFactory.confluencePageUrl(page.getPageId()));
+            if (!page.isRemoteLinkUpToDate()
+                    && jiraAdapter.updateIssuePageRemoteLink(issue.getIssueKey(), page.getPageId())) {
+                page.remoteLinkWritten();
+                pageRepository.save(page);
+            }
         }
         return generatedPageUrls;
     }
 
-    private String generatePage(String projectPageId, String projectKey, JiraIssuePageDto issue) {
+    private JiraIssuePage generatePage(String projectPageId, String projectKey, JiraIssuePageDto issue) {
         String issueKey = issue.getIssueKey();
         Optional<JiraIssuePage> trackedPage = pageRepository.findByIssueKey(issueKey);
         String pageId = trackedPage.map(JiraIssuePage::getPageId)
@@ -54,7 +58,7 @@ class JiraIssuePageGenerator {
             }
             page.updateLocation(projectKey, pageId, projectPageId);
             pageRepository.save(page);
-            return pageId;
+            return page;
         } catch (RuntimeException ex) {
             log.warn("Failed to generate Jira issue page for issue '{}' in project '{}'", issueKey, projectKey, ex);
             throw ex;

@@ -11,7 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.*;
@@ -40,7 +40,7 @@ class JiraAdapterTest {
         doThrow(mock(RestClientException.class)).when(jiraWebClient)
                 .upsertDeploymentLogIssuePageRemoteLink(anyString(), anyString());
 
-        assertDoesNotThrow(() -> jiraAdapter.updateIssuePageRemoteLink("JEAP-1234", "pageId"));
+        assertThat(jiraAdapter.updateIssuePageRemoteLink("JEAP-1234", "pageId")).isFalse();
 
         verify(counter).increment();
     }
@@ -50,9 +50,14 @@ class JiraAdapterTest {
         doThrow(new JiraIssueNotFoundException("CVE-2026", mock(RestClientException.class)))
                 .when(jiraWebClient).upsertDeploymentLogIssuePageRemoteLink(anyString(), anyString());
 
-        assertDoesNotThrow(() -> jiraAdapter.updateIssuePageRemoteLink("CVE-2026", "pageId"));
+        assertThat(jiraAdapter.updateIssuePageRemoteLink("CVE-2026", "pageId")).isFalse();
 
         verify(counter, never()).increment();
+    }
+
+    @Test
+    void acceptedLinkIsReported() {
+        assertThat(jiraAdapter.updateIssuePageRemoteLink("JEAP-1234", "pageId")).isTrue();
     }
 
 }

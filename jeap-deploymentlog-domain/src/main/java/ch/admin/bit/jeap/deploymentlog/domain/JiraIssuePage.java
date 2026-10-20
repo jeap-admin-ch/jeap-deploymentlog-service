@@ -29,6 +29,8 @@ public class JiraIssuePage {
     @Column(nullable = false)
     private ZonedDateTime lastUpdatedAt;
 
+    private String remoteLinkPageId;
+
     private JiraIssuePage(String issueKey, String projectKey, String pageId, String parentPageId) {
         this.issueKey = issueKey;
         updateLocation(projectKey, pageId, parentPageId);
@@ -43,5 +45,16 @@ public class JiraIssuePage {
         this.pageId = pageId;
         this.parentPageId = parentPageId;
         this.lastUpdatedAt = ZonedDateTime.now();
+    }
+
+    /**
+     * The stable Jira remote link carries the page URL; it only has to be written again when the page ID changed.
+     */
+    public boolean isRemoteLinkUpToDate() {
+        return pageId.equals(remoteLinkPageId);
+    }
+
+    public void remoteLinkWritten() {
+        this.remoteLinkPageId = pageId;
     }
 }

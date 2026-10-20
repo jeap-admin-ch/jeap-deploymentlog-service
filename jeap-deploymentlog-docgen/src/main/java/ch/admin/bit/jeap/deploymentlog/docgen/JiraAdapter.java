@@ -21,9 +21,13 @@ public class JiraAdapter {
         this.remoteLinkErrorCounter = meterRegistry.counter("deploymentlog.docgen.jiraissuelink.error");
     }
 
-    public void updateIssuePageRemoteLink(String jiraIssueKey, String pageId) {
+    /**
+     * @return whether Jira accepted the link; failures are logged and counted, not thrown
+     */
+    public boolean updateIssuePageRemoteLink(String jiraIssueKey, String pageId) {
         try {
             jiraWebClient.upsertDeploymentLogIssuePageRemoteLink(jiraIssueKey, pageId);
+            return true;
         } catch (JiraIssueNotFoundException ex) {
             log.warn("Skipping stable DeploymentLog issue page link because Jira issue {} does not exist or is not visible",
                     value("jiraIssueKey", ex.getIssueKey()));
@@ -32,5 +36,6 @@ public class JiraAdapter {
             log.warn("Failed to update stable DeploymentLog issue page link for Jira issue {}",
                     value("jiraIssueKey", jiraIssueKey), ex);
         }
+        return false;
     }
 }

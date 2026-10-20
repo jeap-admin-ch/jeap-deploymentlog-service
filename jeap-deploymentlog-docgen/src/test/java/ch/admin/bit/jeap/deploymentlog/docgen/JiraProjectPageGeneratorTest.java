@@ -156,6 +156,49 @@ class JiraProjectPageGeneratorTest {
     }
 
     @Test
+    void writesTrackedProjectPageOnceWhenItsIssuePageLinksAreUnchanged() {
+        JiraProjectPageDto project = JiraProjectPageDto.builder().projectKey("JEAP")
+                .activityPeriod(Duration.ofDays(30))
+                .issues(List.of(JiraProjectIssueDto.builder().issueKey("JEAP-1")
+                        .deploymentLogIssuePageUrl("https://confluence/issue-page").build()))
+                .build();
+        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(project));
+        JiraProjectPage tracked = JiraProjectPage.create("JEAP", "project-page", "changes-page");
+        when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.of(tracked));
+        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
+                any(), eq(false))).thenReturn(true);
+        when(jiraIssuePageGenerator.generatePages("project-page", "JEAP", Set.of("JEAP-1")))
+                .thenReturn(java.util.Map.of("JEAP-1", "https://confluence/issue-page"));
+
+        generator.generateForProject("changes-page", "JEAP", Set.of("JEAP-1"));
+
+        verify(confluenceAdapter, times(1)).updatePageById(any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void generatesOnlyTheRequestedProjectAndIssues() {
+        JiraProjectPageDto jeap = JiraProjectPageDto.builder().projectKey("JEAP")
+                .activityPeriod(Duration.ofDays(30))
+                .issues(List.of(JiraProjectIssueDto.builder().issueKey("JEAP-1").build(),
+                        JiraProjectIssueDto.builder().issueKey("JEAP-2").build()))
+                .build();
+        JiraProjectPageDto other = JiraProjectPageDto.builder().projectKey("ABC")
+                .activityPeriod(Duration.ofDays(30))
+                .issues(List.of(JiraProjectIssueDto.builder().issueKey("ABC-1").build()))
+                .build();
+        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(other, jeap));
+        when(pageRepository.findByProjectKey("JEAP"))
+                .thenReturn(Optional.of(JiraProjectPage.create("JEAP", "project-page", "changes-page")));
+        when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
+                any(), eq(false))).thenReturn(true);
+
+        generator.generateForProject("changes-page", "JEAP", Set.of("JEAP-2"));
+
+        verify(jiraIssuePageGenerator).generatePages("project-page", "JEAP", Set.of("JEAP-2"));
+        verify(pageRepository, never()).findByProjectKey("ABC");
+    }
+
+    @Test
     void regeneratesTrackedIssuePagesForNormalizedValidKeys() {
         JiraProjectPage tracked = JiraProjectPage.create("JEAP", "project-page", "changes-page");
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.of(tracked));

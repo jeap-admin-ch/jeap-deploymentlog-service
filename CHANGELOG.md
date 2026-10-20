@@ -15,6 +15,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that project. A burst of deployments referencing the same Jira issues therefore regenerates the change view a few
   times instead of once per deployment, and a failing change view no longer keeps the deployment page pending.
   The missing page generation job resubmits refreshes pending for longer than `min-age-minutes`.
+- The stable Jira remote link of an issue page is only written when the issue page is new or was recreated. The page
+  ID it was written for is stored in the new column `jira_issue_page.remote_link_page_id`; the first generation after
+  upgrading writes each link once more. `repairJiraLinks` still writes the links unconditionally.
+- A Jira project page is written a second time in the same run only when new or recreated issue pages change its
+  links; otherwise it is written once.
 
 ### Added
 

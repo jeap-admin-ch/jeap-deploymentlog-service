@@ -82,14 +82,17 @@ class JiraProjectPageGenerator {
         boolean moveRequired = trackedPage.map(JiraProjectPage::getParentPageId)
                 .map(parent -> !Objects.equals(parent, changesPageId))
                 .orElse(false);
-        Supplier<String> content = () -> templateRenderer.renderJiraProjectPage(project);
+        Set<String> issueKeysToGenerate = project.getIssues().stream()
+                .map(JiraProjectIssueDto::getIssueKey)
+                .filter(issueKey -> affectedIssueKeys == null || affectedIssueKeys.contains(issueKey))
+                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
 
         try {
+            Supplier<String> content = () -> templateRenderer.renderJiraProjectPage(project);
             if (pageId == null || !confluenceAdapter.updatePageById(
                     pageId, changesPageId, pageTitle, content, moveRequired)) {
                 pageId = confluenceAdapter.addOrUpdatePageUnderAncestor(changesPageId, pageTitle, content);
             }
-
             JiraProjectPage page = trackedPage.orElse(null);
             if (page == null) {
                 page = JiraProjectPage.create(projectKey, pageId, changesPageId);
@@ -97,31 +100,32 @@ class JiraProjectPageGenerator {
             page.updateLocation(pageId, changesPageId);
             pageRepository.save(page);
 
-            Set<String> issueKeysToGenerate = project.getIssues().stream()
-                    .map(JiraProjectIssueDto::getIssueKey)
-                    .filter(issueKey -> affectedIssueKeys == null || affectedIssueKeys.contains(issueKey))
-                    .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
-            Map<String, String> generatedIssuePageUrls = jiraIssuePageGenerator
-                    .generatePages(pageId, projectKey, issueKeysToGenerate);
-            if (!generatedIssuePageUrls.isEmpty()) {
-                JiraProjectPageDto projectWithLinks = project.toBuilder()
-                        .issues(project.getIssues().stream()
-                                .map(issue -> issue.toBuilder()
-                                        .deploymentLogIssuePageUrl(generatedIssuePageUrls
-                                                .getOrDefault(issue.getIssueKey(), issue.getDeploymentLogIssuePageUrl()))
-                                        .build())
-                                .toList())
-                        .build();
-                String finalPageId = pageId;
+            // The issue pages need the project page as their parent, so their links reach the project page with a
+            // second write. It is only needed for new or recreated issue pages: tracked ones keep their link.
+            JiraProjectPageDto projectWithLinks = withIssuePageUrls(project,
+                    jiraIssuePageGenerator.generatePages(pageId, projectKey, issueKeysToGenerate));
+            if (!projectWithLinks.equals(project)) {
                 confluenceAdapter.updatePageById(pageId, changesPageId, pageTitle,
                         () -> templateRenderer.renderJiraProjectPage(projectWithLinks), false);
-                page.updateLocation(finalPageId, changesPageId);
-                pageRepository.save(page);
             }
             return pageId;
         } catch (RuntimeException ex) {
             log.warn("Failed to generate Jira project page for project '{}'", projectKey, ex);
             throw ex;
         }
+    }
+
+    private static JiraProjectPageDto withIssuePageUrls(JiraProjectPageDto project, Map<String, String> issuePageUrls) {
+        if (issuePageUrls.isEmpty()) {
+            return project;
+        }
+        return project.toBuilder()
+                .issues(project.getIssues().stream()
+                        .map(issue -> issue.toBuilder()
+                                .deploymentLogIssuePageUrl(issuePageUrls
+                                        .getOrDefault(issue.getIssueKey(), issue.getDeploymentLogIssuePageUrl()))
+                                .build())
+                        .toList())
+                .build();
     }
 }
