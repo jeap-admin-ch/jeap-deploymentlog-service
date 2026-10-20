@@ -162,7 +162,7 @@ class JiraProjectPageGeneratorTest {
                 .issues(List.of(JiraProjectIssueDto.builder().issueKey("JEAP-1")
                         .deploymentLogIssuePageUrl("https://confluence/issue-page").build()))
                 .build();
-        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(project));
+        when(dtoFactory.createActiveProject(eq("JEAP"), any())).thenReturn(Optional.of(project));
         JiraProjectPage tracked = JiraProjectPage.create("JEAP", "project-page", "changes-page");
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.of(tracked));
         when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
@@ -176,17 +176,13 @@ class JiraProjectPageGeneratorTest {
     }
 
     @Test
-    void generatesOnlyTheRequestedProjectAndIssues() {
+    void generatesOnlyTheRequestedIssuesOfTheProject() {
         JiraProjectPageDto jeap = JiraProjectPageDto.builder().projectKey("JEAP")
                 .activityPeriod(Duration.ofDays(30))
                 .issues(List.of(JiraProjectIssueDto.builder().issueKey("JEAP-1").build(),
                         JiraProjectIssueDto.builder().issueKey("JEAP-2").build()))
                 .build();
-        JiraProjectPageDto other = JiraProjectPageDto.builder().projectKey("ABC")
-                .activityPeriod(Duration.ofDays(30))
-                .issues(List.of(JiraProjectIssueDto.builder().issueKey("ABC-1").build()))
-                .build();
-        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(other, jeap));
+        when(dtoFactory.createActiveProject(eq("JEAP"), any())).thenReturn(Optional.of(jeap));
         when(pageRepository.findByProjectKey("JEAP"))
                 .thenReturn(Optional.of(JiraProjectPage.create("JEAP", "project-page", "changes-page")));
         when(confluenceAdapter.updatePageById(eq("project-page"), eq("changes-page"), eq("JEAP (Jira)"),
@@ -195,7 +191,7 @@ class JiraProjectPageGeneratorTest {
         generator.generateForProject("changes-page", "JEAP", Set.of("JEAP-2"));
 
         verify(jiraIssuePageGenerator).generatePages("project-page", "JEAP", Set.of("JEAP-2"));
-        verify(pageRepository, never()).findByProjectKey("ABC");
+        verify(dtoFactory, never()).createActiveProjects(any());
     }
 
     @Test

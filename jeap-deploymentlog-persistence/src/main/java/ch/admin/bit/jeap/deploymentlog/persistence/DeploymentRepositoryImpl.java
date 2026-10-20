@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -458,6 +459,13 @@ public class DeploymentRepositoryImpl implements DeploymentRepository {
     @Override
     public List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt) {
         return jpaDeploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(startedAt);
+    }
+
+    @Override
+    public List<Deployment> findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter(String projectKey,
+                                                                                ZonedDateTime startedAt) {
+        return jpaDeploymentRepository.findDeploymentsWithJiraIssuesMatchingStartedAtOrAfter(
+                projectKey.trim().toUpperCase(Locale.ROOT) + "-%", startedAt);
     }
 
     @Override

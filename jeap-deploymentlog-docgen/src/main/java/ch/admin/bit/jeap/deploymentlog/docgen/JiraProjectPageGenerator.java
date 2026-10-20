@@ -47,10 +47,8 @@ class JiraProjectPageGenerator {
     }
 
     void generateForProject(String changesPageId, String projectKey, Set<String> affectedIssueKeys) {
-        List<JiraProjectPageDto> affectedProjects = dtoFactory.createActiveProjects(ZonedDateTime.now()).stream()
-                .filter(page -> projectKey.equals(page.getProjectKey()))
-                .toList();
-        generate(changesPageId, affectedProjects, affectedIssueKeys);
+        dtoFactory.createActiveProject(projectKey, ZonedDateTime.now())
+                .ifPresent(project -> generatePage(changesPageId, project, affectedIssueKeys));
     }
 
     void regenerateTrackedIssuePages(Set<String> storedIssueKeys) {

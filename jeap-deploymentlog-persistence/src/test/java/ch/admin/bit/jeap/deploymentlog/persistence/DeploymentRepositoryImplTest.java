@@ -356,6 +356,29 @@ class DeploymentRepositoryImplTest {
     }
 
     @Test
+    void findsActiveDeploymentsOfOneJiraProject() {
+        Environment environment = environmentRepository.save(new Environment("PROJECT-SCOPE"));
+        System system = systemRepository.save(new System("System P"));
+        Component component = componentRepository.save(new Component("component", system));
+        ZonedDateTime now = ZonedDateTime.now();
+
+        Deployment ownProject = deploymentWithIssue(environment, component, now.minusDays(1), " jeap-1 ",
+                Set.of(DeploymentType.CODE));
+        Deployment otherProject = deploymentWithIssue(environment, component, now.minusDays(1), "JEAPX-1",
+                Set.of(DeploymentType.CODE));
+        Deployment ownProjectTooOld = deploymentWithIssue(environment, component, now.minusDays(60), "JEAP-2",
+                Set.of(DeploymentType.CODE));
+        deploymentRepository.save(ownProject);
+        deploymentRepository.save(otherProject);
+        deploymentRepository.save(ownProjectTooOld);
+
+        assertThat(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("JEAP",
+                now.minusDays(30)))
+                .extracting(Deployment::getId)
+                .containsExactly(ownProject.getId());
+    }
+
+    @Test
     void existsCodeDeploymentForComponentDistinguishesConfigCodeAndMixedDeployments() {
         Environment environment = environmentRepository.save(new Environment("CODE-CHECK"));
         System system = systemRepository.save(new System("code-check-system"));

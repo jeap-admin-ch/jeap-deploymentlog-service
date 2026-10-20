@@ -283,6 +283,16 @@ interface JpaDeploymentRepository extends CrudRepository<Deployment, UUID>, JpaS
             select distinct d from Deployment d
             join d.changelog c
             join c.jiraIssueKeys issueKey
+            where d.startedAt >= :startedAt
+            and upper(trim(issueKey)) like :issueKeyPattern
+            """)
+    List<Deployment> findDeploymentsWithJiraIssuesMatchingStartedAtOrAfter(
+            @Param("issueKeyPattern") String issueKeyPattern, @Param("startedAt") ZonedDateTime startedAt);
+
+    @Query("""
+            select distinct d from Deployment d
+            join d.changelog c
+            join c.jiraIssueKeys issueKey
             join d.deploymentTypes deploymentType
             where deploymentType = 'CODE'
             and upper(trim(issueKey)) in :issueKeys

@@ -96,6 +96,12 @@ public interface DeploymentRepository {
 
     List<Deployment> findDeploymentsWithJiraIssuesStartedAtOrAfter(ZonedDateTime startedAt);
 
+    /**
+     * Narrows the search to issue keys starting with {@code <projectKey>-}. The project key may contain
+     * {@code _}, a wildcard in this match, so callers must still filter the issue keys by project.
+     */
+    List<Deployment> findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter(String projectKey, ZonedDateTime startedAt);
+
     List<Deployment> findCodeDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);
 
     List<Deployment> findDeploymentsForJiraIssues(Set<String> normalizedIssueKeys);

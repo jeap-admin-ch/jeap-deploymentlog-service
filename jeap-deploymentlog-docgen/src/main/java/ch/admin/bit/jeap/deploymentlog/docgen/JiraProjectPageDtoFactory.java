@@ -17,6 +17,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Component
@@ -34,13 +35,28 @@ class JiraProjectPageDtoFactory {
 
     List<JiraProjectPageDto> createActiveProjects(ZonedDateTime generatedAt) {
         ZonedDateTime activeSince = generatedAt.minus(confluenceProperties.getChangeViewActivityPeriod());
-        List<Deployment> recentDeployments = deploymentRepository
-                .findDeploymentsWithJiraIssuesStartedAtOrAfter(activeSince);
+        return createProjects(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(activeSince),
+                issue -> true);
+    }
 
+    /**
+     * The project's entry of {@link #createActiveProjects(ZonedDateTime)}, reading only that project's deployments.
+     */
+    Optional<JiraProjectPageDto> createActiveProject(String projectKey, ZonedDateTime generatedAt) {
+        ZonedDateTime activeSince = generatedAt.minus(confluenceProperties.getChangeViewActivityPeriod());
+        List<Deployment> recentDeployments = deploymentRepository
+                .findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter(projectKey, activeSince);
+        return createProjects(recentDeployments, issue -> issue.projectKey().equals(projectKey)).stream()
+                .findFirst();
+    }
+
+    private List<JiraProjectPageDto> createProjects(List<Deployment> recentDeployments,
+                                                    Predicate<JiraIssueKey.Parsed> includedIssues) {
         Map<String, JiraIssueKey.Parsed> activeIssues = recentDeployments.stream()
                 .flatMap(deployment -> issueKeys(deployment).stream())
                 .map(JiraIssueKey::parse)
                 .flatMap(Optional::stream)
+                .filter(includedIssues)
                 .collect(Collectors.toMap(JiraIssueKey.Parsed::issueKey, Function.identity(), (left, right) -> left,
                         TreeMap::new));
         if (activeIssues.isEmpty()) {

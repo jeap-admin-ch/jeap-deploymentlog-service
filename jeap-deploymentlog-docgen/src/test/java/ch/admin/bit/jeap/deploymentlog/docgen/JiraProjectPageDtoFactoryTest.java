@@ -94,6 +94,32 @@ class JiraProjectPageDtoFactoryTest {
     }
 
     @Test
+    void createsOnlyTheRequestedProjectFromItsOwnDeployments() {
+        Deployment ops = deployment(NOW.minusDays(1), DeploymentState.STARTED,
+                environment("DEV", 1, false), "OPS_2-9", "JEAP-1");
+        Deployment lookalike = deployment(NOW.minusDays(1), DeploymentState.STARTED,
+                environment("DEV", 1, false), "OPSX2-1");
+        when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("OPS_2", NOW.minusDays(30)))
+                .thenReturn(List.of(ops, lookalike));
+        when(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("OPS_2-9"))).thenReturn(List.of());
+
+        var project = factory.createActiveProject("OPS_2", NOW);
+
+        assertThat(project).get().extracting(JiraProjectPageDto::getProjectKey).isEqualTo("OPS_2");
+        assertThat(project.orElseThrow().getIssues()).extracting(JiraProjectIssueDto::getIssueKey)
+                .containsExactly("OPS_2-9");
+        verify(deploymentRepository, never()).findDeploymentsWithJiraIssuesStartedAtOrAfter(any());
+    }
+
+    @Test
+    void createsNoProjectWithoutActiveIssues() {
+        when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("JEAP", NOW.minusDays(30)))
+                .thenReturn(List.of());
+
+        assertThat(factory.createActiveProject("JEAP", NOW)).isEmpty();
+    }
+
+    @Test
     void doesNotQueryHistoricalDeploymentsWhenThereAreNoValidActiveIssues() {
         Deployment invalid = deployment(NOW.minusDays(1), DeploymentState.STARTED,
                 environment("DEV", 1, false), "not-an-issue");

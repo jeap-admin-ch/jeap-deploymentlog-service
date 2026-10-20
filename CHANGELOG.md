@@ -20,6 +20,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   upgrading writes each link once more. `repairJiraLinks` still writes the links unconditionally.
 - A Jira project page is written a second time in the same run only when new or recreated issue pages change its
   links; otherwise it is written once.
+- Refreshing the Jira change view of one project only reads the deployments referencing that project's issues,
+  instead of building the pages of all active Jira projects and discarding the others.
 
 ### Added
 
