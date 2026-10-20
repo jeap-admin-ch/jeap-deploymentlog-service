@@ -10,6 +10,7 @@ import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenAsyncService;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentState;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.JiraChangeViewRequestRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.SystemRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentHistoryPageRepository;
@@ -38,7 +39,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,6 +73,8 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     @Autowired
     private DeploymentService deploymentService;
     @Autowired
+    private JiraChangeViewRequestRepository changeViewRequests;
+    @Autowired
     private DataSource dataSource;
 
     @Autowired
@@ -96,7 +98,10 @@ class DocumentationTransactionIT extends IntegrationTestBase {
 
     private final AtomicInteger remoteCalls = new AtomicInteger();
     private final AtomicInteger jiraCalls = new AtomicInteger();
-    private final AtomicBoolean failProjectPage = new AtomicBoolean();
+    private static final String PROJECT_PAGE_TITLE = "PROJ (Jira)";
+    // Written after the deployment page within the same deployment run.
+    private static final String COMPONENT_PAGE_TITLE = "test (TestSystem)";
+    private final AtomicReference<String> failingPageTitle = new AtomicReference<>();
 
     @BeforeEach
     void checkRemoteCallBoundaries() {
@@ -106,7 +111,7 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         }).when(confluence).findPageByTitle(anyString(), anyString());
         doAnswer(invocation -> {
             assertNoDatabaseTransaction();
-            if (failProjectPage.get() && "PROJ (Jira)".equals(invocation.getArgument(1))) {
+            if (invocation.getArgument(1).equals(failingPageTitle.get())) {
                 throw new IllegalStateException("Confluence temporarily unavailable");
             }
             Object result = invocation.callRealMethod();
@@ -115,7 +120,7 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         }).when(confluence).addOrUpdatePageUnderAncestor(anyString(), anyString(), any());
         doAnswer(invocation -> {
             assertNoDatabaseTransaction();
-            if (failProjectPage.get() && "PROJ (Jira)".equals(invocation.getArgument(2))) {
+            if (invocation.getArgument(2).equals(failingPageTitle.get())) {
                 throw new IllegalStateException("Confluence temporarily unavailable");
             }
             Object result = invocation.callRealMethod();
@@ -146,7 +151,7 @@ class DocumentationTransactionIT extends IntegrationTestBase {
 
     @Test
     void failureAfterSavingDeploymentPageKeepsRequestPendingAndCanBeRepaired() {
-        failProjectPage.set(true);
+        failingPageTitle.set(COMPONENT_PAGE_TITLE);
         var dto = createDeploymentDto();
         dto.setStartedAt(ZonedDateTime.now());
         dto.setProperties(Map.of("detail", "render me"));
@@ -156,7 +161,7 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         assertThat(pageRepository.findDeploymentPageByDeploymentId(deployment.getId())).isPresent();
         assertThat(deploymentRepository.getPageGenerationRequestId(deployment.getId())).isPresent();
 
-        failProjectPage.set(false);
+        failingPageTitle.set(null);
         asyncService.triggerDocgenForDeployment(deployment.getId());
         awaitUntilAsyncTasksCompleted();
         assertThat(deploymentRepository.getPageGenerationRequestId(deployment.getId())).isEmpty();
@@ -168,8 +173,28 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     }
 
     @Test
+    void jiraChangeViewFailureDoesNotKeepTheDeploymentPendingAndIsRepairedSeparately() {
+        failingPageTitle.set(PROJECT_PAGE_TITLE);
+        var dto = createDeploymentDto();
+        dto.setStartedAt(ZonedDateTime.now());
+        postDeployment(dto, "change-view-failure");
+        awaitUntilAsyncTasksCompleted();
+        var deployment = deploymentRepository.findByExternalId("change-view-failure").orElseThrow();
+        assertThat(deploymentRepository.getPageGenerationRequestId(deployment.getId())).isEmpty();
+        assertThat(changeViewRequests.findByProjectKey("PROJ")).isNotEmpty();
+
+        failingPageTitle.set(null);
+        asyncService.triggerJiraChangeViewRefresh("PROJ");
+        awaitUntilAsyncTasksCompleted();
+
+        assertThat(changeViewRequests.findByProjectKey("PROJ")).isEmpty();
+        assertThat(jiraCalls.get()).isPositive();
+        assertThat(confluenceAdapterMock.getModifiedPages()).contains(PROJECT_PAGE_TITLE, "PROJ-123");
+    }
+
+    @Test
     void tokenlessRepairRemainsEligibleAfterPartialFailure() {
-        failProjectPage.set(true);
+        failingPageTitle.set(COMPONENT_PAGE_TITLE);
         var dto = createDeploymentDto();
         dto.setStartedAt(ZonedDateTime.now().minusMinutes(10));
         postDeployment(dto, "tokenless-repair");
@@ -188,13 +213,13 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         asyncService.triggerRepairDocgenForDeployment(id);
         awaitUntilAsyncTasksCompleted();
 
-        // The letter was committed, but the later Jira failure must not remove repair eligibility.
+        // The letter was committed, but the later component-page failure must not remove repair eligibility.
         assertThat(pageRepository.findDeploymentPageByDeploymentId(id)).isPresent();
         assertThat(deploymentRepository.getPageGenerationRequestId(id)).isPresent();
         assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
         assertThat(deploymentService.getMissingDeploymentPages(100, 0, 60)).contains(id);
 
-        failProjectPage.set(false);
+        failingPageTitle.set(null);
         asyncService.triggerRepairDocgenForDeployment(id);
         awaitUntilAsyncTasksCompleted();
 
@@ -211,14 +236,14 @@ class DocumentationTransactionIT extends IntegrationTestBase {
     @ParameterizedTest
     @CsvSource({"all,false", "system,false", "migration,false", "system,true"})
     void bulkRepairRemainsPendingUntilAllPagesSucceed(String scope, boolean concurrentRequest) {
-        failProjectPage.set(true);
+        failingPageTitle.set(PROJECT_PAGE_TITLE);
         var dto = createDeploymentDto();
         dto.setStartedAt(ZonedDateTime.now().minusMinutes(10));
         postDeployment(dto, "bulk-repair");
         awaitUntilAsyncTasksCompleted();
         var id = deploymentRepository.findByExternalId("bulk-repair").orElseThrow().getId();
-        var initialRequest = deploymentRepository.getPageGenerationRequestId(id).orElseThrow();
-        deploymentService.completePageGenerationRequest(id, initialRequest);
+        // The Jira change view is refreshed separately, so its failure does not keep the deployment pending.
+        assertThat(deploymentRepository.getPageGenerationRequestId(id)).isEmpty();
         pageRepository.delete(pageRepository.findDeploymentPageByDeploymentId(id).orElseThrow());
         assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
 
@@ -239,7 +264,7 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         assertThat(deploymentRepository.isPageGenerationRepairRequired(id)).isTrue();
         assertThat(deploymentService.getMissingDeploymentPages(100, 0, 60)).contains(id);
 
-        failProjectPage.set(false);
+        failingPageTitle.set(null);
         var nextRequest = new AtomicReference<UUID>();
         if (concurrentRequest) {
             doAnswer(invocation -> {

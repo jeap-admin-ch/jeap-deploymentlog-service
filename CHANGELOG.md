@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.19.0] - 2026-10-20
+
+### Changed
+
+- The Jira change view (Jira project and issue pages below `Changes`, and the Jira remote links) is no longer
+  regenerated within every deployment run. A deployment run records a pending request per referenced Jira issue in
+  the new table `jira_change_view_request`; one background task per Jira project processes all pending requests of
+  that project. A burst of deployments referencing the same Jira issues therefore regenerates the change view a few
+  times instead of once per deployment, and a failing change view no longer keeps the deployment page pending.
+  The missing page generation job resubmits refreshes pending for longer than `min-age-minutes`.
+
+### Added
+
+- Gauge `deploymentlog.docgen.jirachangeview.lag`: the number of Jira issues with a change view refresh pending for
+  longer than `min-age-minutes`.
+
 ## [16.18.0] - 2026-10-18
 
 ### Dependencies

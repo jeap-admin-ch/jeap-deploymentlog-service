@@ -11,9 +11,9 @@ one instance runs them at a time.
 
 | Job                       | Schedule                                                              | Lock                        | Purpose                                                    |
 |---------------------------|-----------------------------------------------------------------------|-----------------------------|--------------------------------------------------------------|
-| Missing page generation   | `jeap.deploymentlog.documentation-generator.scheduled.cron`, default every 10 minutes | `generate-missing-pages` (at least 60s, at most 5m)   | Regenerates deployment pages that are missing or outdated. |
+| Missing page generation   | `jeap.deploymentlog.documentation-generator.scheduled.cron`, default every 10 minutes | `generate-missing-pages` (at least 60s, at most 5m)   | Regenerates deployment pages that are missing or outdated, and resubmits pending Jira change view refreshes. |
 | Housekeeping | `jeap.deploymentlog.housekeeping.cron` with fallback to `jeap.deploymentlog.documentation-generator.housekeeping.cron`, default daily at 03:30 | `outdated-page-housekeeping` (at least 60s, at most 30m) | Independently runs enabled Confluence-page cleanup and persistent data retention. |
-| Metrics update            | every 15 minutes, and once at startup                                 | none                        | Refreshes the page generation lag gauge.                     |
+| Metrics update            | every 15 minutes, and once at startup                                 | none                        | Refreshes the page generation and Jira change view lag gauges. |
 
 Setting a cron expression to `-` disables the corresponding job.
 
@@ -62,6 +62,20 @@ Re-triggering a deployment regenerates its whole page path, not just its deploym
 page, the deployment history page of the environment, the yearly deployment list page and the deployment
 history overview are all written again on the way. The pages that aggregate several deployments are
 therefore repaired along with the deployment, without being tracked separately.
+
+### Jira change view refresh
+
+The Jira project and issue pages below `Changes` aggregate the deployments of many systems. A deployment run does not
+regenerate them itself. After its own pages succeeded, it records one pending request per referenced Jira issue in
+`jira_change_view_request` and submits a background task keyed by the Jira project. While that task is queued, further
+deployments of the same project only add requests, so a burst of deployments referencing the same issues results in a
+few refreshes instead of one per deployment. New deployment pages overtake the queued refreshes.
+
+A refresh regenerates the project page and the issue pages and remote links of all pending issues of its project,
+then deletes exactly the requests it has read; a request recorded while it runs stays pending. A failed, rejected or
+lost refresh leaves its requests behind. The missing page generation job resubmits projects with requests older than
+`min-age-minutes`, oldest first and at most `retried-pages-limit` per run, so the change view catches up after a
+Confluence or Jira outage or a restart. A failing change view never keeps a deployment page pending.
 
 ### Housekeeping
 
@@ -190,7 +204,8 @@ The metrics are exposed through the actuator endpoints provided by the jEAP moni
 | Metric                                       | Type    | Meaning                                                                                          |
 |----------------------------------------------|---------|----------------------------------------------------------------------------------------------------|
 | `deploymentlog.docgen.deploymentpages.lag`   | gauge   | Number of deployments of the last 7 days whose page is missing or outdated. Refreshed every 15 minutes. |
-| `deploymentlog.docgen.deploymentpages.error` | counter | Incremented for every failed generation attempt, including failed system migrations and merges.   |
+| `deploymentlog.docgen.deploymentpages.error` | counter | Incremented for every failed generation attempt, including failed system migrations and merges and failed Jira change view refreshes. |
+| `deploymentlog.docgen.jirachangeview.lag`    | gauge   | Number of Jira issues with a change view refresh pending for longer than `min-age-minutes`. Refreshed every 15 minutes. |
 | `deploymentlog.docgen.jiraissuelink.error`   | counter | Incremented after all retries to create or update a stable Jira link to a DeploymentLog issue page failed. |
 | `deploymentlog_generate_deployment_page`     | timer   | Duration of generating the pages for one deployment.                                              |
 | `update_deployment_history_pages`            | timer   | Duration of refreshing the deployment history pages after a housekeeping run.                     |
@@ -296,6 +311,7 @@ more than two stages, has to adjust the `productive`, `development` and `staging
 | Confluence unreachable or failing          | The request that recorded the deployment already succeeded. The generation fails, the error counter is incremented and the lag gauge rises; the repair job retries. |
 | Confluence rejects an update as a conflict | The adapter waits `retry-on-conflict-wait-duration`, re-reads the page, re-renders the content and retries — up to three update attempts per call. If the conflict persists, the retry around the whole call repeats it up to four times with exponential backoff, so at most twelve update requests are sent. |
 | Jira issue cannot be updated               | Logged as a warning; the page generation succeeds. Use `repairJiraLinks` to catch up.                       |
+| Jira change view cannot be generated       | The deployment pages are not affected. The refresh requests stay pending, the error counter is incremented and the Jira change view lag gauge rises; the repair job resubmits the refresh. |
 | Jira unavailable during a ready-for-deploy check | The request fails with `503` and the deployment is **not** recorded — the check is synchronous by design. |
 | Docgen lock cannot be acquired within 30 seconds (default) | Deployment-page generation is deferred to repair, while a persisted retention refresh remains pending. History refreshes retry lock timeouts up to three times with a 30-second delay. Other non-repairable jobs report failure. |
 | An instance dies mid-generation            | Its lock expires; the pages it did not finish are detected as missing or outdated and repaired.            |

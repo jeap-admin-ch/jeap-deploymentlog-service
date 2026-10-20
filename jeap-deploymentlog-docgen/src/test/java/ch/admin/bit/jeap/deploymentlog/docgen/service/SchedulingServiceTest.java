@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPage;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.JiraChangeViewRequestRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionStateRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
@@ -36,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -65,6 +67,8 @@ class SchedulingServiceTest {
     private EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     @Mock
     private DocgenLocks docgenLocksMock;
+    @Mock
+    private JiraChangeViewRequestRepository jiraChangeViewRequestRepository;
 
     @BeforeEach
     void runTasksProtectedByDocgenLocks() {
@@ -81,7 +85,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID outdatedDeploymentId = UUID.randomUUID();
         when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 10_080))
                 .thenReturn(List.of(outdatedDeploymentId));
@@ -94,13 +99,47 @@ class SchedulingServiceTest {
     }
 
     @Test
+    void generateMissingPages_resubmitsPendingJiraChangeViewRefreshesOldestFirst() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingService schedulingService = schedulingService(new HousekeepingConfigProperties());
+        when(jiraChangeViewRequestRepository.findProjectKeysRequestedBefore(any(), eq(50)))
+                .thenReturn(List.of("OLDEST", "OLDER"));
+
+        schedulingService.generateMissingPages();
+
+        var order = inOrder(docgenAsyncServiceMock);
+        order.verify(docgenAsyncServiceMock).triggerJiraChangeViewRefresh("OLDEST");
+        order.verify(docgenAsyncServiceMock).triggerJiraChangeViewRefresh("OLDER");
+    }
+
+    @Test
+    void generateMissingPages_repairsJiraChangeViewEvenWhenTheQueueIsFull() {
+        LockAssert.TestHelper.makeAllAssertsPass(true);
+        SchedulingService schedulingService = schedulingService(new HousekeepingConfigProperties());
+        UUID deploymentId = UUID.randomUUID();
+        when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 10_080)).thenReturn(List.of(deploymentId));
+        doThrow(new TaskRejectedException("queue full"))
+                .when(docgenAsyncServiceMock).triggerRepairDocgenForDeployment(deploymentId);
+        when(jiraChangeViewRequestRepository.findProjectKeysRequestedBefore(any(), eq(50)))
+                .thenReturn(List.of("FIRST", "SECOND"));
+        doThrow(new TaskRejectedException("queue full"))
+                .when(docgenAsyncServiceMock).triggerJiraChangeViewRefresh("FIRST");
+
+        schedulingService.generateMissingPages();
+
+        verify(docgenAsyncServiceMock).triggerJiraChangeViewRefresh("FIRST");
+        verify(docgenAsyncServiceMock, never()).triggerJiraChangeViewRefresh("SECOND");
+    }
+
+    @Test
     void generateMissingPages_checksForBoundedLegacyBatchOnEveryRun() {
         LockAssert.TestHelper.makeAllAssertsPass(true);
         SchedulingConfigProperties props = new SchedulingConfigProperties();
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         when(deploymentServiceMock.releaseLegacyPageGeneration(50, 5, 10_080))
                 .thenReturn(50, 1, 0);
         when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 10_080)).thenReturn(List.of());
@@ -120,7 +159,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         when(deploymentServiceMock.getMissingDeploymentPages(50, 5, 2_880)).thenReturn(List.of());
 
         schedulingService.generateMissingPages();
@@ -135,7 +175,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID firstDeploymentId = UUID.randomUUID();
         UUID secondDeploymentId = UUID.randomUUID();
         when(deploymentServiceMock.getMissingDeploymentPages(anyInt(), anyLong(), anyLong()))
@@ -156,7 +197,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository, props,
                 new HousekeepingConfigProperties(), dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         String pageId = "123";
         DeploymentPage deploymentPage = DeploymentPage.builder()
                 .id(UUID.randomUUID())
@@ -189,7 +231,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 schedulingProps, housekeepingProps, dataRetentionRepository, componentPageRepository,
-                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID deploymentId = UUID.randomUUID();
         DataRetentionResult result = new DataRetentionResult(
                 Set.of(new SystemEnv(UUID.randomUUID(), "system", UUID.randomUUID())),
@@ -219,7 +262,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProps, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
 
         schedulingService.housekeeping();
 
@@ -390,7 +434,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProps, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID deploymentId = UUID.randomUUID();
         DeploymentPage deploymentPage = DeploymentPage.builder()
                 .id(UUID.randomUUID()).deploymentId(deploymentId).pageId("page")
@@ -418,7 +463,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProps, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID firstDeploymentId = UUID.randomUUID();
         UUID secondDeploymentId = UUID.randomUUID();
         DeploymentPage firstPage = deploymentPage(firstDeploymentId, "first-page");
@@ -455,7 +501,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProps, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID deploymentId = UUID.randomUUID();
         DeploymentPage page = deploymentPage(deploymentId, "page");
         when(dataRetentionRepository.findDeletionCandidates(any(), eq(500)))
@@ -480,7 +527,8 @@ class SchedulingServiceTest {
         SchedulingService schedulingService = new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProps, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
         UUID deploymentId = UUID.randomUUID();
         when(dataRetentionRepository.findDeletionCandidates(any(), eq(500)))
                 .thenReturn(List.of(new DataRetentionCandidate(deploymentId, "system")));
@@ -544,6 +592,7 @@ class SchedulingServiceTest {
         return new SchedulingService(
                 deploymentServiceMock, docgenAsyncServiceMock, confluenceAdapter, deploymentPageRepository,
                 new SchedulingConfigProperties(), housekeepingProperties, dataRetentionRepository,
-                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock);
+                componentPageRepository, versionDeploymentRepository, environmentComponentVersionStateRepository, docgenLocksMock, meterRegistryMock,
+                jiraChangeViewRequestRepository);
     }
 }

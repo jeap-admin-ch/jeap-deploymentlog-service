@@ -179,9 +179,12 @@ flowchart TD
 Generating the pages for one deployment first reconciles the structural pages, then walks the deployment path —
 the grouped or ungrouped system page, its `Deployments (<SystemName>)` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. The affected component page is then
-rendered from the committed deployment history. Jira project pages referenced by that deployment are updated
-under `Changes`. All ancestor pages are therefore refreshed with the same run,
+rendered from the committed deployment history. All ancestor pages are therefore refreshed with the same run,
 which is why recording a deployment also keeps the aggregated views current.
+
+The Jira project and issue pages under `Changes` aggregate deployments of many systems and are refreshed separately:
+the deployment run records a pending request per referenced Jira issue, and one background task per Jira project
+processes all pending requests of that project. See [Operations](operations.md#jira-change-view-refresh).
 
 Every step is idempotent. Stable Confluence page ids and their expected parents are persisted. Existing pages are
 updated or moved by id, preserving their content, children and Confluence history; a missing tracked page is created
@@ -206,7 +209,8 @@ The following safeguards keep concurrent runs from corrupting the tree:
 - Component-page creation additionally acquires the renewable distributed lock `docgen:component:<UUID>`. This serialises the title lookup, Confluence
   operation and tracking update across service instances even during a component move. Tracking is written only after
   Confluence has successfully created, updated or moved the page.
-- Jira project-page generation acquires the renewable distributed lock `docgen:jira-changes`. This serialises project title lookup,
+- Jira change view generation (project and issue pages) acquires the renewable distributed lock `docgen:jira-changes`.
+  It runs outside the per-system locks. This serialises project title lookup,
   Confluence operations and tracking across different system locks and service instances; a project Page ID is stored
   only after Confluence succeeds.
 - Shared-lock acquisition timeouts defer deployment work to repair without invalidating the cached structure or

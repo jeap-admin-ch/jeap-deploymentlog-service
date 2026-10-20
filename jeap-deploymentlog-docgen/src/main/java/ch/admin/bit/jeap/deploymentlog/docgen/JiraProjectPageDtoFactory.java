@@ -67,12 +67,12 @@ class JiraProjectPageDtoFactory {
                 .toList();
     }
 
-    Set<String> projectKeys(Deployment deployment) {
+    static Set<JiraIssueKey.Parsed> parsedIssueKeys(Deployment deployment) {
         return issueKeys(deployment).stream()
                 .map(JiraIssueKey::parse)
                 .flatMap(Optional::stream)
-                .map(JiraIssueKey.Parsed::projectKey)
-                .collect(Collectors.toCollection(TreeSet::new));
+                .collect(Collectors.toCollection(() -> new TreeSet<>(
+                        Comparator.comparing(JiraIssueKey.Parsed::issueKey))));
     }
 
     private JiraProjectIssueDto toIssueDto(String issueKey, ZonedDateTime latestDeployment,

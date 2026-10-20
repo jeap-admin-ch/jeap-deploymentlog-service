@@ -2,7 +2,6 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectIssueDto;
-import ch.admin.bit.jeap.deploymentlog.domain.Deployment;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPage;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPageRepository;
 import lombok.RequiredArgsConstructor;
@@ -47,14 +46,9 @@ class JiraProjectPageGenerator {
         generate(changesPageId, inactiveTrackedProjects, Set.of());
     }
 
-    void generateForDeployment(String changesPageId, Deployment deployment) {
-        Set<String> affectedProjectKeys = dtoFactory.projectKeys(deployment);
-        Set<String> affectedIssueKeys = JiraProjectPageDtoFactory.normalizedIssueKeys(deployment);
-        if (affectedProjectKeys.isEmpty()) {
-            return;
-        }
+    void generateForProject(String changesPageId, String projectKey, Set<String> affectedIssueKeys) {
         List<JiraProjectPageDto> affectedProjects = dtoFactory.createActiveProjects(ZonedDateTime.now()).stream()
-                .filter(page -> affectedProjectKeys.contains(page.getProjectKey()))
+                .filter(page -> projectKey.equals(page.getProjectKey()))
                 .toList();
         generate(changesPageId, affectedProjects, affectedIssueKeys);
     }

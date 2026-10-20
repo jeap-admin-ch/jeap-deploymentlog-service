@@ -234,6 +234,79 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
+    void successfulGenerationTriggersOneJiraChangeViewRefreshPerProject() {
+        UUID deploymentId = UUID.randomUUID();
+        when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
+        when(documentationGenerator.generateDeploymentPages(deploymentId)).thenReturn(GeneratedDeploymentPageDto.builder()
+                .pageId("pageId")
+                .jiraProjectKeys(Set.of("ABC", "JIRA"))
+                .build());
+
+        docgenAsyncService.triggerDocgenForDeployment(deploymentId);
+
+        await().until(taskDispatcher::isIdle);
+        verify(documentationGenerator).refreshJiraChangeView("ABC");
+        verify(documentationGenerator).refreshJiraChangeView("JIRA");
+    }
+
+    @Test
+    void jiraChangeViewRefreshesOfTheSameProjectAreCoalescedWhileQueued() throws InterruptedException {
+        DocgenTaskDispatcher smallDispatcher = new DocgenTaskDispatcher(10, 10);
+        DocgenAsyncService service = new DocgenAsyncService(documentationGenerator, deploymentRepository,
+                dataRetentionRepository, new SimpleMeterRegistry(), docgenLocks, smallDispatcher, deploymentService);
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        smallDispatcher.submitBackground("blocker", () -> {
+            running.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        try {
+            org.junit.jupiter.api.Assertions.assertTrue(running.await(10, TimeUnit.SECONDS));
+            service.triggerJiraChangeViewRefresh("JIRA");
+            service.triggerJiraChangeViewRefresh("JIRA");
+            service.triggerJiraChangeViewRefresh("ABC");
+            service.triggerJiraChangeViewRefresh("JIRA");
+            release.countDown();
+            await().until(smallDispatcher::isIdle);
+            verify(documentationGenerator, times(1)).refreshJiraChangeView("JIRA");
+            verify(documentationGenerator, times(1)).refreshJiraChangeView("ABC");
+        } finally {
+            release.countDown();
+            smallDispatcher.shutdown();
+        }
+    }
+
+    @Test
+    void failedJiraChangeViewRefreshIsCountedAsError() {
+        doThrow(new IllegalStateException("Confluence unavailable"))
+                .when(documentationGenerator).refreshJiraChangeView("JIRA");
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerJiraChangeViewRefresh("JIRA");
+
+        await().until(taskDispatcher::isIdle);
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count())
+                .isEqualTo(errorsBefore + 1);
+    }
+
+    @Test
+    void jiraChangeViewLockTimeoutIsLeftForRepairWithoutCountingAnError() {
+        doThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                .when(documentationGenerator).refreshJiraChangeView("JIRA");
+        double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
+
+        docgenAsyncService.triggerJiraChangeViewRefresh("JIRA");
+
+        await().until(taskDispatcher::isIdle);
+        assertThat(meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count())
+                .isEqualTo(errorsBefore);
+    }
+
+    @Test
     void queuedAndRejectedRepairsAreNotMarkedAsAttempted() throws InterruptedException {
         when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
         DocgenTaskDispatcher smallDispatcher = new DocgenTaskDispatcher(1, 10);

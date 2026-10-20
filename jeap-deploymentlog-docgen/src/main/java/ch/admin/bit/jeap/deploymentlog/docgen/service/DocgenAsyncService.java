@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen.service;
 
 import ch.admin.bit.jeap.db.tx.AwsJdbcFailoverExceptionClassifier;
 import ch.admin.bit.jeap.deploymentlog.docgen.DocumentationGenerator;
+import ch.admin.bit.jeap.deploymentlog.docgen.model.GeneratedDeploymentPageDto;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
 import ch.admin.bit.jeap.deploymentlog.domain.System;
 import jakarta.annotation.PostConstruct;
@@ -26,6 +27,8 @@ public class DocgenAsyncService {
     private static final String SYSTEM_NAME = "systemName";
     private static final String COMPONENT_NAME = "componentName";
     public static final String DEPLOYMENT_ID = "deploymentId";
+    private static final String PROJECT_KEY = "projectKey";
+    private static final String JIRA_CHANGE_VIEW_TASK_KEY_PREFIX = "jira-change-view:";
 
     private static final int HISTORY_LOCK_RETRIES = 3;
     @Value("${jeap.deploymentlog.documentation-generator.history-lock-retry-delay:PT30S}")
@@ -138,10 +141,15 @@ public class DocgenAsyncService {
             // before a later component/Jira step fails; never replace a concurrently submitted request.
             deploymentService.requestPageGenerationIfAbsent(deploymentId);
             UUID requestId = deploymentRepository.getPageGenerationRequestId(deploymentId).orElse(null);
-            if (documentationGenerator.generateDeploymentPages(deploymentId) != null && requestId != null) {
+            GeneratedDeploymentPageDto generatedPage = documentationGenerator.generateDeploymentPages(deploymentId);
+            if (generatedPage == null) {
+                return;
+            }
+            if (requestId != null) {
                 // A request arriving while generation was running must remain pending for the next run.
                 deploymentService.completePageGenerationRequest(deploymentId, requestId);
             }
+            generatedPage.getJiraProjectKeys().forEach(this::triggerJiraChangeViewRefreshOrLeaveForRepair);
         } catch (Exception ex) {
             handleDeploymentPageGenerationFailure(deploymentId, systemName, componentName, ex,
                     "Failed to generate pages");
@@ -170,6 +178,42 @@ public class DocgenAsyncService {
         log.warn("{} for deployment {}, system {} and component {}", failureMessage,
                 value(DEPLOYMENT_ID, deploymentId), value(SYSTEM_NAME, systemName),
                 value(COMPONENT_NAME, componentName), ex);
+    }
+
+    /**
+     * Keyed per project: while a refresh of the project is queued, further requests of the same project are absorbed
+     * by it, so a burst of deployments referencing the same issues results in few refreshes.
+     */
+    public void triggerJiraChangeViewRefresh(String projectKey) {
+        dispatcher.submitBackground(JIRA_CHANGE_VIEW_TASK_KEY_PREFIX + projectKey,
+                () -> refreshJiraChangeView(projectKey));
+    }
+
+    private void triggerJiraChangeViewRefreshOrLeaveForRepair(String projectKey) {
+        try {
+            triggerJiraChangeViewRefresh(projectKey);
+        } catch (TaskRejectedException ex) {
+            log.info("Docgen queue is full; leaving the Jira change view of project {} for the repair job",
+                    value(PROJECT_KEY, projectKey));
+        }
+    }
+
+    private void refreshJiraChangeView(String projectKey) {
+        try {
+            documentationGenerator.refreshJiraChangeView(projectKey);
+        } catch (DocgenLockTimeoutException ex) {
+            log.info("Jira change view lock is busy for project {}; leaving its requests pending for the repair job",
+                    value(PROJECT_KEY, projectKey));
+        } catch (Exception ex) {
+            if (AwsJdbcFailoverExceptionClassifier.isRetryable(ex)) {
+                log.info("Database connection recovered while refreshing the Jira change view of project {}; " +
+                        "leaving its requests pending for the repair job", value(PROJECT_KEY, projectKey));
+                log.debug("Jira change view refresh interrupted by a recovered database connection", ex);
+                return;
+            }
+            errorCounter.increment();
+            log.warn("Failed to refresh the Jira change view of project {}", value(PROJECT_KEY, projectKey), ex);
+        }
     }
 
     public void triggerMigrationForSystem(System system) {

@@ -7,6 +7,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageCleanupCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.ComponentPageRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.VersionDeploymentRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DeploymentService;
+import ch.admin.bit.jeap.deploymentlog.domain.JiraChangeViewRequestRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.EnvironmentComponentVersionStateRepository;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionCandidate;
 import ch.admin.bit.jeap.deploymentlog.domain.DataRetentionRepository;
@@ -57,7 +58,9 @@ public class SchedulingService {
     private final EnvironmentComponentVersionStateRepository environmentComponentVersionStateRepository;
     private final DocgenLocks docgenLocks;
     private final MeterRegistry meterRegistry;
+    private final JiraChangeViewRequestRepository jiraChangeViewRequestRepository;
     private AtomicLong deploymentPageGenerationLagCounter;
+    private AtomicLong jiraChangeViewLagCounter;
 
     @Scheduled(cron = "${jeap.deploymentlog.documentation-generator.scheduled.cron:'-'}")
     @SchedulerLock(name = "generate-missing-pages", lockAtLeastFor = "60s", lockAtMostFor = "5m")
@@ -89,8 +92,35 @@ public class SchedulingService {
                 break;
             }
         }
+        triggerPendingJiraChangeViewRefreshes();
 
         log.debug("Missing page check finished");
+    }
+
+    /**
+     * Resubmits the Jira change view refresh of projects with requests older than the minimum age - their in-memory
+     * task was lost, rejected or failed.
+     */
+    private void triggerPendingJiraChangeViewRefreshes() {
+        try {
+            List<String> projectKeys = jiraChangeViewRequestRepository.findProjectKeysRequestedBefore(
+                    ZonedDateTime.now().minusMinutes(configProperties.getMinAgeMinutes()),
+                    configProperties.getRetriedPagesLimit());
+            if (!projectKeys.isEmpty()) {
+                log.info("Re-triggering the Jira change view refresh of {} projects: {}", projectKeys.size(), projectKeys);
+            }
+            for (String projectKey : projectKeys) {
+                try {
+                    docgenAsyncService.triggerJiraChangeViewRefresh(projectKey);
+                } catch (TaskRejectedException ex) {
+                    log.info("Docgen queue is full; leaving the Jira change view of project {} and the remaining " +
+                            "projects for the next repair run", projectKey);
+                    break;
+                }
+            }
+        } catch (RuntimeException ex) {
+            log.error("Failed to re-trigger pending Jira change view refreshes", ex);
+        }
     }
 
     @Scheduled(cron = "${jeap.deploymentlog.housekeeping.cron:${jeap.deploymentlog.documentation-generator.housekeeping.cron:'-'}}")
@@ -349,5 +379,14 @@ public class SchedulingService {
 
         //noinspection ConstantConditions
         deploymentPageGenerationLagCounter.set(deploymentPageGenerationLag);
+
+        long jiraChangeViewLag = jiraChangeViewRequestRepository.countIssueKeysRequestedBefore(
+                ZonedDateTime.now().minusMinutes(configProperties.getMinAgeMinutes()));
+        if (jiraChangeViewLagCounter == null) {
+            jiraChangeViewLagCounter = meterRegistry.gauge("deploymentlog.docgen.jirachangeview.lag",
+                    new AtomicLong(jiraChangeViewLag));
+        }
+        //noinspection ConstantConditions
+        jiraChangeViewLagCounter.set(jiraChangeViewLag);
     }
 }

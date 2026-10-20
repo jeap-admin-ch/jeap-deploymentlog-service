@@ -1,5 +1,6 @@
 package ch.admin.bit.jeap.deploymentlog.docgen;
 
+import ch.admin.bit.jeap.deploymentlog.docgen.model.GeneratedDeploymentPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.model.SystemPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.GeneratorService;
 import ch.admin.bit.jeap.deploymentlog.domain.*;
@@ -10,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,6 +20,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +29,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -88,6 +93,9 @@ class DocumentationGeneratorTest {
 
     @Mock
     JiraIssuePageRepository jiraIssuePageRepositoryMock;
+
+    @Mock
+    JiraChangeViewRequestRepository jiraChangeViewRequestRepositoryMock;
 
     @Mock
     DocumentationTransactionRunner transactionRunnerMock;
@@ -180,7 +188,7 @@ class DocumentationGeneratorTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void generateDeploymentPagesReusesStructureAfterJiraLockContention(boolean lockTimeout) {
+    void generateDeploymentPagesReusesStructureAfterSharedLockContention(boolean lockTimeout) {
         System system = new System("SYSTEM A");
         ch.admin.bit.jeap.deploymentlog.domain.Component component =
                 new ch.admin.bit.jeap.deploymentlog.domain.Component("component-a", system);
@@ -212,12 +220,11 @@ class DocumentationGeneratorTest {
                         .build());
 
         if (lockTimeout) {
-            doThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
-                    .when(documentationStructureLockMock).runWithChangesLock(any());
+            doThrow(new DocgenLockTimeoutException("docgen:component:" + component.getId()))
+                    .doReturn("component-page")
+                    .when(componentPageGeneratorMock).generatePage(anyString(), eq(component));
             assertThrows(DocgenLockTimeoutException.class,
                     () -> documentationGenerator.generateDeploymentPages(deploymentId));
-            doAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get())
-                    .when(documentationStructureLockMock).runWithChangesLock(any());
         } else {
             documentationGenerator.generateDeploymentPages(deploymentId);
         }
@@ -230,6 +237,107 @@ class DocumentationGeneratorTest {
         verify(componentPageGeneratorMock, never()).generatePages(anyString(), any());
     }
 
+    @Test
+    void generateDeploymentPagesRecordsJiraChangeViewRequestsInsteadOfGeneratingTheChangeView() {
+        UUID deploymentId = stubDeployment(Set.of(" jira-1 ", "ABC-2", "not a key"));
+
+        GeneratedDeploymentPageDto generatedPage = documentationGenerator.generateDeploymentPages(deploymentId);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<JiraChangeViewRequest>> requests = ArgumentCaptor.forClass(Collection.class);
+        verify(jiraChangeViewRequestRepositoryMock).saveAll(requests.capture());
+        assertThat(requests.getValue())
+                .extracting(JiraChangeViewRequest::getIssueKey, JiraChangeViewRequest::getProjectKey)
+                .containsExactlyInAnyOrder(tuple("JIRA-1", "JIRA"), tuple("ABC-2", "ABC"));
+        assertThat(generatedPage.getJiraProjectKeys()).containsExactly("ABC", "JIRA");
+        verifyNoInteractions(jiraProjectPageGeneratorMock);
+        verify(documentationStructureLockMock, never()).runWithChangesLock(any());
+    }
+
+    @Test
+    void generateDeploymentPagesWithoutJiraIssuesRecordsNoRequest() {
+        UUID deploymentId = stubDeployment(Set.of());
+
+        GeneratedDeploymentPageDto generatedPage = documentationGenerator.generateDeploymentPages(deploymentId);
+
+        assertThat(generatedPage.getJiraProjectKeys()).isEmpty();
+        verifyNoInteractions(jiraChangeViewRequestRepositoryMock);
+    }
+
+    @Test
+    void refreshJiraChangeViewGeneratesTheProjectOnceAndDeletesTheProcessedRequests() {
+        ZonedDateTime requestedAt = ZonedDateTime.now();
+        JiraChangeViewRequest first = JiraChangeViewRequest.create("JIRA-1", "JIRA", requestedAt);
+        JiraChangeViewRequest second = JiraChangeViewRequest.create("JIRA-1", "JIRA", requestedAt);
+        JiraChangeViewRequest third = JiraChangeViewRequest.create("JIRA-2", "JIRA", requestedAt);
+        when(jiraChangeViewRequestRepositoryMock.findByProjectKey("JIRA")).thenReturn(List.of(first, second, third));
+
+        documentationGenerator.refreshJiraChangeView("JIRA");
+
+        InOrder inOrder = inOrder(documentationStructureLockMock, jiraProjectPageGeneratorMock,
+                jiraChangeViewRequestRepositoryMock);
+        inOrder.verify(documentationStructureLockMock).runWithChangesLock(any());
+        inOrder.verify(jiraProjectPageGeneratorMock).generateForProject(
+                ROOT_PAGE_ID + "/Changes", "JIRA", Set.of("JIRA-1", "JIRA-2"));
+        inOrder.verify(jiraChangeViewRequestRepositoryMock).deleteAllById(
+                List.of(first.getId(), second.getId(), third.getId()));
+    }
+
+    @Test
+    void refreshJiraChangeViewKeepsTheRequestsWhenGenerationFails() {
+        when(jiraChangeViewRequestRepositoryMock.findByProjectKey("JIRA"))
+                .thenReturn(List.of(JiraChangeViewRequest.create("JIRA-1", "JIRA", ZonedDateTime.now())));
+        doThrow(new IllegalStateException("Confluence unavailable"))
+                .when(jiraProjectPageGeneratorMock).generateForProject(anyString(), eq("JIRA"), any());
+
+        assertThrows(IllegalStateException.class, () -> documentationGenerator.refreshJiraChangeView("JIRA"));
+
+        verify(jiraChangeViewRequestRepositoryMock, never()).deleteAllById(any());
+    }
+
+    @Test
+    void refreshJiraChangeViewWithoutPendingRequestsGeneratesNothing() {
+        when(jiraChangeViewRequestRepositoryMock.findByProjectKey("JIRA")).thenReturn(List.of());
+
+        documentationGenerator.refreshJiraChangeView("JIRA");
+
+        verifyNoInteractions(jiraProjectPageGeneratorMock);
+        verify(jiraChangeViewRequestRepositoryMock, never()).deleteAllById(any());
+    }
+
+    private UUID stubDeployment(Set<String> jiraIssueKeys) {
+        System system = new System("SYSTEM A");
+        ch.admin.bit.jeap.deploymentlog.domain.Component component =
+                new ch.admin.bit.jeap.deploymentlog.domain.Component("component-a", system);
+        system.getComponents().add(component);
+        ComponentVersion componentVersion = mock(ComponentVersion.class);
+        Environment environment = new Environment("DEV");
+        Deployment deployment = mock(Deployment.class);
+        UUID deploymentId = UUID.randomUUID();
+        ZonedDateTime startedAt = ZonedDateTime.parse("2026-08-31T10:00:00+02:00");
+        when(deploymentRepositoryMock.getById(deploymentId)).thenReturn(deployment);
+        when(deployment.getEnvironment()).thenReturn(environment);
+        when(deployment.getComponentVersion()).thenReturn(componentVersion);
+        when(componentVersion.getComponent()).thenReturn(component);
+        when(deployment.getStartedAt()).thenReturn(startedAt);
+        when(deployment.getSequence()).thenReturn(DeploymentSequence.NEW);
+        when(deployment.getChangelog()).thenReturn(Changelog.builder().jiraIssueKeys(jiraIssueKeys).build());
+        when(systemRepositoryMock.findAllWithSystemGroup()).thenReturn(List.of(system));
+        when(generatorServiceMock.createSystemPageDto(system))
+                .thenReturn(SystemPageDto.builder().name(system.getName()).build());
+        when(generatorServiceMock.createDeploymentLetterPageDto(deployment)).thenReturn(
+                ch.admin.bit.jeap.deploymentlog.docgen.model.DeploymentLetterPageDto.builder()
+                        .deploymentId(deploymentId.toString())
+                        .startedAt("2026-08-31 10:00:00")
+                        .componentName(component.getName())
+                        .environmentName(environment.getName())
+                        .state("STARTED")
+                        .sequence(DeploymentSequence.NEW.getLabel())
+                        .deploymentStateTimestamp(startedAt)
+                        .changeJiraIssueKeys(jiraIssueKeys)
+                        .build());
+        return deploymentId;
+    }
 
     @Test
     void migrateSystem() {
@@ -387,6 +495,7 @@ class DocumentationGeneratorTest {
                 componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
                 jiraIssuePageRepositoryMock,
+                jiraChangeViewRequestRepositoryMock,
                 transactionRunnerMock);
 
         String systemName = "SYSTEM A";
@@ -703,6 +812,7 @@ class DocumentationGeneratorTest {
                 componentRepositoryMock,
                 jiraProjectPageGeneratorMock,
                 jiraIssuePageRepositoryMock,
+                jiraChangeViewRequestRepositoryMock,
                 transactionRunnerMock);
     }
 }

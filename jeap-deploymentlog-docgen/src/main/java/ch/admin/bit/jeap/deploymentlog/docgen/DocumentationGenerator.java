@@ -17,6 +17,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -56,6 +57,7 @@ public class DocumentationGenerator {
     private final ComponentRepository componentRepository;
     private final JiraProjectPageGenerator jiraProjectPageGenerator;
     private final JiraIssuePageRepository jiraIssuePageRepository;
+    private final JiraChangeViewRequestRepository jiraChangeViewRequestRepository;
     private final DocumentationTransactionRunner transactionRunner;
     private final AtomicReference<CachedStructure> structureCache = new AtomicReference<>();
 
@@ -83,9 +85,61 @@ public class DocumentationGenerator {
                 : generateUndeploymentLetter(deploymentLetterParentPageId, deployment);
         componentPageGenerator.generatePage(systemStructure.componentsPageId(),
                 deployment.getComponentVersion().getComponent());
-        generateJiraProjectPagesForDeployment(structure, deployment);
-        return generatedPage;
+        return GeneratedDeploymentPageDto.builder()
+                .deploymentLetterPageDto(generatedPage.getDeploymentLetterPageDto())
+                .pageId(generatedPage.getPageId())
+                .jiraProjectKeys(requestJiraChangeViewRefresh(deployment))
+                .build();
     }
+
+    /**
+     * The Jira change view aggregates the deployments of many systems. Instead of regenerating it within every
+     * deployment run, the run only records which issues need a refresh; {@link #refreshJiraChangeView(String)} then
+     * processes all requests of a project at once.
+     */
+    private Set<String> requestJiraChangeViewRefresh(Deployment deployment) {
+        ZonedDateTime requestedAt = ZonedDateTime.now();
+        List<JiraChangeViewRequest> requests = JiraProjectPageDtoFactory.parsedIssueKeys(deployment).stream()
+                .map(issueKey -> JiraChangeViewRequest.create(issueKey.issueKey(), issueKey.projectKey(), requestedAt))
+                .toList();
+        if (requests.isEmpty()) {
+            return Set.of();
+        }
+        transactionRunner.run(() -> {
+            jiraChangeViewRequestRepository.saveAll(requests);
+            return null;
+        });
+        return requests.stream()
+                .map(JiraChangeViewRequest::getProjectKey)
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    /**
+     * Regenerates the project page, and the issue pages and remote links of all pending requests of one Jira project.
+     * Only the requests read here are removed, so a request recorded while the refresh runs stays pending.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void refreshJiraChangeView(String projectKey) {
+        DocumentationStructure structure = resolveDocumentationStructure();
+        runWithStructure(structure, () -> documentationStructureLock.runWithChangesLock(() -> {
+            List<JiraChangeViewRequest> requests = transactionRunner.run(
+                    () -> jiraChangeViewRequestRepository.findByProjectKey(projectKey));
+            if (requests.isEmpty()) {
+                return null;
+            }
+            Set<String> issueKeys = requests.stream()
+                    .map(JiraChangeViewRequest::getIssueKey)
+                    .collect(Collectors.toCollection(TreeSet::new));
+            jiraProjectPageGenerator.generateForProject(structure.changesPageId(), projectKey, issueKeys);
+            List<UUID> processedRequestIds = requests.stream().map(JiraChangeViewRequest::getId).toList();
+            transactionRunner.run(() -> {
+                jiraChangeViewRequestRepository.deleteAllById(processedRequestIds);
+                return null;
+            });
+            return null;
+        }));
+    }
+
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void migrateSystem(System system) {
@@ -800,13 +854,6 @@ public class DocumentationGenerator {
     }
 
     private record LegacyPageLocation(String parentPageId, String title) {
-    }
-
-    private void generateJiraProjectPagesForDeployment(DocumentationStructure structure, Deployment deployment) {
-        documentationStructureLock.runWithChangesLock(() -> {
-            jiraProjectPageGenerator.generateForDeployment(structure.changesPageId(), deployment);
-            return null;
-        });
     }
 
     private void generateAllJiraProjectPages(DocumentationStructure structure) {
