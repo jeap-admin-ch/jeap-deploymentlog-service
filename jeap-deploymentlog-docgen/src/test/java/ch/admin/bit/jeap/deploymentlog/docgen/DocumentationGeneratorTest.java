@@ -166,6 +166,20 @@ class DocumentationGeneratorTest {
     }
 
     @Test
+    void dataRetentionRefreshUpdatesTrackedIssuePagesWhenAProjectLockIsBusy() {
+        DocgenLockTimeoutException lockTimeout = new DocgenLockTimeoutException("docgen:jira-project:JEAP");
+        doThrow(lockTimeout).when(jiraProjectPageGeneratorMock).generateAll(anyString());
+        DataRetentionResult result = new DataRetentionResult(
+                Set.of(), Set.of(), Set.of(), Set.of("JEAP-1"), 1, Set.of(UUID.randomUUID()));
+
+        DocgenLockTimeoutException thrown = assertThrows(DocgenLockTimeoutException.class,
+                () -> documentationGenerator.updatePagesAfterDataRetention(result));
+
+        assertThat(thrown).isSameAs(lockTimeout);
+        verify(jiraProjectPageGeneratorMock).regenerateTrackedIssuePages(Set.of("JEAP-1"));
+    }
+
+    @Test
     void generateAllPagesForSystem() {
         // given
         String rootPageId = ROOT_PAGE_ID;

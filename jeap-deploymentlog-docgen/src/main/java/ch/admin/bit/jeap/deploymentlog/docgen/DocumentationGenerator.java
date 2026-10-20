@@ -551,8 +551,17 @@ public class DocumentationGenerator {
                 .sorted(Comparator.comparing(Environment::getStagingOrder).thenComparing(Environment::getName))
                 .forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                         structure.stagesPageId(), environment, null));
-        generateAllJiraProjectPages(structure);
+        // A busy project lock must not keep the issue pages of the other projects from being updated.
+        DocgenLockTimeoutException lockTimeout = null;
+        try {
+            generateAllJiraProjectPages(structure);
+        } catch (DocgenLockTimeoutException ex) {
+            lockTimeout = ex;
+        }
         jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
+        if (lockTimeout != null) {
+            throw lockTimeout;
+        }
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)

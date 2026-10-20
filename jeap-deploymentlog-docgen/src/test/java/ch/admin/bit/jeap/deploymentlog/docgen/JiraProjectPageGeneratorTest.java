@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectIssueDto;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPage;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPageRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -220,6 +221,33 @@ class JiraProjectPageGeneratorTest {
         generator.generateAll("changes-page");
 
         assertThat(lockedProjects).containsExactly("ABC", "JEAP");
+    }
+
+    @Test
+    void generatesTheRemainingProjectsWhenOneProjectLockIsBusy() {
+        when(dtoFactory.activeProjectKeys(any())).thenReturn(Set.of("JEAP", "ABC"));
+        DocgenLockTimeoutException lockTimeout = new DocgenLockTimeoutException("docgen:jira-project:ABC");
+        doThrow(lockTimeout).when(documentationStructureLock).runWithJiraProjectLock(eq("ABC"), any());
+        when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.empty());
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(eq("changes-page"), eq("JEAP (Jira)"), any()))
+                .thenReturn("project-page");
+
+        assertThatThrownBy(() -> generator.generateAll("changes-page")).isSameAs(lockTimeout);
+
+        verify(pageRepository).save(argThat(page -> page.getProjectKey().equals("JEAP")));
+    }
+
+    @Test
+    void regeneratesTheRemainingTrackedIssuePagesWhenOneProjectLockIsBusy() {
+        DocgenLockTimeoutException lockTimeout = new DocgenLockTimeoutException("docgen:jira-project:ABC");
+        doThrow(lockTimeout).when(documentationStructureLock).runWithJiraProjectLock(eq("ABC"), any());
+        when(pageRepository.findByProjectKey("JEAP"))
+                .thenReturn(Optional.of(JiraProjectPage.create("JEAP", "project-page", "changes-page")));
+
+        assertThatThrownBy(() -> generator.regenerateTrackedIssuePages(Set.of("ABC-1", "JEAP-1")))
+                .isSameAs(lockTimeout);
+
+        verify(jiraIssuePageGenerator).generatePages("project-page", "JEAP", Set.of("JEAP-1"));
     }
 
     @Test

@@ -2,6 +2,7 @@ package ch.admin.bit.jeap.deploymentlog.docgen;
 
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectPageDto;
 import ch.admin.bit.jeap.deploymentlog.docgen.model.JiraProjectIssueDto;
+import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPage;
 import ch.admin.bit.jeap.deploymentlog.domain.JiraProjectPageRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 @Component
@@ -33,15 +35,13 @@ class JiraProjectPageGenerator {
     /**
      * Regenerates the change view of every active project and clears the page of every tracked project that became
      * inactive. Each project is read and written under its own lock, so a concurrent refresh of the same project
-     * cannot be overwritten with older data.
+     * cannot be overwritten with older data. A project whose lock is busy does not stop the others, see
+     * {@link #forEachProjectUnderLock}.
      */
     void generateAll(String changesPageId) {
         Set<String> projectKeys = new TreeSet<>(dtoFactory.activeProjectKeys(ZonedDateTime.now()));
         pageRepository.findAll().forEach(page -> projectKeys.add(page.getProjectKey()));
-        projectKeys.forEach(projectKey -> documentationStructureLock.runWithJiraProjectLock(projectKey, () -> {
-            generateAllOfProject(changesPageId, projectKey);
-            return null;
-        }));
+        forEachProjectUnderLock(projectKeys, projectKey -> generateAllOfProject(changesPageId, projectKey));
     }
 
     private void generateAllOfProject(String changesPageId, String projectKey) {
@@ -74,13 +74,36 @@ class JiraProjectPageGenerator {
                         TreeMap::new,
                         java.util.stream.Collectors.mapping(JiraIssueKey.Parsed::issueKey,
                                 java.util.stream.Collectors.toCollection(java.util.TreeSet::new))));
-        issueKeysByProject.forEach((projectKey, issueKeys) -> documentationStructureLock.runWithJiraProjectLock(
-                projectKey, () -> {
-                    pageRepository.findByProjectKey(projectKey)
-                            .ifPresent(projectPage -> jiraIssuePageGenerator.generatePages(
-                                    projectPage.getPageId(), projectKey, issueKeys));
+        forEachProjectUnderLock(issueKeysByProject.keySet(), projectKey -> pageRepository.findByProjectKey(projectKey)
+                .ifPresent(projectPage -> jiraIssuePageGenerator.generatePages(
+                        projectPage.getPageId(), projectKey, issueKeysByProject.get(projectKey))));
+    }
+
+    /**
+     * Runs the task for each project under that project's lock. A lock held elsewhere, typically by a refresh on
+     * another instance, only skips its own project: the remaining projects are still processed, and the timeout is
+     * rethrown at the end so that the caller defers and retries the run as before.
+     */
+    private void forEachProjectUnderLock(Set<String> projectKeys, Consumer<String> task) {
+        DocgenLockTimeoutException lockTimeout = null;
+        for (String projectKey : projectKeys) {
+            try {
+                documentationStructureLock.runWithJiraProjectLock(projectKey, () -> {
+                    task.accept(projectKey);
                     return null;
-                }));
+                });
+            } catch (DocgenLockTimeoutException ex) {
+                log.info("Skipping the Jira change view of project '{}', its lock is held elsewhere", projectKey);
+                if (lockTimeout == null) {
+                    lockTimeout = ex;
+                } else {
+                    lockTimeout.addSuppressed(ex);
+                }
+            }
+        }
+        if (lockTimeout != null) {
+            throw lockTimeout;
+        }
     }
 
     private String generatePage(String changesPageId, JiraProjectPageDto project, Set<String> affectedIssueKeys) {
