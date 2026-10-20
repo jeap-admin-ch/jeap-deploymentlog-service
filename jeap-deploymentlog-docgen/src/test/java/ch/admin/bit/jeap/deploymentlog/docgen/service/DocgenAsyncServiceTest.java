@@ -145,13 +145,13 @@ class DocgenAsyncServiceTest {
     }
 
     @Test
-    void jiraLockTimeoutLeavesRequestPendingAndRetryCompletesWithoutCountingAnError() {
+    void sharedLockTimeoutLeavesRequestPendingAndRetryCompletesWithoutCountingAnError() {
         UUID deploymentId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         when(lockProvider.lock(any())).thenReturn(Optional.of(simpleLockMock));
         when(deploymentRepository.getPageGenerationRequestId(deploymentId)).thenReturn(Optional.of(requestId));
         when(documentationGenerator.generateDeploymentPages(deploymentId))
-                .thenThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                .thenThrow(new DocgenLockTimeoutException("docgen:component:" + UUID.randomUUID()))
                 .thenReturn(generatedDeploymentPageDtoWithoutJiraIssueKeys());
         double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
 
@@ -295,7 +295,7 @@ class DocgenAsyncServiceTest {
 
     @Test
     void jiraChangeViewLockTimeoutIsLeftForRepairWithoutCountingAnError() {
-        doThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+        doThrow(new DocgenLockTimeoutException("docgen:jira-project:jira"))
                 .when(documentationGenerator).refreshJiraChangeView("JIRA");
         double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
 
@@ -586,7 +586,7 @@ class DocgenAsyncServiceTest {
                 Set.of(new SystemEnv(UUID.randomUUID(), "systemName", UUID.randomUUID())),
                 Set.of(), Set.of(), Set.of(), 1, Set.of(UUID.randomUUID())));
         when(documentationGenerator.updatePagesAfterDataRetentionIfStructureAvailable(refreshTask.result()))
-                .thenThrow(new DocgenLockTimeoutException("docgen:jira-changes"))
+                .thenThrow(new DocgenLockTimeoutException("docgen:jira-project:jira"))
                 .thenReturn(true);
         double errorsBefore = meterRegistry.counter("deploymentlog.docgen.deploymentpages.error").count();
 
