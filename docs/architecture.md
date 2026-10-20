@@ -175,8 +175,9 @@ Distributed locks keep concurrent generation runs apart:
   while the run is in progress (`KeepAliveLockProvider`), so a long run retrying Confluence updates does
   not lose it. The wait can be changed with
   `jeap.deploymentlog.documentation-generator.lock-acquire-timeout`.
-- **Shared page locks** — renewable locks `docgen:component:<UUID>` and `docgen:jira-changes` serialize
-  component and Jira generation across systems without holding database row locks during HTTP calls.
+- **Shared page locks** — renewable locks `docgen:component:<UUID>` and `docgen:jira-project:<PROJECTKEY>` serialize
+  the generation of one component page or of one Jira project's change view across systems, without holding database
+  row locks during HTTP calls.
 - **Scheduled job locks** — the cron jobs carry their own `@SchedulerLock`, so only one instance runs them
   at a time.
 

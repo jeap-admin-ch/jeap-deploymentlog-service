@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 
 @Component
@@ -27,25 +28,38 @@ class JiraProjectPageGenerator {
     private final JiraProjectPageDtoFactory dtoFactory;
     private final JiraProjectPageRepository pageRepository;
     private final JiraIssuePageGenerator jiraIssuePageGenerator;
+    private final DocumentationStructureLock documentationStructureLock;
 
+    /**
+     * Regenerates the change view of every active project and clears the page of every tracked project that became
+     * inactive. Each project is read and written under its own lock, so a concurrent refresh of the same project
+     * cannot be overwritten with older data.
+     */
     void generateAll(String changesPageId) {
-        List<JiraProjectPageDto> activeProjects = dtoFactory.createActiveProjects(ZonedDateTime.now());
-        Set<String> activeProjectKeys = activeProjects.stream()
-                .map(JiraProjectPageDto::getProjectKey)
-                .collect(java.util.stream.Collectors.toSet());
-        List<JiraProjectPageDto> inactiveTrackedProjects = pageRepository.findAll().stream()
-                .map(JiraProjectPage::getProjectKey)
-                .filter(projectKey -> !activeProjectKeys.contains(projectKey))
-                .sorted()
-                .map(projectKey -> JiraProjectPageDto.builder()
-                        .projectKey(projectKey)
-                        .issues(List.of())
-                        .build())
-                .toList();
-        generate(changesPageId, activeProjects, null);
-        generate(changesPageId, inactiveTrackedProjects, Set.of());
+        Set<String> projectKeys = new TreeSet<>(dtoFactory.activeProjectKeys(ZonedDateTime.now()));
+        pageRepository.findAll().forEach(page -> projectKeys.add(page.getProjectKey()));
+        projectKeys.forEach(projectKey -> documentationStructureLock.runWithJiraProjectLock(projectKey, () -> {
+            generateAllOfProject(changesPageId, projectKey);
+            return null;
+        }));
     }
 
+    private void generateAllOfProject(String changesPageId, String projectKey) {
+        Optional<JiraProjectPageDto> activeProject = dtoFactory.createActiveProject(projectKey, ZonedDateTime.now());
+        if (activeProject.isPresent()) {
+            generatePage(changesPageId, activeProject.get(), null);
+        } else if (pageRepository.findByProjectKey(projectKey).isPresent()) {
+            JiraProjectPageDto inactiveProject = JiraProjectPageDto.builder()
+                    .projectKey(projectKey)
+                    .issues(List.of())
+                    .build();
+            generatePage(changesPageId, inactiveProject, Set.of());
+        }
+    }
+
+    /**
+     * Callers hold the project's lock.
+     */
     void generateForProject(String changesPageId, String projectKey, Set<String> affectedIssueKeys) {
         dtoFactory.createActiveProject(projectKey, ZonedDateTime.now())
                 .ifPresent(project -> generatePage(changesPageId, project, affectedIssueKeys));
@@ -60,13 +74,13 @@ class JiraProjectPageGenerator {
                         TreeMap::new,
                         java.util.stream.Collectors.mapping(JiraIssueKey.Parsed::issueKey,
                                 java.util.stream.Collectors.toCollection(java.util.TreeSet::new))));
-        issueKeysByProject.forEach((projectKey, issueKeys) -> pageRepository.findByProjectKey(projectKey)
-                .ifPresent(projectPage -> jiraIssuePageGenerator.generatePages(
-                        projectPage.getPageId(), projectKey, issueKeys)));
-    }
-
-    private void generate(String changesPageId, List<JiraProjectPageDto> projectPages, Set<String> affectedIssueKeys) {
-        projectPages.forEach(project -> generatePage(changesPageId, project, affectedIssueKeys));
+        issueKeysByProject.forEach((projectKey, issueKeys) -> documentationStructureLock.runWithJiraProjectLock(
+                projectKey, () -> {
+                    pageRepository.findByProjectKey(projectKey)
+                            .ifPresent(projectPage -> jiraIssuePageGenerator.generatePages(
+                                    projectPage.getPageId(), projectKey, issueKeys));
+                    return null;
+                }));
     }
 
     private String generatePage(String changesPageId, JiraProjectPageDto project, Set<String> affectedIssueKeys) {

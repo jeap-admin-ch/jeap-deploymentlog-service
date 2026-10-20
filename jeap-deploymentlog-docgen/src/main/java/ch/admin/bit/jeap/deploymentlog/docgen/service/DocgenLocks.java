@@ -156,8 +156,13 @@ public class DocgenLocks {
         return runWithNamedLock(DOCUMENTATION_STRUCTURE_LOCK_NAME, task);
     }
 
-    public <T> T runWithChangesLock(Supplier<T> task) {
-        return runWithNamedLock(SHARED_LOCK_NAME_PREFIX + "jira-changes", task);
+    /**
+     * Serialises the Jira change view of one project - its project page, issue pages and their tracking - across
+     * instances. Different projects have distinct page titles and issue pages, so they do not need to wait for each
+     * other. No caller holds two project locks at once.
+     */
+    public <T> T runWithJiraProjectLock(String projectKey, Supplier<T> task) {
+        return runWithNamedLock(SHARED_LOCK_NAME_PREFIX + "jira-project:" + projectKey, task);
     }
 
     public <T> T runWithComponentLock(UUID componentId, Supplier<T> task) {

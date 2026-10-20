@@ -127,13 +127,41 @@ class DocgenLocksTest {
         UUID componentId = UUID.randomUUID();
         AtomicInteger completedTasks = new AtomicInteger();
         try {
-            for (String systemName : List.of("jira-changes", "component-" + componentId)) {
+            for (String systemName : List.of("jira-project-JEAP", "component-" + componentId)) {
                 locks.runWithSystemLock(systemName, () ->
-                        locks.runWithChangesLock(() ->
+                        locks.runWithJiraProjectLock("JEAP", () ->
                                 locks.runWithComponentLock(componentId, completedTasks::incrementAndGet)));
                 assertThat(heldNames).isEmpty();
             }
             assertThat(completedTasks.get()).isEqualTo(2);
+        } finally {
+            locks.shutdown();
+        }
+    }
+
+    @Test
+    void jiraProjectLocksOfDifferentProjectsDoNotBlockEachOther() {
+        var heldNames = new HashSet<String>();
+        LockProvider provider = configuration -> {
+            String name = configuration.getName();
+            if (!heldNames.add(name)) {
+                return Optional.empty();
+            }
+            return Optional.of(() -> heldNames.remove(name));
+        };
+        DocgenLocks locks = new DocgenLocks(provider);
+        locks.setTryAcquireTimeout(Duration.ZERO);
+        try {
+            String innerProjectResult = locks.runWithJiraProjectLock("JEAP", () ->
+                    locks.runWithJiraProjectLock("ABC", () -> String.join(",", new java.util.TreeSet<>(heldNames))));
+            assertThat(innerProjectResult).isEqualTo("docgen:jira-project:abc,docgen:jira-project:jeap");
+
+            locks.runWithJiraProjectLock("JEAP", () -> {
+                org.junit.jupiter.api.Assertions.assertThrows(DocgenLockTimeoutException.class,
+                        () -> locks.runWithJiraProjectLock("JEAP", () -> null));
+                return null;
+            });
+            assertThat(heldNames).isEmpty();
         } finally {
             locks.shutdown();
         }

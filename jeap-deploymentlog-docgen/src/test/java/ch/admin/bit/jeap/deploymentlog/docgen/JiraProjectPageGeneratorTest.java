@@ -35,6 +35,8 @@ class JiraProjectPageGeneratorTest {
     private JiraProjectPageRepository pageRepository;
     @Mock
     private JiraIssuePageGenerator jiraIssuePageGenerator;
+    @Mock
+    private DocumentationStructureLock documentationStructureLock;
 
     private JiraProjectPageGenerator generator;
     private JiraProjectPageDto dto;
@@ -42,10 +44,13 @@ class JiraProjectPageGeneratorTest {
     @BeforeEach
     void setUp() {
         generator = new JiraProjectPageGenerator(confluenceAdapter, templateRenderer, dtoFactory, pageRepository,
-                jiraIssuePageGenerator);
+                jiraIssuePageGenerator, documentationStructureLock);
         dto = JiraProjectPageDto.builder().projectKey("JEAP").activityPeriod(Duration.ofDays(30))
                 .issues(List.of()).build();
-        lenient().when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(dto));
+        lenient().when(dtoFactory.activeProjectKeys(any())).thenReturn(Set.of("JEAP"));
+        lenient().when(dtoFactory.createActiveProject(eq("JEAP"), any())).thenReturn(Optional.of(dto));
+        lenient().when(documentationStructureLock.runWithJiraProjectLock(anyString(), any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(1).get());
         lenient().when(pageRepository.findAll()).thenReturn(List.of());
         lenient().when(templateRenderer.renderJiraProjectPage(dto)).thenReturn("content");
         lenient().when(jiraIssuePageGenerator.generatePages(anyString(), anyString(), anyCollection()))
@@ -112,7 +117,7 @@ class JiraProjectPageGeneratorTest {
     @Test
     void clearsTrackedProjectPageAfterItsLastIssueBecameInactive() {
         JiraProjectPage tracked = JiraProjectPage.create("OLD", "old-page", "changes-page");
-        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of());
+        when(dtoFactory.activeProjectKeys(any())).thenReturn(Set.of());
         when(pageRepository.findAll()).thenReturn(List.of(tracked));
         when(pageRepository.findByProjectKey("OLD")).thenReturn(Optional.of(tracked));
         when(confluenceAdapter.updatePageById(eq("old-page"), eq("changes-page"), eq("OLD (Jira)"),
@@ -134,7 +139,7 @@ class JiraProjectPageGeneratorTest {
                 .activityPeriod(Duration.ofDays(30))
                 .issues(List.of(JiraProjectIssueDto.builder().issueKey("JEAP-1").build()))
                 .build();
-        when(dtoFactory.createActiveProjects(any())).thenReturn(List.of(project));
+        when(dtoFactory.createActiveProject(eq("JEAP"), any())).thenReturn(Optional.of(project));
         when(pageRepository.findByProjectKey("JEAP")).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("changes-page", "JEAP (Jira)")).thenReturn(Optional.empty());
         when(confluenceAdapter.findPageByTitle("changes-page", "JEAP")).thenReturn(Optional.empty());
@@ -191,7 +196,30 @@ class JiraProjectPageGeneratorTest {
         generator.generateForProject("changes-page", "JEAP", Set.of("JEAP-2"));
 
         verify(jiraIssuePageGenerator).generatePages("project-page", "JEAP", Set.of("JEAP-2"));
-        verify(dtoFactory, never()).createActiveProjects(any());
+        verify(dtoFactory, never()).activeProjectKeys(any());
+    }
+
+    @Test
+    void generatesEveryProjectUnderItsOwnLock() {
+        JiraProjectPageDto other = JiraProjectPageDto.builder().projectKey("ABC").activityPeriod(Duration.ofDays(30))
+                .issues(List.of()).build();
+        when(dtoFactory.activeProjectKeys(any())).thenReturn(Set.of("JEAP", "ABC"));
+        when(dtoFactory.createActiveProject(eq("ABC"), any())).thenReturn(Optional.of(other));
+        List<String> lockedProjects = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            lockedProjects.add(invocation.getArgument(0));
+            return invocation.<Supplier<?>>getArgument(1).get();
+        }).when(documentationStructureLock).runWithJiraProjectLock(anyString(), any());
+        doAnswer(invocation -> {
+            assertThat(lockedProjects).last().isEqualTo("JEAP");
+            return Optional.of(dto);
+        }).when(dtoFactory).createActiveProject(eq("JEAP"), any());
+        when(pageRepository.findByProjectKey(anyString())).thenReturn(Optional.empty());
+        when(confluenceAdapter.addOrUpdatePageUnderAncestor(anyString(), anyString(), any())).thenReturn("page");
+
+        generator.generateAll("changes-page");
+
+        assertThat(lockedProjects).containsExactly("ABC", "JEAP");
     }
 
     @Test
@@ -201,6 +229,7 @@ class JiraProjectPageGeneratorTest {
 
         generator.regenerateTrackedIssuePages(Set.of("jeap-2", "JEAP-1", "invalid"));
 
+        verify(documentationStructureLock).runWithJiraProjectLock(eq("JEAP"), any());
         verify(jiraIssuePageGenerator).generatePages(
                 "project-page", "JEAP", Set.of("JEAP-1", "JEAP-2"));
     }

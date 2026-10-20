@@ -59,8 +59,10 @@ class JiraProjectPageDtoFactoryTest {
                 environment("DEV", 1, false), "JEAP-2");
         Deployment recentOther = deployment(NOW.minusHours(2), DeploymentState.STARTED,
                 environment("DEV", 1, false), "OPS_2-9");
-        when(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(NOW.minusDays(30)))
-                .thenReturn(List.of(recentJeap2, recentJeap1, duplicateJeap1, recentOther));
+        when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("JEAP", NOW.minusDays(30)))
+                .thenReturn(List.of(recentJeap2, recentJeap1, duplicateJeap1));
+        when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("OPS_2", NOW.minusDays(30)))
+                .thenReturn(List.of(recentOther));
 
         Deployment jeap1DevSuccess = deployment(NOW.minusDays(20), DeploymentState.SUCCESS,
                 environment("DEV", 1, false), "JEAP-1");
@@ -68,12 +70,14 @@ class JiraProjectPageDtoFactoryTest {
                 environment("PROD", 3, true), "JEAP-1");
         Deployment jeap2ProdSuccess = deployment(NOW.minusHours(1), DeploymentState.SUCCESS,
                 environment("PROD", 3, true), "JEAP-2");
-        when(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("JEAP-1", "JEAP-2", "OPS_2-9")))
+        when(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("JEAP-1", "JEAP-2")))
                 .thenReturn(List.of(jeap2ProdSuccess, jeap1ProdFailure, jeap1DevSuccess));
+        when(deploymentRepository.findCodeDeploymentsForJiraIssues(Set.of("OPS_2-9"))).thenReturn(List.of());
         when(jiraIssuePageRepository.findByIssueKey("JEAP-1"))
                 .thenReturn(java.util.Optional.of(JiraIssuePage.create("JEAP-1", "JEAP", "issue-page", "project-page")));
 
-        List<JiraProjectPageDto> pages = factory.createActiveProjects(NOW);
+        List<JiraProjectPageDto> pages = List.of(factory.createActiveProject("JEAP", NOW).orElseThrow(),
+                factory.createActiveProject("OPS_2", NOW).orElseThrow());
 
         assertThat(pages).extracting(JiraProjectPageDto::getProjectKey)
                 .containsExactly("JEAP", "OPS_2");
@@ -112,6 +116,18 @@ class JiraProjectPageDtoFactoryTest {
     }
 
     @Test
+    void listsProjectsOfValidActiveIssueKeys() {
+        Deployment first = deployment(NOW.minusDays(1), DeploymentState.STARTED, environment("DEV", 1, false),
+                "jeap-1", "invalid key");
+        Deployment second = deployment(NOW.minusDays(2), DeploymentState.SUCCESS, environment("DEV", 1, false),
+                "OPS_2-9", "JEAP-2");
+        when(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(NOW.minusDays(30)))
+                .thenReturn(List.of(first, second));
+
+        assertThat(factory.activeProjectKeys(NOW)).containsExactly("JEAP", "OPS_2");
+    }
+
+    @Test
     void createsNoProjectWithoutActiveIssues() {
         when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("JEAP", NOW.minusDays(30)))
                 .thenReturn(List.of());
@@ -122,11 +138,11 @@ class JiraProjectPageDtoFactoryTest {
     @Test
     void doesNotQueryHistoricalDeploymentsWhenThereAreNoValidActiveIssues() {
         Deployment invalid = deployment(NOW.minusDays(1), DeploymentState.STARTED,
-                environment("DEV", 1, false), "not-an-issue");
-        when(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(NOW.minusDays(30)))
+                environment("DEV", 1, false), "jeap-not-an-issue");
+        when(deploymentRepository.findDeploymentsWithJiraIssuesOfProjectStartedAtOrAfter("JEAP", NOW.minusDays(30)))
                 .thenReturn(List.of(invalid));
 
-        assertThat(factory.createActiveProjects(NOW)).isEmpty();
+        assertThat(factory.createActiveProject("JEAP", NOW)).isEmpty();
 
         verify(deploymentRepository, never()).findCodeDeploymentsForJiraIssues(anySet());
     }

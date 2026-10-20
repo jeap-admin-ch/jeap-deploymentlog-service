@@ -209,10 +209,12 @@ The following safeguards keep concurrent runs from corrupting the tree:
 - Component-page creation additionally acquires the renewable distributed lock `docgen:component:<UUID>`. This serialises the title lookup, Confluence
   operation and tracking update across service instances even during a component move. Tracking is written only after
   Confluence has successfully created, updated or moved the page.
-- Jira change view generation (project and issue pages) acquires the renewable distributed lock `docgen:jira-changes`.
-  It runs outside the per-system locks. This serialises project title lookup,
-  Confluence operations and tracking across different system locks and service instances; a project Page ID is stored
-  only after Confluence succeeds.
+- Jira change view generation acquires one renewable distributed lock per Jira project,
+  `docgen:jira-project:<PROJECTKEY>`, outside the per-system locks. It serialises the project's title lookup, the
+  Confluence operations on its project and issue pages and their tracking across service instances; a project Page ID
+  is stored only after Confluence succeeds. Different projects have distinct page titles and issue pages, so their
+  refreshes run concurrently. A full regeneration reads and writes one project at a time under its lock and never
+  holds two project locks.
 - Shared-lock acquisition timeouts defer deployment work to repair without invalidating the cached structure or
   incrementing the generation-error counter. A pending request is cleared only after all generation steps succeed.
   Database transactions do not span Confluence or Jira calls.

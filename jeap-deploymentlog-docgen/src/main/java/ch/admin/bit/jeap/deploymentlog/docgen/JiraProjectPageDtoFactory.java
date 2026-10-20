@@ -33,14 +33,21 @@ class JiraProjectPageDtoFactory {
     private final JiraWebClientProperties jiraProperties;
     private final JiraIssuePageRepository jiraIssuePageRepository;
 
-    List<JiraProjectPageDto> createActiveProjects(ZonedDateTime generatedAt) {
+    /**
+     * Projects with at least one issue referenced by a deployment started within the change view activity period.
+     */
+    Set<String> activeProjectKeys(ZonedDateTime generatedAt) {
         ZonedDateTime activeSince = generatedAt.minus(confluenceProperties.getChangeViewActivityPeriod());
-        return createProjects(deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(activeSince),
-                issue -> true);
+        return deploymentRepository.findDeploymentsWithJiraIssuesStartedAtOrAfter(activeSince).stream()
+                .flatMap(deployment -> issueKeys(deployment).stream())
+                .map(JiraIssueKey::parse)
+                .flatMap(Optional::stream)
+                .map(JiraIssueKey.Parsed::projectKey)
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     /**
-     * The project's entry of {@link #createActiveProjects(ZonedDateTime)}, reading only that project's deployments.
+     * The project page of an active project, reading only the deployments referencing that project's issues.
      */
     Optional<JiraProjectPageDto> createActiveProject(String projectKey, ZonedDateTime generatedAt) {
         ZonedDateTime activeSince = generatedAt.minus(confluenceProperties.getChangeViewActivityPeriod());

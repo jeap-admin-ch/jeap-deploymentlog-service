@@ -22,6 +22,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   links; otherwise it is written once.
 - Refreshing the Jira change view of one project only reads the deployments referencing that project's issues,
   instead of building the pages of all active Jira projects and discarding the others.
+- The global ShedLock `docgen:jira-changes` is replaced by one lock per Jira project,
+  `docgen:jira-project:<PROJECTKEY>`, so the change views of different projects are generated concurrently across
+  instances. During a rolling upgrade, an old and a new instance do not exclude each other on the Jira change view;
+  a concurrent update of the same page is handled by the Confluence conflict retry.
 
 ### Added
 

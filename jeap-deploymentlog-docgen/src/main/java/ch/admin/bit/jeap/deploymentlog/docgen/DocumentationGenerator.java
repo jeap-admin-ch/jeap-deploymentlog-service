@@ -121,7 +121,7 @@ public class DocumentationGenerator {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void refreshJiraChangeView(String projectKey) {
         DocumentationStructure structure = resolveDocumentationStructure();
-        runWithStructure(structure, () -> documentationStructureLock.runWithChangesLock(() -> {
+        runWithStructure(structure, () -> documentationStructureLock.runWithJiraProjectLock(projectKey, () -> {
             List<JiraChangeViewRequest> requests = transactionRunner.run(
                     () -> jiraChangeViewRequestRepository.findByProjectKey(projectKey));
             if (requests.isEmpty()) {
@@ -552,10 +552,7 @@ public class DocumentationGenerator {
                 .forEach(environment -> generateDeploymentHistoryOverviewPageForEnvironment(
                         structure.stagesPageId(), environment, null));
         generateAllJiraProjectPages(structure);
-        documentationStructureLock.runWithChangesLock(() -> {
-            jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
-            return null;
-        });
+        jiraProjectPageGenerator.regenerateTrackedIssuePages(result.jiraIssueKeys());
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -857,10 +854,7 @@ public class DocumentationGenerator {
     }
 
     private void generateAllJiraProjectPages(DocumentationStructure structure) {
-        documentationStructureLock.runWithChangesLock(() -> {
-            jiraProjectPageGenerator.generateAll(structure.changesPageId());
-            return null;
-        });
+        jiraProjectPageGenerator.generateAll(structure.changesPageId());
     }
 
     private record DocumentationStructure(String changesPageId,

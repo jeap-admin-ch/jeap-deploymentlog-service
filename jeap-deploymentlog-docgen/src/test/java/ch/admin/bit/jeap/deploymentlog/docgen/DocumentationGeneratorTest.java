@@ -251,7 +251,7 @@ class DocumentationGeneratorTest {
                 .containsExactlyInAnyOrder(tuple("JIRA-1", "JIRA"), tuple("ABC-2", "ABC"));
         assertThat(generatedPage.getJiraProjectKeys()).containsExactly("ABC", "JIRA");
         verifyNoInteractions(jiraProjectPageGeneratorMock);
-        verify(documentationStructureLockMock, never()).runWithChangesLock(any());
+        verify(documentationStructureLockMock, never()).runWithJiraProjectLock(any(), any());
     }
 
     @Test
@@ -276,7 +276,7 @@ class DocumentationGeneratorTest {
 
         InOrder inOrder = inOrder(documentationStructureLockMock, jiraProjectPageGeneratorMock,
                 jiraChangeViewRequestRepositoryMock);
-        inOrder.verify(documentationStructureLockMock).runWithChangesLock(any());
+        inOrder.verify(documentationStructureLockMock).runWithJiraProjectLock(eq("JIRA"), any());
         inOrder.verify(jiraProjectPageGeneratorMock).generateForProject(
                 ROOT_PAGE_ID + "/Changes", "JIRA", Set.of("JIRA-1", "JIRA-2"));
         inOrder.verify(jiraChangeViewRequestRepositoryMock).deleteAllById(
@@ -776,8 +776,8 @@ class DocumentationGeneratorTest {
         }).when(documentationStructurePageRepositoryMock).delete(any(DocumentationStructurePage.class));
         lenient().when(documentationStructureLockMock.tryRunLocked(any()))
                 .thenAnswer(invocation -> Optional.of(invocation.<Supplier<?>>getArgument(0).get()));
-        lenient().when(documentationStructureLockMock.runWithChangesLock(any()))
-                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
+        lenient().when(documentationStructureLockMock.runWithJiraProjectLock(anyString(), any()))
+                .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(1).get());
         lenient().when(documentationStructureLockMock.runLocked(any()))
                 .thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
         lenient().when(systemRepositoryMock.getById(any())).thenAnswer(invocation ->

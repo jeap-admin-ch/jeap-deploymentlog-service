@@ -19,8 +19,8 @@ public class DocumentationStructureLock {
         return docgenLocks.runWithDocumentationStructureLock(task);
     }
 
-    public <T> T runWithChangesLock(Supplier<T> task) {
-        return docgenLocks.runWithChangesLock(task);
+    public <T> T runWithJiraProjectLock(String projectKey, Supplier<T> task) {
+        return docgenLocks.runWithJiraProjectLock(projectKey, task);
     }
 
     public <T> Optional<T> tryRunLocked(Supplier<T> task) {
