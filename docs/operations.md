@@ -102,7 +102,7 @@ jeap.deploymentlog.housekeeping.undeployed-components.retention-days=730
 ```
 
 The defaults and validation rules for all properties are listed in
-[Configuration](configuration.md#scheduled-jobs).
+[Configuration](configuration.md#docgen-execution-and-scheduled-jobs).
 
 #### Confluence deployment-page cleanup
 
