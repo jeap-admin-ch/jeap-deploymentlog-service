@@ -8,6 +8,7 @@ import ch.admin.bit.jeap.deploymentlog.domain.System;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import ch.admin.bit.jeap.deploymentlog.docgen.service.DocgenLockTimeoutException;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -232,6 +233,7 @@ class DocumentationGeneratorTest {
                         .deploymentStateTimestamp(startedAt)
                         .changeJiraIssueKeys(Set.of())
                         .build());
+        when(generatorServiceMock.findComponentPageId(component)).thenReturn(Optional.of("component-page"));
 
         if (lockTimeout) {
             doThrow(new DocgenLockTimeoutException("docgen:component:" + component.getId()))
@@ -266,6 +268,33 @@ class DocumentationGeneratorTest {
         assertThat(generatedPage.getJiraProjectKeys()).containsExactly("ABC", "JIRA");
         verifyNoInteractions(jiraProjectPageGeneratorMock);
         verify(documentationStructureLockMock, never()).runWithJiraProjectLock(any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            ",component-page,true",
+            "deleted-page,component-page,true",
+            "component-page,component-page,false",
+            ",,false"
+    })
+    void generateDeploymentPagesRewritesSystemPageAndLetterOnlyWhenTheComponentPageIsNew(
+            String trackedPageId, String generatedPageId, boolean rewritten) {
+        UUID deploymentId = stubDeployment(Set.of());
+        when(generatorServiceMock.findComponentPageId(any())).thenReturn(Optional.ofNullable(trackedPageId));
+        when(componentPageGeneratorMock.generatePage(anyString(), any())).thenReturn(generatedPageId);
+
+        documentationGenerator.generateDeploymentPages(deploymentId);
+
+        int writes = rewritten ? 2 : 1;
+        verify(generatorServiceMock, times(writes)).createDeploymentLetterPageDto(any());
+        // One more for the structure synchronization at the start of the run.
+        verify(generatorServiceMock, times(writes + 1)).createSystemPageDto(any());
+        if (rewritten) {
+            InOrder inOrder = inOrder(generatorServiceMock, componentPageGeneratorMock);
+            inOrder.verify(componentPageGeneratorMock).generatePage(anyString(), any());
+            inOrder.verify(generatorServiceMock).createSystemPageDto(any());
+            inOrder.verify(generatorServiceMock).createDeploymentLetterPageDto(any());
+        }
     }
 
     @Test

@@ -72,7 +72,9 @@ public class DocumentationGenerator {
     private GeneratedDeploymentPageDto generateDeploymentPages(UUID deploymentId, DocumentationStructure structure) {
         Deployment deployment = loadDeployment(deploymentId);
         Environment environment = deployment.getEnvironment();
-        System system = deployment.getComponentVersion().getComponent().getSystem();
+        ch.admin.bit.jeap.deploymentlog.domain.Component component = deployment.getComponentVersion().getComponent();
+        System system = component.getSystem();
+        String trackedComponentPageId = generatorService.findComponentPageId(component).orElse(null);
 
         SystemStructure systemStructure = refreshAffectedSystem(structure, system);
         String deploymentListParentPageId = generateDeploymentHistoryPageForEnvironment(
@@ -80,11 +82,14 @@ public class DocumentationGenerator {
         int year = deployment.getStartedAt().getYear();
         String deploymentLetterParentPageId = generateDeploymentListPage(deploymentListParentPageId, environment, system, year);
         generateDeploymentHistoryOverviewPageForEnvironment(structure.stagesPageId(), environment, null);
-        GeneratedDeploymentPageDto generatedPage = deployment.getSequence() != DeploymentSequence.UNDEPLOYED
-                ? generateDeploymentLetter(deploymentLetterParentPageId, deployment)
-                : generateUndeploymentLetter(deploymentLetterParentPageId, deployment);
-        componentPageGenerator.generatePage(systemStructure.componentsPageId(),
-                deployment.getComponentVersion().getComponent());
+        GeneratedDeploymentPageDto generatedPage = generateLetter(deploymentLetterParentPageId, deployment);
+        String componentPageId = componentPageGenerator.generatePage(systemStructure.componentsPageId(), component);
+        if (componentPageId != null && !componentPageId.equals(trackedComponentPageId)) {
+            // The component page links the letter, so it is written last. When it was created or recreated, the
+            // system page and the letter were rendered without a valid link to it and are written once more.
+            refreshAffectedSystem(structure, system);
+            generatedPage = generateLetter(deploymentLetterParentPageId, deployment);
+        }
         return GeneratedDeploymentPageDto.builder()
                 .deploymentLetterPageDto(generatedPage.getDeploymentLetterPageDto())
                 .pageId(generatedPage.getPageId())
@@ -442,6 +447,12 @@ public class DocumentationGenerator {
                 generateDeploymentLetter(pageId, deploymentLetterPageDto);
             }
         }
+    }
+
+    private GeneratedDeploymentPageDto generateLetter(String parentPageId, Deployment deployment) {
+        return deployment.getSequence() != DeploymentSequence.UNDEPLOYED
+                ? generateDeploymentLetter(parentPageId, deployment)
+                : generateUndeploymentLetter(parentPageId, deployment);
     }
 
     private GeneratedDeploymentPageDto generateDeploymentLetter(String parentPageId, Deployment deployment) {

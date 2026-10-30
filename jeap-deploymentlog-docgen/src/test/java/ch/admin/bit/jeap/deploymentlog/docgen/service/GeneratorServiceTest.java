@@ -14,12 +14,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -410,6 +412,34 @@ class GeneratorServiceTest {
                     null, "https://confluence.example/wiki/pages/viewpage.action?pageId=42");
         }
         verify(componentPageRepository, times(2)).findByComponentIdIn(any());
+    }
+
+    @Test
+    void systemPageAndLettersLinkOnlyTrackedComponentPages() {
+        System system = new System("System A");
+        Environment environment = new Environment("DEV");
+        Deployment linked = createDeployment(system, environment);
+        Deployment unlinked = createUndeployment(system, environment);
+        Component linkedComponent = linked.getComponentVersion().getComponent();
+        Component unlinkedComponent = unlinked.getComponentVersion().getComponent();
+        ComponentPage page = ComponentPage.create(linkedComponent.getId(), "42", "parent");
+        when(componentPageRepository.findByComponentIdIn(any())).thenAnswer(invocation ->
+                invocation.<Collection<UUID>>getArgument(0).contains(page.getComponentId()) ? List.of(page) : List.of());
+        when(confluenceProperties.getUrl()).thenReturn("https://confluence.example/wiki/");
+        doReturn(List.of(linkedComponent, unlinkedComponent))
+                .when(environmentComponentVersionStateRepositoryMock).findComponentsBySystem(system);
+
+        SystemPageDto systemPage = generatorService.createSystemPageDto(system);
+        DeploymentLetterPageDto linkedLetter = generatorService.createDeploymentLetterPageDto(linked);
+        DeploymentLetterPageDto unlinkedLetter = generatorService.createUndeploymentLetterPageDto(unlinked);
+
+        String pageUrl = "https://confluence.example/wiki/pages/viewpage.action?pageId=42";
+        assertThat(systemPage.getComponentList())
+                .extracting(ComponentDto::getComponentName, ComponentDto::getComponentPageUrl)
+                .containsExactlyInAnyOrder(tuple(linkedComponent.getName(), pageUrl),
+                        tuple(unlinkedComponent.getName(), null));
+        assertThat(linkedLetter.getComponentPageUrl()).isEqualTo(pageUrl);
+        assertThat(unlinkedLetter.getComponentPageUrl()).isNull();
     }
 
     @Test

@@ -12,10 +12,8 @@
         </tr>
         <tr th:each="component: ${system.componentList}">
             <td>
-                <ac:link>
-                    <ri:page th:ri:content-title="${component.componentName}"/>
-                    <ac:plain-text-link-body><![CDATA[[(${component.componentName})]]]></ac:plain-text-link-body>
-                </ac:link>
+                <a th:if="${component.componentPageUrl != null}" th:href="${component.componentPageUrl}" th:text="${component.componentName}"></a>
+                <span th:unless="${component.componentPageUrl != null}" th:text="${component.componentName}"></span>
             </td>
             <th:block th:each="componentEnv: ${component.componentEnvDtoList}">
                 <td th:class="${componentEnv.colorClass}">

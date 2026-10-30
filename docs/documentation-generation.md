@@ -44,7 +44,7 @@ flowchart TD
 
 | Page                          | Title pattern                                       | Content                                                                                                                             |
 |-------------------------------|-----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| System page                   | `<SystemName>`                                      | One row per component, one column per environment, showing the deployed version, when it was deployed and a link to the deployment page. Differences between the environments are highlighted, see below. |
+| System page                   | `<SystemName>`                                      | One row per component, linked to its component page, one column per environment, showing the deployed version, when it was deployed and a link to the deployment page. Differences between the environments are highlighted, see below. |
 | Component page                | `<ComponentName> (<SystemName>)`, below `Components (<SystemName>)` | The latest version flows of one component. The system-qualified title avoids collisions with ArchRepo pages in the same Confluence space. The table is rendered directly on this page; no flow or `Version Flows` child pages are created. |
 | Jira project page             | `<JiraProjectKey>`, below `Changes`                | Issues with a deployment started during `change-view-activity-period`, their latest deployment and highest successfully reached CODE-deployment stage. |
 | Jira issue page               | `<JiraIssueKey>`, below its Jira project page      | All retained deployments referencing the issue, independent of the project-page activity period. |
@@ -84,6 +84,10 @@ One page is generated per known component directly below the `Components (<Syste
 the technical component UUID, not its title: the component UUID, Confluence page id and current parent page id are
 persisted together. This keeps the page id and Confluence history stable when a component changes systems. Moving a
 system between groups needs no component-page operation because the complete system subtree moves with it.
+
+The system page, the deployment and undeployment pages, the deployment histories and the global environment overviews
+link a component to its component page by this persisted page id. A component without a component page, for example
+one without a CODE deployment on a relevant stage, is shown as plain text, so no link points to a missing page.
 
 A version flow is a read-side grouping of CODE deployments by component and version name, not a persisted
 entity. Each version appears once in the table and once as a line in the diagram, with one nested row and one
@@ -144,13 +148,13 @@ The Jira issue link is constructed from the configured Jira URL; rendering perfo
 
 ### Deployment page content
 
-A deployment page documents one deployment: the environment and the deployment target, who started it and
-when, the state with its message and the resulting duration, the deployment sequence (first deployment, new
-version, repetition, undeployment), the component version with a link to the deployed source state, the
-deployment unit with its coordinates and artefact repository, the deployment types, the links and the
-properties sent with the deployment, the Remedy change id (as a link when a Remedy root URL is configured),
-the build job links resolved from the published artifact versions and references, and the changelog with its
-Jira issue keys.
+A deployment page documents one deployment: the component, linked to its component page, the environment and
+the deployment target, who started it and when, the state with its message and the resulting duration, the
+deployment sequence (first deployment, new version, repetition, undeployment), the component version with a link
+to the deployed source state, the deployment unit with its coordinates and artefact repository, the deployment
+types, the links and the properties sent with the deployment, the Remedy change id (as a link when a Remedy root
+URL is configured), the build job links resolved from the published artifact versions and references, and the
+changelog with its Jira issue keys.
 
 ## When pages are generated
 
@@ -180,7 +184,9 @@ Generating the pages for one deployment first reconciles the structural pages, t
 the grouped or ungrouped system page, its `Deployments (<SystemName>)` container, the environment history page, the year page,
 the global environment overview and finally the deployment or undeployment page. The affected component page is then
 rendered from the committed deployment history. All ancestor pages are therefore refreshed with the same run,
-which is why recording a deployment also keeps the aggregated views current.
+which is why recording a deployment also keeps the aggregated views current. The component page comes last because it
+links the deployment page. When the run creates the component page, or recreates a deleted one, the system page and
+the deployment page are written once more, so that they link to it from the component's first deployment on.
 
 The Jira project and issue pages under `Changes` aggregate deployments of many systems and are refreshed separately:
 the deployment run records a pending request per referenced Jira issue, and one background task per Jira project

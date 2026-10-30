@@ -54,6 +54,26 @@ class TemplateRendererTest {
     }
 
     @Test
+    void renderSystemPage_linksOnlyTrackedComponentPages() {
+        SystemPageDto systemPageDto = SystemPageDto.builder()
+                .name("SYSTEM A")
+                .environmentNamesArrayList(List.of())
+                .componentList(List.of(
+                        ComponentDto.builder().componentName("linked<&>")
+                                .componentPageUrl("https://confluence.example/pages/viewpage.action?pageId=42")
+                                .componentEnvDtoList(List.of()).build(),
+                        ComponentDto.builder().componentName("plain<&>").componentEnvDtoList(List.of()).build()))
+                .build();
+
+        String content = templateRenderer.renderSystemPage(systemPageDto);
+
+        assertThat(content)
+                .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=42\"",
+                        ">linked&lt;&amp;&gt;</a>", "<span>plain&lt;&amp;&gt;</span>")
+                .doesNotContain("ri:content-title=\"linked", "ri:content-title=\"plain", "linked<&>", "plain<&>");
+    }
+
+    @Test
     void renderComponentPageWithoutFlows() {
         String content = templateRenderer.renderComponentPage(ComponentPageDto.builder()
                 .componentName("component")
@@ -556,6 +576,38 @@ class TemplateRendererTest {
                 .contains("theLabel&lt;&amp;&gt;")
                 .doesNotContain("CI <ci@example.com>", "PROD<&>", "undeploy<123>", "CF<&>",
                         "details <with@special>", "theLabel<&>");
+    }
+
+    @Test
+    void renderDeploymentAndUndeploymentLetterPages_linkOnlyTrackedComponentPages() {
+        DeploymentLetterPageDto linked = componentLetter("https://confluence.example/pages/viewpage.action?pageId=42");
+        DeploymentLetterPageDto plain = componentLetter(null);
+
+        for (String content : List.of(templateRenderer.renderDeploymentLetterPage(linked),
+                templateRenderer.renderUndeploymentLetterPage(linked))) {
+            assertThat(content)
+                    .contains("href=\"https://confluence.example/pages/viewpage.action?pageId=42\"",
+                            ">service&lt;&amp;&gt;</a>")
+                    .doesNotContain("<span>service&lt;&amp;&gt;</span>", "ri:content-title=\"service", "service<&>");
+        }
+        for (String content : List.of(templateRenderer.renderDeploymentLetterPage(plain),
+                templateRenderer.renderUndeploymentLetterPage(plain))) {
+            assertThat(content)
+                    .contains("<span>service&lt;&amp;&gt;</span>")
+                    .doesNotContain("viewpage.action", "ri:content-title=\"service", "service<&>");
+        }
+    }
+
+    private static DeploymentLetterPageDto componentLetter(String componentPageUrl) {
+        return DeploymentLetterPageDto.builder()
+                .deploymentId("123")
+                .startedAt("01.01.2022 - 12:00:00")
+                .componentName("service<&>")
+                .componentPageUrl(componentPageUrl)
+                .environmentName("PROD")
+                .state("SUCCESS")
+                .changeComparedToVersion("")
+                .build();
     }
 
     @Test

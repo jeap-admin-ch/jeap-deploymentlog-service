@@ -51,10 +51,14 @@ public class GeneratorService {
 
         List<Component> componentList =
                 environmentComponentVersionStateRepository.findComponentsBySystem(system);
+        Map<UUID, String> componentPageUrls = componentPageUrls(componentList.stream()
+                .map(Component::getId)
+                .collect(Collectors.toSet()));
 
         List<ComponentDto> componentDtos = componentList.stream()
                 .map(component -> ComponentDto.builder()
                         .componentName(component.getName())
+                        .componentPageUrl(componentPageUrls.get(component.getId()))
                         .componentEnvDtoList(createComponentEnvDtoList(component, environmentList))
                         .build())
                 .sorted(Comparator.comparing(ComponentDto::getComponentName))
@@ -244,10 +248,24 @@ public class GeneratorService {
                 .toList();
     }
 
+    public Optional<String> findComponentPageId(Component component) {
+        return componentPageRepository.findByComponentId(component.getId()).map(ComponentPage::getPageId);
+    }
+
+    private String componentPageUrl(Component component) {
+        return componentPageUrls(Set.of(component.getId())).get(component.getId());
+    }
+
     private Map<UUID, String> componentPageUrls(List<Deployment> deployments) {
-        Set<UUID> componentIds = deployments.stream()
+        return componentPageUrls(deployments.stream()
                 .map(deployment -> deployment.getComponentVersion().getComponent().getId())
-                .collect(Collectors.toSet());
+                .collect(Collectors.toSet()));
+    }
+
+    private Map<UUID, String> componentPageUrls(Set<UUID> componentIds) {
+        if (componentIds.isEmpty()) {
+            return Map.of();
+        }
         List<ComponentPage> pages = componentPageRepository.findByComponentIdIn(componentIds);
         if (pages.isEmpty() || !StringUtils.hasText(confluenceProperties.getUrl())) {
             return Map.of();
@@ -286,6 +304,7 @@ public class GeneratorService {
                 .stateMessage(emptyStringForNull(deployment.getStateMessage()))
                 .duration(getDurationFormatted(deployment))
                 .componentName(deployment.getComponentVersion().getComponent().getName())
+                .componentPageUrl(componentPageUrl(deployment.getComponentVersion().getComponent()))
                 .version(deployment.getComponentVersion().getVersionName())
                 .versionControlUrl(deployment.getComponentVersion().getVersionControlUrl())
                 .links(getLinks(deployment))
@@ -333,6 +352,7 @@ public class GeneratorService {
                 .stateMessage(emptyStringForNull(deployment.getStateMessage()))
                 .duration(getDurationFormatted(deployment))
                 .componentName(deployment.getComponentVersion().getComponent().getName())
+                .componentPageUrl(componentPageUrl(deployment.getComponentVersion().getComponent()))
                 .deploymentStateTimestamp(deployment.getLastModified())
                 .deploymentUnitType(deployment.getComponentVersion().getDeploymentUnit().getType().getLabel())
                 .deploymentUnitCoordinates(formatCoordinates(deployment))

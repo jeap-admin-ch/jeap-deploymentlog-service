@@ -33,11 +33,14 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import javax.sql.DataSource;
 import org.springframework.orm.jpa.EntityManagerHolder;
 import org.hibernate.engine.spi.SessionImplementor;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -355,6 +358,30 @@ class DocumentationTransactionIT extends IntegrationTestBase {
         assertThat(trackedPage.getPageId()).isNotEqualTo("deleted-component-page");
         assertThat(finalHistory.get()).contains("viewpage.action?pageId=" + trackedPage.getPageId())
                 .doesNotContain("deleted-component-page");
+    }
+
+    @Test
+    void firstDeploymentLinksTheComponentPageItCreatesFromTheDeploymentPage() {
+        var lastContentByTitle = new ConcurrentHashMap<String, String>();
+        doAnswer(invocation -> {
+            assertNoDatabaseTransaction();
+            lastContentByTitle.put(invocation.getArgument(1), invocation.<Supplier<String>>getArgument(2).get());
+            return invocation.callRealMethod();
+        }).when(confluence).addOrUpdatePageUnderAncestor(anyString(), anyString(), any());
+        ZonedDateTime startedAt = ZonedDateTime.now().withNano(0);
+        var dto = createDeploymentDto();
+        dto.setStartedAt(startedAt);
+
+        postDeployment(dto, "first-deployment");
+        awaitUntilAsyncTasksCompleted();
+
+        var componentId = new TransactionTemplate(transactionManager).execute(status ->
+                deploymentRepository.findByExternalId("first-deployment").orElseThrow()
+                        .getComponentVersion().getComponent().getId());
+        String letterTitle = startedAt.withZoneSameInstant(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + " test (DEV)";
+        assertThat(lastContentByTitle.get(letterTitle)).contains("viewpage.action?pageId="
+                + componentPages.findByComponentId(componentId).orElseThrow().getPageId());
     }
 
     private void regenerate(String scope) {

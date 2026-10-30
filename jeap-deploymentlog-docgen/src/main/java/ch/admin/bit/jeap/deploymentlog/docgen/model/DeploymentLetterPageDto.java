@@ -28,6 +28,7 @@ public class DeploymentLetterPageDto {
     String state;
     String stateMessage;
     String componentName;
+    String componentPageUrl;
     String version;
     String versionControlUrl;
     String deploymentUnitType;

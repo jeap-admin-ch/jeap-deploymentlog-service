@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [16.23.1] - 2026-10-30
+
+### Fixed
+
+- Link components on system pages, deployment pages and undeployment pages to their DeploymentLog component pages
+  instead of the Archrepo pages, which are no longer published to Confluence. A component without a component page
+  is shown as plain text. When a deployment creates the component page, the system page and the deployment page are
+  written once more, so that they link to it from the component's first deployment on. Existing pages keep the old
+  link until they are regenerated, e.g. with `POST /api/jobs/docgen/system/{systemName}`.
+
 ## [16.23.0] - 2026-10-28
 
 ### Dependencies

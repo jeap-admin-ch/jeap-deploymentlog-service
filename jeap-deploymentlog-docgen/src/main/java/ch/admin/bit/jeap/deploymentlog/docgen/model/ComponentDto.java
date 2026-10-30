@@ -9,5 +9,6 @@ import java.util.List;
 @Builder
 public class ComponentDto {
     String componentName;
+    String componentPageUrl;
     List<ComponentEnvDto> componentEnvDtoList;
 }

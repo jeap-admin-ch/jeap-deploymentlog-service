@@ -9,10 +9,8 @@
         <tr>
             <th>Komponente</th>
             <td><strong>
-                <ac:link>
-                    <ri:page th:ri:content-title="${deploymentLetter.getComponentName}"/>
-                    <ac:plain-text-link-body><![CDATA[[(${deploymentLetter.componentName})]]]></ac:plain-text-link-body>
-                </ac:link>
+                <a th:if="${deploymentLetter.componentPageUrl != null}" th:href="${deploymentLetter.componentPageUrl}" th:text="${deploymentLetter.componentName}"></a>
+                <span th:unless="${deploymentLetter.componentPageUrl != null}" th:text="${deploymentLetter.componentName}"></span>
             </strong>
             </td>
         </tr>
