@@ -275,13 +275,14 @@ class DocgenLocksTest {
         ScheduledExecutorService lockExtenderMock = mock(ScheduledExecutorService.class);
         // Shedlock cancels this future when it gives up on the lock
         doReturn(mock(ScheduledFuture.class)).when(lockExtenderMock)
-                .scheduleAtFixedRate(any(), anyLong(), anyLong(), any());
+                .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
         return lockExtenderMock;
     }
 
     private static void runScheduledExtension(ScheduledExecutorService lockExtenderMock) {
+        // Shedlock schedules each extension as a one-shot task that schedules the next one once it has run
         ArgumentCaptor<Runnable> extension = ArgumentCaptor.forClass(Runnable.class);
-        verify(lockExtenderMock).scheduleAtFixedRate(extension.capture(), anyLong(), anyLong(), any());
+        verify(lockExtenderMock).schedule(extension.capture(), anyLong(), any(TimeUnit.class));
         extension.getValue().run();
     }
 
