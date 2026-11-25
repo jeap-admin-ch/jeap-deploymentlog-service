@@ -4,7 +4,7 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## What this is
 
-`jeap-deploymentlog-service` is a jEAP **library**, published to Maven Central, that traces microservice deployments
+`jeap-deploymentlog-service` is a jEAP **library** that traces microservice deployments
 across stages and generates deployment documentation as Confluence pages. Downstream projects depend on
 `jeap-deploymentlog-web` and add their own configuration/instance — they do not run this repo directly (a runnable
 `DeploymentLogApplication` exists in the web module mainly as a default/test entry point). See `README.md`.
