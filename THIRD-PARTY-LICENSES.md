@@ -27,8 +27,6 @@ Apache License Version 2.0
  * Jackson-annotations - [com.fasterxml.jackson.core:jackson-annotations](https://github.com/FasterXML/jackson)
  * Jackson-core - [com.fasterxml.jackson.core:jackson-core](https://github.com/FasterXML/jackson-core)
  * jackson-databind - [com.fasterxml.jackson.core:jackson-databind](https://github.com/FasterXML/jackson)
- * Jackson-dataformat-YAML - [com.fasterxml.jackson.dataformat:jackson-dataformat-yaml](https://github.com/FasterXML/jackson-dataformats-text)
- * Jackson datatype: JSR310 - [com.fasterxml.jackson.datatype:jackson-datatype-jsr310](https://github.com/FasterXML/jackson-modules-java8/jackson-datatype-jsr310)
  * Caffeine cache - [com.github.ben-manes.caffeine:caffeine](https://github.com/ben-manes/caffeine)
  * JCIP Annotations under Apache License - [com.github.stephenc.jcip:jcip-annotations](http://stephenc.github.com/jcip-annotations)
  * error-prone annotations - [com.google.errorprone:error_prone_annotations](https://errorprone.info/error_prone_annotations)
@@ -42,8 +40,8 @@ Apache License Version 2.0
  * Nimbus LangTag - [com.nimbusds:lang-tag](https://bitbucket.org/connect2id/nimbus-language-tags)
  * Nimbus JOSE+JWT - [com.nimbusds:nimbus-jose-jwt](https://bitbucket.org/connect2id/nimbus-jose-jwt)
  * OAuth 2.0 SDK with OpenID Connect and Federation extensions - [com.nimbusds:oauth2-oidc-sdk](https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions)
- * okhttp - [com.squareup.okhttp3:okhttp-jvm](https://square.github.io/okhttp/)
- * okio - [com.squareup.okio:okio-jvm](https://github.com/square/okio/)
+ * okhttp - [com.squareup.okhttp3:okhttp-jvm](https://lysine.dev/okhttp/)
+ * okio - [com.squareup.okio:okio-jvm](https://github.com/lysine-dev/okio/)
  * JSON library from Android SDK - [com.vaadin.external.google:android-json](http://developer.android.com/sdk)
  * HikariCP - [com.zaxxer:HikariCP](https://github.com/brettwooldridge/HikariCP)
  * Apache Commons Codec - [commons-codec:commons-codec](https://commons.apache.org/proper/commons-codec/)
@@ -67,11 +65,9 @@ Apache License Version 2.0
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-extension-trace-propagators](https://github.com/open-telemetry/opentelemetry-java)
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk](https://github.com/open-telemetry/opentelemetry-java)
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk-common](https://github.com/open-telemetry/opentelemetry-java)
- * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk-extension-autoconfigure-spi](https://github.com/open-telemetry/opentelemetry-java)
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk-logs](https://github.com/open-telemetry/opentelemetry-java)
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk-metrics](https://github.com/open-telemetry/opentelemetry-java)
  * OpenTelemetry Java - [io.opentelemetry:opentelemetry-sdk-trace](https://github.com/open-telemetry/opentelemetry-java)
- * OpenTelemetry Protocol - [io.opentelemetry.proto:opentelemetry-proto](https://github.com/open-telemetry/opentelemetry-proto-java)
  * OpenTelemetry Semantic Conventions Java - [io.opentelemetry.semconv:opentelemetry-semconv](https://github.com/open-telemetry/semantic-conventions-java)
  * Prometheus Metrics Config - [io.prometheus:prometheus-metrics-config](http://github.com/prometheus/client_java/client_java/prometheus-metrics-config)
  * Prometheus Metrics Core - [io.prometheus:prometheus-metrics-core](http://github.com/prometheus/client_java/client_java/prometheus-metrics-core)
@@ -79,9 +75,9 @@ Apache License Version 2.0
  * Prometheus Metrics Exposition Text Formats - [io.prometheus:prometheus-metrics-exposition-textformats](http://github.com/prometheus/client_java/client_java/prometheus-metrics-exposition-textformats)
  * Prometheus Metrics Model - [io.prometheus:prometheus-metrics-model](http://github.com/prometheus/client_java/client_java/prometheus-metrics-model)
  * Prometheus Metrics Tracer Common - [io.prometheus:prometheus-metrics-tracer-common](http://github.com/prometheus/client_java/client_java/prometheus-metrics-tracer/prometheus-metrics-tracer-common)
- * swagger-annotations-jakarta - [io.swagger.core.v3:swagger-annotations-jakarta](https://github.com/swagger-api/swagger-core/modules/swagger-annotations-jakarta)
- * swagger-core-jakarta - [io.swagger.core.v3:swagger-core-jakarta](https://github.com/swagger-api/swagger-core/modules/swagger-core-jakarta)
- * swagger-models-jakarta - [io.swagger.core.v3:swagger-models-jakarta](https://github.com/swagger-api/swagger-core/modules/swagger-models-jakarta)
+ * swagger-annotations - [io.swagger.core.v3:swagger-annotations](https://github.com/swagger-api/swagger-core/modules/swagger-annotations)
+ * swagger-core - [io.swagger.core.v3:swagger-core](https://github.com/swagger-api/swagger-core/modules/swagger-core)
+ * swagger-models - [io.swagger.core.v3:swagger-models](https://github.com/swagger-api/swagger-core/modules/swagger-models)
  * Jakarta Dependency Injection - [jakarta.inject:jakarta.inject-api](https://github.com/eclipse-ee4j/injection-api)
  * Jakarta Validation API - [jakarta.validation:jakarta.validation-api](https://beanvalidation.org)
  * Byte Buddy (without dependencies) - [net.bytebuddy:byte-buddy](https://bytebuddy.net/byte-buddy)
@@ -120,6 +116,7 @@ Apache License Version 2.0
  * org.opentest4j:opentest4j - [org.opentest4j:opentest4j](https://github.com/ota4j-team/opentest4j)
  * Asciidoc Confluence Publisher Client - [org.sahli.asciidoc.confluence.publisher:asciidoc-confluence-publisher-client](https://github.com/confluence-publisher/confluence-publisher/asciidoc-confluence-publisher-client)
  * JSONassert - [org.skyscreamer:jsonassert](https://github.com/skyscreamer/JSONassert)
+ * SnakeYAML Engine - [org.snakeyaml:snakeyaml-engine](https://bitbucket.org/snakeyaml/snakeyaml-engine)
  * springdoc-openapi-starter-common - [org.springdoc:springdoc-openapi-starter-common](https://springdoc.org/springdoc-openapi-starter-common/)
  * springdoc-openapi-starter-webmvc-api - [org.springdoc:springdoc-openapi-starter-webmvc-api](https://springdoc.org/springdoc-openapi-starter-webmvc-api/)
  * springdoc-openapi-starter-webmvc-ui - [org.springdoc:springdoc-openapi-starter-webmvc-ui](https://springdoc.org/springdoc-openapi-starter-webmvc-ui/)
@@ -217,12 +214,13 @@ Apache License Version 2.0
  * spring-security-web - [org.springframework.security:spring-security-web](https://spring.io/projects/spring-security)
  * thymeleaf - [org.thymeleaf:thymeleaf](http://www.thymeleaf.org/thymeleaf-lib/thymeleaf)
  * thymeleaf-spring6 - [org.thymeleaf:thymeleaf-spring6](http://www.thymeleaf.org/thymeleaf-lib/thymeleaf-spring6)
- * unbescape - [org.unbescape:unbescape](http://www.unbescape.org)
+ * unbescape - [org.unbescape:unbescape](https://www.unbescape.org)
  * Swagger UI - [org.webjars:swagger-ui](https://www.webjars.org)
  * org.xmlunit:xmlunit-core - [org.xmlunit:xmlunit-core](https://www.xmlunit.org/)
- * SnakeYAML - [org.yaml:snakeyaml](https://bitbucket.org/snakeyaml/snakeyaml)
+ * SnakeYAML - [org.yaml:snakeyaml](https://codeberg.org/snakeyaml/snakeyaml)
  * Jackson-core - [tools.jackson.core:jackson-core](https://github.com/FasterXML/jackson-core)
  * jackson-databind - [tools.jackson.core:jackson-databind](https://github.com/FasterXML/jackson)
+ * Jackson-dataformat-YAML - [tools.jackson.dataformat:jackson-dataformat-yaml](https://github.com/FasterXML/jackson-dataformats-text)
 
 BSD 2-Clause License
 -------------------------------
@@ -233,7 +231,6 @@ BSD 2-Clause License
 BSD License 3
 -------------------------------
 
- * Protocol Buffers [Core] - [com.google.protobuf:protobuf-java](https://developers.google.com/protocol-buffers/protobuf-java/)
  * ANTLR 4 Runtime - [org.antlr:antlr4-runtime](https://www.antlr.org/antlr4-runtime/)
  * Hamcrest - [org.hamcrest:hamcrest](http://hamcrest.org/JavaHamcrest/)
  * asm - [org.ow2.asm:asm](http://asm.ow2.io/)
@@ -307,5 +304,4 @@ Mozilla Public License, Version 2.0
 Public Domain
 -------------------------------
 
- * AOP alliance - [aopalliance:aopalliance](http://aopalliance.sourceforge.net)
  * HdrHistogram - [org.hdrhistogram:HdrHistogram](http://hdrhistogram.github.io/HdrHistogram/)
